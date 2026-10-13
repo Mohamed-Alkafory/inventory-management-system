@@ -1,5 +1,7 @@
 # Inventory Management System
 
+[![CI](https://github.com/Mohamed-Alkafory/inventory-management-system/actions/workflows/ci.yml/badge.svg)](https://github.com/Mohamed-Alkafory/inventory-management-system/actions/workflows/ci.yml)
+
 A starter for an inventory & order management app: a React frontend talking to
 a NestJS REST API, backed by PostgreSQL. Docker Compose runs the database
 locally; the apps themselves run on your machine with npm.
@@ -21,6 +23,22 @@ locally; the apps themselves run on your machine with npm.
 Typical request flow (once features are built):
 browser → Vite dev server → NestJS API (`http://localhost:3000`) → Prisma →
 PostgreSQL (`localhost:5432`).
+
+## Features
+
+What exists in the repository today (no application features yet — the API
+and UI are starter shells awaiting the team's design):
+
+- Two-package layout with separate manifests and lockfiles (`backend/`,
+  `frontend/`)
+- Dockerized PostgreSQL 16 with health checks (`docker compose up -d`)
+- Prisma 7 configuration with PostgreSQL adapter dependencies
+- Unit and end-to-end test suites (Vitest) with coverage support
+- Linting and formatting (oxlint + Prettier for the backend, ESLint for the
+  frontend)
+- GitHub Actions CI running install, lint, test, and build on every pull
+  request
+- Tailwind CSS styling and path aliases in the frontend
 
 ## Prerequisites
 
@@ -282,3 +300,38 @@ Do **not** run `migrate` commands until models are designed together.
   currently placeholders — fill them as the design lands.
 - Folder guides: [`backend/README.md`](backend/README.md),
   [`frontend/README.md`](frontend/README.md).
+
+## Documentation
+
+- [Contributing guide](CONTRIBUTING.md) — workflow, conventions, reviews
+- [Code of Conduct](CODE_OF_CONDUCT.md) — community standards
+- [Security policy](SECURITY.md) — how to report vulnerabilities privately
+- [Authors](AUTHORS) — contributors recorded in Git history
+- [Backend guide](backend/README.md) — API setup, scripts, Prisma
+- [Frontend guide](frontend/README.md) — UI setup, scripts, environment
+- [Design docs](docs/) — API contract, database schema, decisions
+  (placeholders for now)
+- [CI workflow](.github/workflows/ci.yml) — what runs on every pull request
+
+## Contributing
+
+Contributions are welcome. Please read
+[`CONTRIBUTING.md`](CONTRIBUTING.md) for the workflow, coding conventions,
+and review expectations, and follow the
+[`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md). To report a security issue, see
+[`SECURITY.md`](SECURITY.md) (do not open a public issue). Contributors are
+listed in [`AUTHORS`](AUTHORS).
+
+## License
+
+This repository has **no license file yet**. Until the maintainers choose and
+add one, the code is **not** open source in the legal sense — default
+copyright applies (all rights reserved), even though the repository is
+publicly visible. The backend manifest currently declares `"UNLICENSED"`,
+which matches this unlicensed state.
+
+Maintainers: for a student project like this, the [MIT License](https://choosealicense.com/licenses/mit/)
+is the usual simple, permissive choice ([Apache-2.0](https://choosealicense.com/licenses/apache-2.0/)
+is the common alternative with explicit patent terms). Decide, add a
+`LICENSE` file with the full text, and update this section — do not just
+change the `license` field in `package.json`.
