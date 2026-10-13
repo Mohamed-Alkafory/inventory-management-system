@@ -1,6 +1,29 @@
-# Inventory Management System
+<div align="center">
 
+# _Inventory Management System_
+
+**Track stock, orders, and suppliers — React frontend, NestJS API, and PostgreSQL, all in one place.**
+
+[![Repository](https://img.shields.io/badge/REPOSITORY-GITHUB-555?logo=github&logoColor=white)](https://github.com/Mohamed-Alkafory/inventory-management-system)
+[![Get Started](https://img.shields.io/badge/GET_STARTED-SETUP_GUIDE-555?)](#installation-and-setup)
 [![CI](https://github.com/Mohamed-Alkafory/inventory-management-system/actions/workflows/ci.yml/badge.svg)](https://github.com/Mohamed-Alkafory/inventory-management-system/actions/workflows/ci.yml)
+
+[![React](https://img.shields.io/badge/REACT-19-61DAFB?logo=react&logoColor=white)](https://react.dev/)
+[![Vite](https://img.shields.io/badge/VITE-8-646CFF?logo=vite&logoColor=white)](https://vite.dev/)
+[![TypeScript](https://img.shields.io/badge/TYPESCRIPT-6-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Tailwind CSS](https://img.shields.io/badge/TAILWIND_CSS-4-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
+[![NestJS](https://img.shields.io/badge/NESTJS-12-E0234E?logo=nestjs&logoColor=white)](https://nestjs.com/)
+[![PostgreSQL](https://img.shields.io/badge/POSTGRESQL-16-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Prisma](https://img.shields.io/badge/PRISMA-7-2D3748?logo=prisma&logoColor=white)](https://www.prisma.io/docs)
+[![Docker](https://img.shields.io/badge/DOCKER-COMPOSE-2496ED?logo=docker&logoColor=white)](https://docs.docker.com/compose/)
+[![TanStack Query](https://img.shields.io/badge/TANSTACK_QUERY-5-FF4154)](https://tanstack.com/query/latest)
+[![React Router](https://img.shields.io/badge/REACT_ROUTER-7-CA4245?logo=reactrouter&logoColor=white)](https://reactrouter.com/)
+[![React Hook Form](https://img.shields.io/badge/HOOK_FORM-7-EC5990?logo=reacthookform&logoColor=white)](https://react-hook-form.com/)
+[![Zod](https://img.shields.io/badge/ZOD-4-3E67AF?logo=zod&logoColor=white)](https://zod.dev/)
+[![Vitest](https://img.shields.io/badge/VITEST-TESTS-6E9F18?logo=vitest&logoColor=white)](https://vitest.dev/)
+[![License](https://img.shields.io/badge/LICENSE-MIT-blue)](LICENSE)
+
+</div>
 
 A starter for an inventory & order management app: a React frontend talking to
 a NestJS REST API, backed by PostgreSQL. Docker Compose runs the database
@@ -324,14 +347,4 @@ listed in [`AUTHORS`](AUTHORS).
 
 ## License
 
-This repository has **no license file yet**. Until the maintainers choose and
-add one, the code is **not** open source in the legal sense — default
-copyright applies (all rights reserved), even though the repository is
-publicly visible. The backend manifest currently declares `"UNLICENSED"`,
-which matches this unlicensed state.
-
-Maintainers: for a student project like this, the [MIT License](https://choosealicense.com/licenses/mit/)
-is the usual simple, permissive choice ([Apache-2.0](https://choosealicense.com/licenses/apache-2.0/)
-is the common alternative with explicit patent terms). Decide, add a
-`LICENSE` file with the full text, and update this section — do not just
-change the `license` field in `package.json`.
+This project is licensed under the [MIT License](LICENSE).
