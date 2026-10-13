@@ -58,12 +58,50 @@ Open a pull request against `main`, wait for CI and review, then
 
 ## Commits
 
-Use [Conventional Commits](https://www.conventionalcommits.org/):
+Use this exact format:
 
-- `feat:` `fix:` `test:` `docs:` `refactor:` `chore:`
-- Example: `feat(products): add product creation endpoint`
+```text
+[#ISSUE_NUMBER] type: short description
+```
 
-Write commits that explain *why*, not just *what*. Keep each commit focused.
+Examples:
+
+```text
+[#12] feat: add product creation endpoint
+[#15] fix: handle missing product records
+[#18] docs: update local setup instructions
+[#21] test: add inventory service tests
+[#24] refactor: simplify product validation
+```
+
+Rules:
+
+- Start with the related Issue number in brackets (`[#12]`). It links the
+  work to its task; it does **not** close the Issue by itself.
+- Use a lowercase type immediately after: `feat`, `fix`, `docs`, `test`,
+  `refactor`, or `chore`.
+- Write a concise English description in imperative mood ("add", not "adds"
+  or "added"). Keep the whole line under ~72 characters when possible.
+
+Common types:
+
+| Type | Use for |
+|---|---|
+| `feat` | New features or endpoints |
+| `fix` | Bug fixes |
+| `docs` | Documentation only |
+| `test` | Tests only |
+| `refactor` | Code restructuring without behavior change |
+| `chore` | Tooling, dependencies, housekeeping |
+
+No related Issue? Open one first (or use the Task template) so the work is
+tracked, then reference its number. Trivial fixes (typos, formatting) may use
+`[#0]` only if the team agrees — otherwise create the Issue; it takes a
+minute.
+
+Do not confuse commit messages with pull request closing keywords. `Closes
+#12` belongs in the **pull request description** (it closes the Issue on
+merge); commit messages only reference the number in brackets.
 
 ## Coding conventions
 
@@ -105,13 +143,39 @@ changes; there is no need to invent tests for unrelated code.
 - Include steps to reproduce (bugs), expected vs. actual behavior, and your
   environment (OS, Node version, Docker version).
 
+## Project board
+
+Work is tracked on a GitHub Projects board with these statuses:
+
+`Backlog` → `Ready` → `In Progress` → `In Review` → `Done`
+
+How the team uses it:
+
+1. The maintainers prepare and prioritize tasks (`Backlog` → `Ready`).
+2. Pick an available `Ready` task or propose a new Issue. Assign yourself —
+   the assignee owns the implementation and keeps the Issue updated.
+3. Move the Issue to `In Progress` and implement on a separate branch
+   (see [Branches](#branches)).
+4. Open a pull request linked to the Issue and move it to `In Review`.
+5. After review approval and green CI, the PR is squash-merged and the Issue
+   moves to `Done` (auto-closed when the PR uses `Closes #...`).
+
+The board is manual GitHub setup (see [Branch protection and project
+setup](#branch-protection-and-project-setup)); these rules describe how to
+use it once it exists.
+
 ## Pull requests
 
-- Fill in the pull request template: summary, changes, testing, related issue.
+- Fill in [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md):
+  summary, related Issue, type of change, testing, and the checklist.
 - Keep it small and focused; one concern per pull request.
+- In **Related Issue**, write `Closes #<issue-number>` when the merge should
+  close the Issue. This is the closing keyword — commit messages only carry
+  the `[#...]` reference (see [Commits](#commits)).
 - Confirm the checklist: conventions followed, no secrets, no unrelated
-  changes, docs updated if behavior changed.
-- Link the issue it resolves (`Closes #...`).
+  changes, docs updated if behavior changed, UI screenshots attached for
+  frontend changes.
+- Link the Issue it resolves (`Closes #...`).
 - In your first pull request, add yourself to the `AUTHORS` file.
 
 ## Review expectations
@@ -121,3 +185,48 @@ changes; there is no need to invent tests for unrelated code.
 - Authors should respond to every comment (fix, explain, or discuss) and
   re-request review when ready.
 - Never push directly to `main`. Rebase only your own branch, never `main`.
+
+## Labels
+
+Apply labels so issues and pull requests are easy to find:
+
+| Label | Meaning |
+|---|---|
+| `frontend` | React/Vite UI work |
+| `backend` | NestJS API work |
+| `database` | PostgreSQL, Prisma schema, or migrations |
+| `bug` | Something is broken (pairs with the Bug report template) |
+| `enhancement` | New feature or improvement (pairs with the Feature request template) |
+| `documentation` | Docs only |
+| `testing` | Tests or test infrastructure |
+| `good first issue` | Small, well-defined — ideal for a first contribution |
+| `help wanted` | The team is asking for help on this |
+
+`bug` and `enhancement` are GitHub defaults (auto-applied by the issue
+templates); the rest must be created once under Issues → Labels. Keep this
+set — do not invent one-off labels without team agreement.
+
+## Branch protection and project setup
+
+These are one-time manual steps in GitHub Settings (not files in this repo).
+Do not change repository settings without maintainer approval.
+
+**Branch protection for `main`** (Settings → Branches → Add rule):
+
+- Require a pull request before merging; dismiss stale approvals on new
+  commits.
+- Require at least one approving review.
+- Require status checks to pass before merging: **`backend`** and
+  **`frontend`** (the exact job names in `.github/workflows/ci.yml`).
+  Require branches to be up to date before merging.
+- Block force pushes and branch deletion.
+
+Availability depends on the repository plan and your role: public
+repositories on the free plan support required pull requests, required
+reviews, required status checks, and force-push/deletion blocks. Some
+advanced ruleset features need a paid plan — the list above stays within
+what a student team normally has.
+
+**Project board** (Projects → New project → Board): create the columns
+`Backlog`, `Ready`, `In Progress`, `In Review`, `Done` and use them as
+described in [Project board](#project-board).

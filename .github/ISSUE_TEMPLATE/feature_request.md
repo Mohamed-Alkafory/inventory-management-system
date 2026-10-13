@@ -5,11 +5,11 @@ title: "[feat] "
 labels: enhancement
 ---
 
-## Problem
+## Problem / motivation
 
 <!-- What problem would this solve? Who does it help? -->
 
-## Proposal
+## Proposed solution
 
 <!-- What should be built or changed? Keep the scope small. -->
 

@@ -7,13 +7,21 @@ labels: bug
 
 ## Description
 
-<!-- What happens, and what did you expect instead? -->
+<!-- What is broken? One or two sentences. -->
 
 ## Steps to reproduce
 
 1.
 2.
 3.
+
+## Expected behavior
+
+<!-- What should happen? -->
+
+## Actual behavior
+
+<!-- What happens instead? -->
 
 ## Environment
 
