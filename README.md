@@ -2,348 +2,352 @@
 
 # _Inventory Management System_
 
-**Track stock, orders, and suppliers — React frontend, NestJS API, and PostgreSQL, all in one place.**
+**A centralized platform for managing inventory, tracking orders, and organizing suppliers.**
 
-[![Repository](https://img.shields.io/badge/REPOSITORY-GITHUB-555?logo=github&logoColor=white)](https://github.com/Mohamed-Alkafory/inventory-management-system)
-[![Get Started](https://img.shields.io/badge/GET_STARTED-SETUP_GUIDE-555?)](#installation-and-setup)
-[![CI](https://github.com/Mohamed-Alkafory/inventory-management-system/actions/workflows/ci.yml/badge.svg)](https://github.com/Mohamed-Alkafory/inventory-management-system/actions/workflows/ci.yml)
+[![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
+[![Vite](https://img.shields.io/badge/Vite-Bundler-646CFF?style=for-the-badge&logo=vite&logoColor=white)](https://vite.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-6-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-v4-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
+<br/>
+[![NestJS](https://img.shields.io/badge/NestJS-Backend-E0234E?style=for-the-badge&logo=nestjs&logoColor=white)](https://nestjs.com/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Database-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![React Query](https://img.shields.io/badge/React_Query-TanStack-FF4154?style=for-the-badge&logo=reactquery&logoColor=white)](https://tanstack.com/query/latest)
+[![Prisma](https://img.shields.io/badge/Prisma-7-2D3748?style=for-the-badge&logo=prisma&logoColor=white)](https://www.prisma.io/docs)
+<br/>
+[![React Router](https://img.shields.io/badge/React_Router-v7-CA4245?style=for-the-badge&logo=reactrouter&logoColor=white)](https://reactrouter.com/)
+[![React Hook Form](https://img.shields.io/badge/React_Hook_Form-Forms-EC5990?style=for-the-badge&logo=reacthookform&logoColor=white)](https://react-hook-form.com/)
+[![Zod](https://img.shields.io/badge/Zod-Validation-3068b7?style=for-the-badge&logo=zod&logoColor=white)](https://zod.dev/)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://docs.docker.com/compose/)
+<br/>
+[![Vitest](https://img.shields.io/badge/Vitest-Tests-6E9F18?style=for-the-badge&logo=vitest&logoColor=white)](https://vitest.dev/)
+[![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
 
-[![React](https://img.shields.io/badge/REACT-19-61DAFB?logo=react&logoColor=white)](https://react.dev/)
-[![Vite](https://img.shields.io/badge/VITE-8-646CFF?logo=vite&logoColor=white)](https://vite.dev/)
-[![TypeScript](https://img.shields.io/badge/TYPESCRIPT-6-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Tailwind CSS](https://img.shields.io/badge/TAILWIND_CSS-4-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
-[![NestJS](https://img.shields.io/badge/NESTJS-12-E0234E?logo=nestjs&logoColor=white)](https://nestjs.com/)
-[![PostgreSQL](https://img.shields.io/badge/POSTGRESQL-16-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
-[![Prisma](https://img.shields.io/badge/PRISMA-7-2D3748?logo=prisma&logoColor=white)](https://www.prisma.io/docs)
-[![Docker](https://img.shields.io/badge/DOCKER-COMPOSE-2496ED?logo=docker&logoColor=white)](https://docs.docker.com/compose/)
-[![TanStack Query](https://img.shields.io/badge/TANSTACK_QUERY-5-FF4154)](https://tanstack.com/query/latest)
-[![React Router](https://img.shields.io/badge/REACT_ROUTER-7-CA4245?logo=reactrouter&logoColor=white)](https://reactrouter.com/)
-[![React Hook Form](https://img.shields.io/badge/HOOK_FORM-7-EC5990?logo=reacthookform&logoColor=white)](https://react-hook-form.com/)
-[![Zod](https://img.shields.io/badge/ZOD-4-3E67AF?logo=zod&logoColor=white)](https://zod.dev/)
-[![Vitest](https://img.shields.io/badge/VITEST-TESTS-6E9F18?logo=vitest&logoColor=white)](https://vitest.dev/)
-[![License](https://img.shields.io/badge/LICENSE-MIT-blue)](LICENSE)
 
 </div>
 
-A starter for an inventory & order management app: a React frontend talking to
-a NestJS REST API, backed by PostgreSQL. Docker Compose runs the database
-locally; the apps themselves run on your machine with npm.
+An inventory and order management system designed to bring product tracking, supplier management, and order operations into one place.
 
-## How it works
+> **Project status:** Under development. The repository currently contains the initial application setup and development infrastructure. Core inventory and order management features have not been implemented yet.
 
-- **`frontend/`** — React 19 + TypeScript + Vite (+ Tailwind CSS, React Router,
-  React Query, Axios). Runs in the browser and calls the backend API.
-  Currently a starter shell; no API calls are wired yet.
-- **`backend/`** — NestJS 12 + TypeScript REST API (+ Prisma 7, Vitest).
-  Listens on port `3000` by default and currently exposes `GET /`, which
-  answers `"Hello World!"`.
-- **PostgreSQL 16** (via `docker-compose.yml`, service `db`) — stores the data.
-  The backend reaches it through `DATABASE_URL` using Prisma.
-- **Prisma** — schema in `backend/prisma/schema.prisma`, connection configured
-  in `backend/prisma.config.ts`. No application models or migrations exist yet
-  (see [Database](#database)).
+## Overview
 
-Typical request flow (once features are built):
-browser → Vite dev server → NestJS API (`http://localhost:3000`) → Prisma →
-PostgreSQL (`localhost:5432`).
+The project is organized as two independent applications backed by a shared PostgreSQL database.
 
-## Features
+- **Frontend:** A React application that provides the user interface.
+- **Backend:** A NestJS REST API that will handle application logic and data access.
+- **Database:** PostgreSQL for persistent data storage.
+- **ORM:** Prisma for database schema management and queries.
+- **Development environment:** Docker Compose for running PostgreSQL locally.
 
-What exists in the repository today (no application features yet — the API
-and UI are starter shells awaiting the team's design):
+### Architecture
 
-- Two-package layout with separate manifests and lockfiles (`backend/`,
-  `frontend/`)
-- Dockerized PostgreSQL 16 with health checks (`docker compose up -d`)
-- Prisma 7 configuration with PostgreSQL adapter dependencies
-- Unit and end-to-end test suites (Vitest) with coverage support
-- Linting and formatting (oxlint + Prettier for the backend, ESLint for the
-  frontend)
-- GitHub Actions CI running install, lint, test, and build on every pull
-  request
-- Tailwind CSS styling and path aliases in the frontend
+```text
+Browser
+   |
+   v
+React Frontend
+   |
+   | HTTP / REST API
+   v
+NestJS Backend
+   |
+   v
+Prisma
+   |
+   v
+PostgreSQL
+```
 
-## Prerequisites
+The architecture represents the intended application design. Frontend-to-backend integration and the core business features are still under development.
 
-| Tool | Version | Install | Verify |
-|---|---|---|---|
-| Git | any recent | <https://git-scm.com/downloads> | `git --version` |
-| Node.js (includes npm) | **22** (matches CI) | <https://nodejs.org/en/download> | `node --version` → `v22.x`, `npm --version` |
-| Docker + Docker Compose | any recent Docker Desktop | <https://docs.docker.com/get-docker/> | `docker --version`, `docker compose version` |
+## Current Status
 
-> Node 24 also works locally, but CI builds with Node 22, so Node 22 is the
-> reference version. Use one Node version per terminal session.
+| Component | Current state |
+|---|---|
+| Frontend | Initial React and Vite application |
+| Backend | Initial NestJS REST API |
+| Database | PostgreSQL container configured |
+| Prisma | Initial configuration; no application models or migrations yet |
+| Automated checks | GitHub Actions CI for backend and frontend |
+| Inventory and order features | Not implemented yet |
 
-## Installation and setup
+The backend currently exposes `GET /`, which returns `"Hello World!"`. The frontend is still an initial application shell, and API calls have not yet been integrated.
 
-Run the `docker` / `cp` steps from the **repository root**. The `npm ci`
-steps run **inside** `backend/` and `frontend/` (each has its own
-`package.json` + `package-lock.json`).
+## Tech Stack
+
+### Frontend
+- React 19
+- TypeScript
+- Vite
+- Tailwind CSS
+- React Router
+- TanStack Query
+- React Hook Form
+- Zod
+- Axios
+
+### Backend
+- NestJS 12
+- TypeScript
+- Prisma 7
+- PostgreSQL
+- Vitest
+
+### Development and Quality
+- Docker Compose
+- npm
+- ESLint
+- oxlint
+- Prettier
+- GitHub Actions
+
+## Getting Started
+
+Follow these steps to run the project locally.
+
+### Prerequisites
+
+| Tool | Version | Verification |
+|---|---|---|
+| Git | Recent version | `git --version` |
+| Node.js | 22 (reference version) | `node --version` |
+| npm | Included with Node.js | `npm --version` |
+| Docker | Recent version | `docker --version` |
+| Docker Compose | Compose v2 | `docker compose version` |
+
+Node.js 22 is the reference version used by CI. Other versions may work locally, but use Node.js 22 when troubleshooting environment-specific issues.
 
 ### 1. Clone the repository
 
 ```bash
 git clone https://github.com/Mohamed-Alkafory/inventory-management-system.git
-```
-
-### 2. Enter the project directory
-
-```bash
 cd inventory-management-system
 ```
 
-### 3. Create the environment files
+### 2. Configure environment variables
+
+Create the local environment files from their templates:
 
 ```bash
 cp .env.example .env
 cp backend/.env.example backend/.env
 ```
 
-The frontend does not need an `.env` yet (see
-[Environment variables](#environment-variables)).
+Update the placeholder credentials if necessary. Ensure that `DATABASE_URL` in `backend/.env` matches the PostgreSQL credentials and port configured in the root `.env`.
 
-### 4. Start PostgreSQL
+Do not commit real environment files or credentials.
+
+### 3. Start PostgreSQL
+
+From the repository root:
 
 ```bash
 docker compose up -d
-```
-
-This starts only the database (`postgres:16-alpine`, data kept in the
-`pgdata` volume). Check it is healthy:
-
-```bash
 docker compose ps
 ```
 
-### 5. Install backend dependencies
+Wait until the database service reports a healthy status.
 
-```bash
-cd backend && npm ci && cd ..
-```
+The Compose configuration uses PostgreSQL 16 and persists database data in the `pgdata` volume.
 
-This uses `backend/package-lock.json`, so everyone gets identical versions.
-
-### 6. Validate the Prisma setup
-
-```bash
-cd backend && npx prisma validate && cd ..
-```
-
-Expected output: `The schema at prisma/schema.prisma is valid`.
-See [Database](#database) for what exists (schema shell only) and what comes
-later (models, migrations).
-
-### 7. Install frontend dependencies
-
-```bash
-cd frontend && npm ci && cd ..
-```
-
-### 8. Start the backend and frontend (two terminals)
-
-Terminal 1 — backend (from `backend/`):
+### 4. Install backend dependencies
 
 ```bash
 cd backend
-npm run start:dev
+npm ci
 ```
 
-Terminal 2 — frontend (from `frontend/`):
+Validate the Prisma configuration:
 
 ```bash
-cd frontend
-npm run dev
-```
-
-### 9. Open the application
-
-- Frontend: <http://localhost:5173> (Vite default; `vite.config.ts` sets no
-  custom port)
-- Backend API: <http://localhost:3000> — `GET /` returns `"Hello World!"`
-
-## Environment variables
-
-| Variable | Used by | Purpose | Example (safe default) |
-|---|---|---|---|
-| `POSTGRES_USER` | `docker-compose.yml` | DB superuser for the container | `inventory` |
-| `POSTGRES_PASSWORD` | `docker-compose.yml` | DB password for the container | `change_me` (dev only) |
-| `POSTGRES_DB` | `docker-compose.yml` | Database created on first start | `inventory_db` |
-| `POSTGRES_PORT` | `docker-compose.yml` | Host port mapped to container `5432` | `5432` |
-| `DATABASE_URL` | Prisma (`backend/prisma.config.ts`) | Connection string; **must match the `POSTGRES_*` values above** | `postgresql://inventory:change_me@localhost:5432/inventory_db?schema=public` |
-| `PORT` | Backend (`backend/src/main.ts`) | API listen port (defaults to `3000` if unset) | `3000` |
-| `JWT_SECRET` | Backend (reserved) | Signing key for upcoming auth; **no code reads it yet** | `change_me` (dev only) |
-| `VITE_API_URL` | Frontend (reserved) | Base URL the frontend will use for the API; **no code reads it yet** | `http://localhost:3000` |
-
-Rules:
-
-- Templates (`.env.example`) are committed and contain placeholders only.
-  Real `.env` files are git-ignored — **never commit them** (see
-  `CONTRIBUTING.md`).
-- `DATABASE_URL` exists in both the root `.env.example` (reference) and
-  `backend/.env.example` (the one the backend actually loads). If you change
-  any `POSTGRES_*` value, update `DATABASE_URL` in **both** `.env` files to
-  match.
-- The frontend needs `frontend/.env` only once frontend code reads
-  `VITE_API_URL`: `cp frontend/.env.example frontend/.env`.
-
-## Running and testing
-
-### Start / stop / restart
-
-```bash
-# Database (from repo root)
-docker compose up -d      # start (keeps data in the pgdata volume)
-docker compose stop       # stop (keeps data)
-docker compose restart db # restart
-docker compose logs db    # follow database logs
-docker compose down       # stop AND remove containers (data in pgdata survives)
-
-# Backend (from backend/)
-npm run start:dev   # watch mode (daily development)
-npm run start:debug # watch mode with debugger
-npm run start       # single run
-npm run build       # production build -> dist/
-npm run start:prod  # run the built output (needs npm run build first)
-
-# Frontend (from frontend/)
-npm run dev     # dev server with hot reload
-npm run preview # serve the production build (needs npm run build first)
-```
-
-> Never delete the `pgdata` volume or reset the database to "fix" a problem —
-> that destroys local data. Ask the team first.
-
-### Lint, build, test (same commands CI runs)
-
-```bash
-# Backend (from backend/)
-npm run lint    # oxlint over src/ and test/
-npm test        # unit tests (Vitest, **/*.spec.ts)
-npm run test:e2e # e2e tests (Vitest, **/*.e2e-spec.ts)
-npm run test:cov # unit tests with coverage
-npm run test:watch # unit tests in watch mode
-npm run format  # prettier over src/ and test/
-npm run build   # NestJS production build
-
-# Frontend (from frontend/)
-npm run lint    # eslint
-npm run build   # tsc -b && vite build
-```
-
-CI (`.github/workflows/ci.yml`) runs `npm ci` → `lint` → `test`/`build` in
-each folder on every PR and every push to `main`.
-
-### Database
-
-Current state: `backend/prisma/schema.prisma` is a shell (generator +
-`provider = "postgresql"`, **no models**), there is no
-`backend/prisma/migrations/` directory, and the connection URL lives in
-`backend/prisma.config.ts` (read from `DATABASE_URL`). Verified check:
-
-```bash
-# From backend/
 npx prisma validate
 ```
 
-When the team adds the first models, the flow will be:
+### 5. Install frontend dependencies
+
+Open another terminal, return to the repository root, and run:
 
 ```bash
-# From backend/ (only after models exist in schema.prisma)
-npx prisma migrate dev   # creates prisma/migrations/ and applies them
-npx prisma generate      # (re)generates the client into src/generated/prisma
+cd frontend
+npm ci
 ```
 
-Do **not** run `migrate` commands until models are designed together.
+Each application has its own `package.json` and lockfile. Install dependencies separately in each directory.
 
-### Verify everything works
+### 6. Start the applications
 
-1. `docker compose ps` shows `db` healthy.
-2. `GET http://localhost:3000/` returns `"Hello World!"`.
-3. `http://localhost:5173` renders the starter page.
-4. `npm test` (backend) and `npm run lint` (both folders) pass.
+Start the backend from `backend/`:
+
+```bash
+npm run start:dev
+```
+
+Start the frontend from `frontend/` in a separate terminal:
+
+```bash
+npm run dev
+```
+
+### 7. Open the applications
+
+| Service | URL |
+|---|---|
+| Frontend | http://localhost:5173 |
+| Backend API | http://localhost:3000 |
+| PostgreSQL | localhost:5432 |
+
+The frontend currently displays the initial application shell. The backend's root endpoint responds to `GET /` with `"Hello World!"`.
+
+## Environment Variables
+
+| Variable | Purpose |
+|---|---|
+| `POSTGRES_USER` | PostgreSQL username |
+| `POSTGRES_PASSWORD` | PostgreSQL password |
+| `POSTGRES_DB` | Database name |
+| `POSTGRES_PORT` | Host port mapped to PostgreSQL |
+| `DATABASE_URL` | Database connection string used by Prisma |
+| `PORT` | Backend API port; defaults to `3000` |
+| `JWT_SECRET` | Reserved for future authentication |
+| `VITE_API_URL` | Reserved for future frontend API integration |
+
+The JWT and frontend API variables are reserved for planned functionality; the current application does not yet consume them.
+
+Environment templates contain placeholders only. Keep actual secrets in ignored local `.env` files and never commit them.
+
+## Development Commands
+
+### Backend
+
+Run commands from `backend/`.
+
+| Command | Description |
+|---|---|
+| `npm run start:dev` | Start in watch mode |
+| `npm run start:debug` | Start with debugging |
+| `npm run start` | Start the application |
+| `npm run build` | Build the production application |
+| `npm run start:prod` | Run the production build |
+| `npm run lint` | Run oxlint |
+| `npm run format` | Format source and test files |
+| `npm test` | Run unit tests |
+| `npm run test:e2e` | Run end-to-end tests |
+| `npm run test:cov` | Run tests with coverage |
+| `npm run test:watch` | Run tests in watch mode |
+
+### Frontend
+
+Run commands from `frontend/`.
+
+| Command | Description |
+|---|---|
+| `npm run dev` | Start the development server |
+| `npm run build` | Type-check and build the application |
+| `npm run preview` | Preview the production build |
+| `npm run lint` | Run ESLint |
+
+## Database
+
+The database schema is managed through Prisma.
+
+Current database setup includes:
+
+- PostgreSQL connection configuration.
+- Prisma schema and configuration files.
+- PostgreSQL adapter dependencies.
+
+Application models and migrations have not been created yet.
+
+Once the team agrees on the initial data model, create migrations from `backend/`:
+
+```bash
+npx prisma migrate dev
+npx prisma generate
+```
+
+Run these commands only after application models have been added to `backend/prisma/schema.prisma`.
+
+Database design should be reviewed before migrations are introduced so the team can agree on entities, relationships, constraints, and data integrity requirements.
+
+## Testing and CI
+
+The repository includes automated checks for the backend and frontend.
+
+The GitHub Actions workflow runs validation tasks on pushes to `main` and pull requests, including dependency installation, linting, tests, and builds.
+
+Run the relevant checks locally before opening a pull request.
+
+Backend:
+
+```bash
+npm run lint
+npm test
+npm run test:e2e
+npm run build
+```
+
+Frontend:
+
+```bash
+npm run lint
+npm run build
+```
+
+Run each command from its corresponding application directory.
 
 ## Troubleshooting
 
-- **Port already in use (`EADDRINUSE`, or Vite picks 5174+).**
-  Another process owns the port. Either stop it, or override the port:
-  backend → set `PORT=3001` in `backend/.env`; database → set
-  `POSTGRES_PORT=5433` in root `.env` **and** update the port in
-  `DATABASE_URL` in both `.env` files; frontend → `npm run dev -- --port 5174`.
-- **Database connection failures (`ECONNREFUSED`, Prisma `P1001`).**
-  Checklist: `docker compose ps` (is `db` up/healthy?), is Docker Desktop
-  running?, does `DATABASE_URL` in `backend/.env` match the root `.env`
-  (`POSTGRES_USER`/`PASSWORD`/`DB`/port)? After changing the root `.env`,
-  recreate the container: `docker compose up -d`.
-- **`docker compose` fails / Docker not running.**
-  Start Docker Desktop and wait until it reports running, then retry.
-  Verify with `docker compose version`.
-- **Missing/incorrect env vars.**
-  Re-copy the templates (`cp .env.example .env`,
-  `cp backend/.env.example backend/.env`), then edit values. Remember
-  `backend/.env` is the file the backend loads — editing only the root
-  `.env` does not change backend behavior except through Compose.
-- **Prisma errors (`P1000` auth failed, schema not found, client not generated).**
-  `P1000` (wrong password) almost always means `DATABASE_URL` disagrees with
-  the container credentials — compare both `.env` files. Run Prisma commands
-  from `backend/` so `prisma.config.ts` and `backend/.env` resolve correctly.
-  There are no migrations yet, so `migrate` failures mean models haven't been
-  added — see [Database](#database).
-- **`npm ci` fails with `EUSAGE` / "Missing … from lock file".**
-  You are likely on an npm version whose lock validation disagrees with the
-  lockfile (seen before with npm 10 vs 11 on an optional peer). First retry
-  with the reference toolchain (Node 22). If a manifest really changed,
-  regenerate from that folder only: `cd backend && npm install` (or
-  `frontend/`), then verify with `npm ci`. Never hand-edit lockfiles, and
-  never run `npm install` at the repo root (there is no root package).
-- **`npm ci` fails with `EPERM` on Windows (locked `.node` file).**
-  A stray Node process (dev server, watcher, antivirus) holds a native binary
-  in `node_modules`. Stop local Node processes / close editors holding the
-  folder and retry. Do not delete volumes or databases for this.
-- **`tsc` / eslint errors in frontend after switching branches.**
-  Reinstall from `frontend/`: `npm ci`. The frontend has fixed TypeScript
-  configs (`tsconfig.app.json`, `tsconfig.node.json`) — don't bypass type
-  errors, fix the code or ask the team.
+### PostgreSQL connection errors
 
-## Team workflow
+If Prisma reports `P1001` or the connection is refused:
 
-- Branching, commits (Conventional Commits), and PR rules live in
-  [`CONTRIBUTING.md`](CONTRIBUTING.md) — trunk-based short branches,
-  rebase, squash-merge, at least one review, never push to `main` directly.
-- Backend and frontend are **separate npm packages**: each has its own
-  `package.json` + `package-lock.json`. After pulling, install in any folder
-  whose manifest changed:
-  ```bash
-  git pull --ff-only origin main
-  cd backend && npm ci && cd ..
-  cd frontend && npm ci && cd ..
-  ```
-  Always prefer `npm ci` (uses the lockfile). Use `npm install` only when you
-  intentionally add/change a dependency, and commit the updated lockfile.
-- Docs live in [`docs/`](docs/) (API contract, DB schema, decisions) and are
-  currently placeholders — fill them as the design lands.
-- Folder guides: [`backend/README.md`](backend/README.md),
-  [`frontend/README.md`](frontend/README.md).
+1. Check that Docker is running.
+2. Run `docker compose ps` from the repository root.
+3. Verify the credentials and port in the root `.env`.
+4. Ensure `DATABASE_URL` in `backend/.env` matches those values.
+5. Check the database logs with `docker compose logs db`.
 
-## Documentation
+### Port already in use
 
-- [Contributing guide](CONTRIBUTING.md) — workflow, conventions, reviews
-- [Code of Conduct](CODE_OF_CONDUCT.md) — community standards
-- [Security policy](SECURITY.md) — how to report vulnerabilities privately
-- [Authors](AUTHORS) — contributors recorded in Git history
-- [Backend guide](backend/README.md) — API setup, scripts, Prisma
-- [Frontend guide](frontend/README.md) — UI setup, scripts, environment
-- [Design docs](docs/) — API contract, database schema, decisions
-  (placeholders for now)
-- [CI workflow](.github/workflows/ci.yml) — what runs on every pull request
+If a port is occupied, stop the conflicting process or configure an alternative port. If you change the PostgreSQL host port, update `DATABASE_URL` accordingly.
+
+Vite may automatically select another port if `5173` is unavailable.
+
+### Dependency installation errors
+
+Use the reference Node.js version and run `npm ci` from the affected application directory.
+
+If dependencies were intentionally changed, update the appropriate lockfile and verify that a clean `npm ci` succeeds before opening a pull request. Never hand-edit lockfiles.
+
+### Database data
+
+The `pgdata` volume persists database data between container restarts. Do not delete the volume or reset the database as a troubleshooting shortcut; doing so may permanently remove local data.
 
 ## Contributing
 
-Contributions are welcome. Please read
-[`CONTRIBUTING.md`](CONTRIBUTING.md) for the workflow, coding conventions,
-and review expectations, and follow the
-[`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md). To report a security issue, see
-[`SECURITY.md`](SECURITY.md) (do not open a public issue). Contributors are
-listed in [`AUTHORS`](AUTHORS).
+Contributions are welcome.
+
+Before contributing, read the [Contributing Guide](CONTRIBUTING.md) for branch naming, commit conventions, pull request requirements, and code review expectations.
+
+Please also review:
+
+- [Code of Conduct](CODE_OF_CONDUCT.md)
+- [Security Policy](SECURITY.md)
+
+Use an issue to discuss or track a task, work on a separate branch, and open a pull request against `main`. Do not push directly to `main`.
+
+## Documentation
+
+- [Contributing Guide](CONTRIBUTING.md)
+- [Code of Conduct](CODE_OF_CONDUCT.md)
+- [Security Policy](SECURITY.md)
+- [Authors](AUTHORS)
+- [Backend Guide](backend/README.md)
+- [Frontend Guide](frontend/README.md)
+- [Design Documentation](docs/)
+- [GitHub Actions Workflow](.github/workflows/ci.yml)
+
+Design documents are being developed alongside the application.
 
 ## License
 
