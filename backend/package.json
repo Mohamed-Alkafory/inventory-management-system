@@ -1,6 +1,7 @@
 {
   "name": "backend",
   "version": "0.0.1",
+  "type": "module",
   "description": "",
   "author": "",
   "private": true,
@@ -18,6 +19,8 @@
     "test:watch": "vitest",
     "test:cov": "vitest run --coverage",
     "test:e2e": "vitest run --config vitest.config.e2e.ts",
+    "db:seed": "prisma db seed",
+    "db:seed:run": "tsc -p tsconfig.seed.json && node -e \"require('fs').writeFileSync('dist-seed/package.json', JSON.stringify({type:'module'}))\" && node dist-seed/prisma/seed.js",
     "postinstall": "prisma skills sync || exit 0"
   },
   "dependencies": {
