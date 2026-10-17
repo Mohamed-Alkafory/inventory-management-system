@@ -118,7 +118,7 @@ model Order {
   createdAt     DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt     DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  createdBy      User            @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  createdBy      User            @relation(fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Cascade)
   orderItems     OrderItem[]
   stockMovements StockMovement[]
 
@@ -170,6 +170,7 @@ model StockMovement {
   createdBy     User           @relation(fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   @@index([productId, createdAt])
+  @@index([createdById])
   @@index([orderId])
   @@index([purchaseOrderId])
   @@map("stock_movements")

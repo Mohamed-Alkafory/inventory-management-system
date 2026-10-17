@@ -6,8 +6,8 @@ Prisma config: `backend/prisma.config.ts` (`schema`, `migrations.path`, datasour
 
 ## Connection
 
-- PostgreSQL 16 via Docker Compose service `db` (`docker-compose.yml`), data in the `pgdata` volume, database `inventory_db`.
-- The backend connects with `DATABASE_URL` (see `backend/.env.example`). Local development currently maps the container to host port `5433` because a native Windows PostgreSQL occupies `5432`; `POSTGRES_PORT` in the repo-root `.env` controls the mapping.
+- PostgreSQL 16 via Docker Compose service `db` (`docker-compose.yml`), data in the `pgdata` volume, database `inventory_db`. The container maps to host port `5432` by default; `POSTGRES_PORT` in the repo-root `.env` overrides it.
+- The backend connects with `DATABASE_URL` (see `backend/.env.example`). Local development on this machine currently maps the container to host port `5433` because a native Windows PostgreSQL occupies `5432`.
 
 ## Conventions
 
@@ -87,7 +87,7 @@ Composite PK `(user_id, type)`; `enabled` (default true). Belongs to `User` (`Ca
 - `suppliers`: `(company_name)`
 - `orders`: `(status, created_at)`, `(created_by_id)`
 - `order_items`: `(product_id)`
-- `stock_movements`: `(product_id, created_at)`, `(order_id)`, `(purchase_order_id)`
+- `stock_movements`: `(product_id, created_at)`, `(created_by_id)`, `(order_id)`, `(purchase_order_id)`
 - `purchase_orders`: `(supplier_id)`, `(status, created_at)`, `(created_by_id)`
 - `purchase_order_items`: `(product_id)`
 - `notifications`: `(user_id, is_read, created_at)`
@@ -110,4 +110,4 @@ Prisma schema cannot express these; they live in migration SQL only:
 1. **Application-enforced stock consistency.** The database guarantees each stock value in isolation (`products.quantity >= 0`, `quantity_change <> 0`, `quantity_after >= 0`) but does _not_ guarantee `quantity_after = previous quantity + quantity_change`, nor that every quantity update has a movement row. Services must update `Product.quantity` and insert the `StockMovement` in one transaction with row locking, computing `quantity_after` server-side.
 2. **Order snapshots.** `OrderItem` duplicates product name/SKU/unit price so fulfilled-order history is immutable.
 3. **Restrict-by-default deletes.** Business entities cannot be deleted while referenced; only dependent rows (order items, notifications, tokens) cascade, and audit logs keep their rows with the user nulled.
-4. **Seed data.** `backend/prisma/seed.ts` (run via `prisma db seed`) inserts deterministic development sample data idempotently; see its header comment for the dev-only credentials.
+4. **Seed data.** `backend/prisma/seed.ts` (run via `prisma db seed`) inserts deterministic development sample data idempotently. Its credentials (e.g. `admin@example.com / Admin123!`) are for **local development only** — change or remove them before deploying to any shared environment.
