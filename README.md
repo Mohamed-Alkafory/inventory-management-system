@@ -269,6 +269,15 @@ Run these commands only after application models have been added to `backend/pri
 
 Database design should be reviewed before migrations are introduced so the team can agree on entities, relationships, constraints, and data integrity requirements.
 
+To load development sample data (idempotent), run from `backend/`:
+
+```bash
+npm run db:seed
+```
+
+> [!WARNING]
+> The seed creates development-only credentials (`admin@example.com / Admin123!`). These are for local development only — never use them in a shared or production environment.
+
 ## Testing and CI
 
 The repository includes automated checks for the backend and frontend.
