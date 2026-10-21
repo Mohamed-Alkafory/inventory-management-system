@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FaUser } from "react-icons/fa";
+import { FaBars, FaTimes, FaUser } from "react-icons/fa";
 import ProdexaLogo from "../Logo";
 import "./Header.css";
 
@@ -61,6 +61,17 @@ export default function Header() {
             <FaUser />
           </a>
         </div>
+
+        <button
+          type="button"
+          className="header__toggle"
+          aria-label={open ? "Close menu" : "Open menu"}
+          aria-expanded={open}
+          aria-controls="main-nav"
+          onClick={() => setOpen((prev) => !prev)}
+        >
+          {open ? <FaTimes /> : <FaBars />}
+        </button>
       </div>
     </header>
   );
