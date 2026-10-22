@@ -1,64 +1,369 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { NotFoundException } from '@nestjs/common';
 import { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { CreateProductDto } from './dto/create-product.dto.js';
+import { UpdateProductDto } from './dto/update-product.dto.js';
 import { ProductsService } from './products.service.js';
+
+const CATEGORY_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+const SUPPLIER_ID = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 
 describe('ProductsService', () => {
   let service: ProductsService;
-  const findMany = vi.fn();
+  const productFindMany = vi.fn();
+  const productFindUnique = vi.fn();
+  const productCreate = vi.fn();
+  const productUpdate = vi.fn();
+  const categoryFindUnique = vi.fn();
+  const supplierFindUnique = vi.fn();
+
+  const productRow = (overrides: Record<string, unknown> = {}) => {
+    const row: Record<string, unknown> = {
+      id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      sku: 'OFF-PEN-002',
+      name: 'Ballpoint Pen',
+      description: null,
+      imageUrl: null,
+      barcode: null,
+      price: new Prisma.Decimal('1.99'),
+      costPrice: new Prisma.Decimal('0.60'),
+      quantity: 500,
+      minStock: 50,
+      isActive: true,
+      categoryId: CATEGORY_ID,
+      supplierId: SUPPLIER_ID,
+      createdAt: new Date('2026-10-15T00:00:00Z'),
+      updatedAt: new Date('2026-10-15T00:00:00Z'),
+    };
+    return { ...row, ...overrides } as Prisma.ProductGetPayload<{
+      select: Record<string, true>;
+    }>;
+  };
 
   beforeEach(async () => {
-    findMany.mockReset();
+    productFindMany.mockReset();
+    productFindUnique.mockReset();
+    productCreate.mockReset();
+    productUpdate.mockReset();
+    categoryFindUnique.mockReset();
+    supplierFindUnique.mockReset();
+    // FK lookups "succeed" unless a test says otherwise.
+    categoryFindUnique.mockResolvedValue({ id: CATEGORY_ID });
+    supplierFindUnique.mockResolvedValue({ id: SUPPLIER_ID });
+    productUpdate.mockResolvedValue(productRow());
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ProductsService,
-        { provide: PrismaService, useValue: { product: { findMany } } },
+        {
+          provide: PrismaService,
+          useValue: {
+            product: {
+              findMany: productFindMany,
+              findUnique: productFindUnique,
+              create: productCreate,
+              update: productUpdate,
+            },
+            category: { findUnique: categoryFindUnique },
+            supplier: { findUnique: supplierFindUnique },
+          },
+        },
       ],
     }).compile();
 
     service = module.get<ProductsService>(ProductsService);
   });
 
-  it('returns active products with numeric prices and no internal fields', async () => {
-    findMany.mockResolvedValue([
-      {
-        id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-        sku: 'OFF-PEN-002',
-        name: 'Ballpoint Pen',
-        description: null,
-        price: new Prisma.Decimal('1.99'),
-        quantity: 500,
-      },
-    ]);
+  describe('findAll', () => {
+    it('keeps the original behavior: active products, name asc, numeric price', async () => {
+      productFindMany.mockResolvedValue([productRow()]);
 
-    await expect(service.findAll()).resolves.toEqual([
-      {
-        id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-        sku: 'OFF-PEN-002',
-        name: 'Ballpoint Pen',
-        description: null,
-        price: 1.99,
-        quantity: 500,
-      },
-    ]);
-  });
+      await expect(service.findAll('STAFF')).resolves.toEqual([
+        {
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          sku: 'OFF-PEN-002',
+          name: 'Ballpoint Pen',
+          description: null,
+          imageUrl: null,
+          barcode: null,
+          price: 1.99,
+          quantity: 500,
+          minStock: 50,
+          isActive: true,
+          categoryId: CATEGORY_ID,
+          supplierId: SUPPLIER_ID,
+          createdAt: new Date('2026-10-15T00:00:00Z'),
+          updatedAt: new Date('2026-10-15T00:00:00Z'),
+        },
+      ]);
 
-  it('queries only active products ordered by name', async () => {
-    findMany.mockResolvedValue([]);
+      expect(productFindMany).toHaveBeenCalledWith({
+        where: { isActive: true },
+        orderBy: { name: 'asc' },
+        select: expect.objectContaining({ id: true, sku: true, price: true }),
+      });
+    });
 
-    await service.findAll();
-
-    expect(findMany).toHaveBeenCalledWith({
-      where: { isActive: true },
-      orderBy: { name: 'asc' },
-      select: {
-        id: true,
-        sku: true,
-        name: true,
-        description: true,
-        price: true,
-        quantity: true,
-      },
+    it('returns assignments without side effects', async () => {
+      productFindMany.mockResolvedValue([productRow()]);
+      await service.findAll('ADMIN');
+      // No extra queries (category/supplier are selected inline).
+      expect(categoryFindUnique).not.toHaveBeenCalled();
+      expect(supplierFindUnique).not.toHaveBeenCalled();
     });
   });
+
+  describe('costPrice visibility (AD-004)', () => {
+    it('hides costPrice for STAFF in list, detail, create and update', async () => {
+      productFindMany.mockResolvedValue([productRow()]);
+      productFindUnique.mockResolvedValue(productRow());
+      productCreate.mockResolvedValue(productRow());
+
+      const [listItem] = await service.findAll('STAFF');
+      expect(listItem).not.toHaveProperty('costPrice');
+
+      const detail = await service.findOne('aaaa', 'STAFF');
+      expect(detail).not.toHaveProperty('costPrice');
+
+      const created = await service.create(validCreateDto());
+      expect(created).toHaveProperty('costPrice'); // create is ADMIN-only
+
+      // update responses are ADMIN-only by construction, but the serializer
+      // honors the role parameter either way.
+      const staffLike = await service.findAll('STAFF');
+      expect(staffLike[0]).not.toHaveProperty('costPrice');
+    });
+
+    it('returns costPrice as a number for ADMIN', async () => {
+      productFindUnique.mockResolvedValue(productRow());
+
+      const detail = await service.findOne('aaaa', 'ADMIN');
+
+      expect(detail.costPrice).toBe(0.6);
+      expect(detail.price).toBe(1.99);
+    });
+
+    it('serializes a null costPrice as null for ADMIN', async () => {
+      productFindUnique.mockResolvedValue(productRow({ costPrice: null }));
+
+      const detail = await service.findOne('aaaa', 'ADMIN');
+
+      expect(detail).toHaveProperty('costPrice', null);
+    });
+  });
+
+  describe('findOne', () => {
+    it('returns the product when it exists', async () => {
+      productFindUnique.mockResolvedValue(productRow());
+
+      await expect(
+        service.findOne('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'ADMIN'),
+      ).resolves.toMatchObject({ sku: 'OFF-PEN-002', price: 1.99 });
+    });
+
+    it('throws 404 when the product does not exist', async () => {
+      productFindUnique.mockResolvedValue(null);
+
+      await expect(
+        service.findOne('missing-id', 'ADMIN'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('still resolves soft-deleted (inactive) products with isActive: false (AD-001)', async () => {
+      productFindUnique.mockResolvedValue(productRow({ isActive: false }));
+
+      const result = await service.findOne('aaaa', 'STAFF');
+
+      expect(result.isActive).toBe(false);
+      expect(result).not.toHaveProperty('costPrice');
+    });
+  });
+
+  describe('create', () => {
+    it('creates the product and returns it serialized for ADMIN', async () => {
+      productCreate.mockResolvedValue(productRow());
+
+      const result = await service.create(validCreateDto());
+
+      expect(result.costPrice).toBe(0.6);
+      expect(productCreate).toHaveBeenCalledWith({
+        data: {
+          sku: 'OFF-PEN-002',
+          name: 'Ballpoint Pen',
+          description: 'Blue ink',
+          imageUrl: 'https://example.com/pen.png',
+          barcode: '8901234567890',
+          price: 1.99,
+          costPrice: 0.6,
+          quantity: 500,
+          minStock: 50,
+          categoryId: CATEGORY_ID,
+          supplierId: SUPPLIER_ID,
+        },
+        select: expect.anything(),
+      });
+    });
+
+    it('throws 404 when the category does not exist', async () => {
+      categoryFindUnique.mockResolvedValue(null);
+
+      await expect(service.create(validCreateDto())).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      expect(productCreate).not.toHaveBeenCalled();
+    });
+
+    it('throws 404 when the supplier does not exist', async () => {
+      supplierFindUnique.mockResolvedValue(null);
+
+      await expect(service.create(validCreateDto())).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      expect(productCreate).not.toHaveBeenCalled();
+    });
+
+    it('skips the supplier lookup when no supplierId is sent', async () => {
+      productCreate.mockResolvedValue(productRow());
+
+      await service.create(validCreateDto({ supplierId: undefined }));
+
+      expect(supplierFindUnique).not.toHaveBeenCalled();
+    });
+
+    it('lets duplicate sku/barcode surface as a Prisma P2002 (409 via the global filter)', async () => {
+      productCreate.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+          code: 'P2002',
+          clientVersion: 'test',
+        }),
+      );
+
+      await expect(service.create(validCreateDto())).rejects.toMatchObject({
+        code: 'P2002',
+      });
+      expect(productCreate).toHaveBeenCalled();
+    });
+  });
+
+  describe('update', () => {
+    it('applies only the provided fields and never quantity/isActive', async () => {
+      productFindUnique.mockResolvedValue(productRow());
+      productUpdate.mockResolvedValue(productRow({ price: new Prisma.Decimal('2.49') }));
+
+      // `quantity`/`isActive` are not part of UpdateProductDto; assert the
+      // data payload contains exactly the provided fields.
+      const result = await service.update(
+        'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        { name: 'Renamed Pen' } as UpdateProductDto,
+      );
+
+      expect(result.name).toBe('Ballpoint Pen');
+      expect(productUpdate).toHaveBeenCalledWith({
+        where: { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
+        data: { name: 'Renamed Pen' },
+        select: expect.objectContaining({ sku: true, costPrice: true }),
+      });
+    });
+
+    it('throws 404 when the product does not exist', async () => {
+      productFindUnique.mockResolvedValue(null);
+
+      await expect(
+        service.update('missing-id', { name: 'X' } as UpdateProductDto),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(productUpdate).not.toHaveBeenCalled();
+    });
+
+    it('throws 404 when the new category does not exist', async () => {
+      productFindUnique.mockResolvedValue(productRow());
+      categoryFindUnique.mockResolvedValue(null);
+
+      await expect(
+        service.update('aaa', { categoryId: 'nope' } as UpdateProductDto),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(productUpdate).not.toHaveBeenCalled();
+    });
+
+    it('throws 404 when the new supplier does not exist', async () => {
+      productFindUnique.mockResolvedValue(productRow());
+      supplierFindUnique.mockResolvedValue(null);
+
+      await expect(
+        service.update('aaa', { supplierId: 'nope' } as UpdateProductDto),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(productUpdate).not.toHaveBeenCalled();
+    });
+
+    it('allows nulling supplierId/barcode without an FK lookup', async () => {
+      productFindUnique.mockResolvedValue(productRow());
+      productUpdate.mockResolvedValue(productRow());
+
+      await service.update('aaa', { supplierId: null, barcode: null } as UpdateProductDto);
+
+      expect(supplierFindUnique).not.toHaveBeenCalled();
+      expect(productUpdate).toHaveBeenCalledWith({
+        where: { id: 'aaa' },
+        data: { supplierId: null, barcode: null },
+        select: expect.anything(),
+      });
+    });
+
+    it('lets duplicate sku surface as a Prisma P2002 (409 via the global filter)', async () => {
+      productFindUnique.mockResolvedValue(productRow());
+      productUpdate.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+          code: 'P2002',
+          clientVersion: 'test',
+        }),
+      );
+
+      await expect(
+        service.update('aaa', { sku: 'TAKEN' } as UpdateProductDto),
+      ).rejects.toMatchObject({ code: 'P2002' });
+    });
+  });
+
+  describe('remove (soft delete, AD-001)', () => {
+    it('sets isActive=false and never deletes the row', async () => {
+      productFindUnique.mockResolvedValue(productRow());
+
+      await expect(
+        service.remove('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),
+      ).resolves.toBeUndefined();
+
+      expect(productUpdate).toHaveBeenCalledWith({
+        where: { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
+        data: { isActive: false },
+        select: { id: true },
+      });
+      expect(productCreate).not.toHaveBeenCalled();
+    });
+
+    it('throws 404 when the product does not exist', async () => {
+      productFindUnique.mockResolvedValue(null);
+
+      await expect(service.remove('missing-id')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      expect(productUpdate).not.toHaveBeenCalled();
+    });
+  });
+
+  function validCreateDto(overrides: Partial<CreateProductDto> = {}): CreateProductDto {
+    const dto: CreateProductDto = {
+      sku: 'OFF-PEN-002',
+      name: 'Ballpoint Pen',
+      description: 'Blue ink',
+      imageUrl: 'https://example.com/pen.png',
+      barcode: '8901234567890',
+      price: 1.99,
+      costPrice: 0.6,
+      quantity: 500,
+      minStock: 50,
+      categoryId: CATEGORY_ID,
+      supplierId: SUPPLIER_ID,
+    };
+    return { ...dto, ...overrides };
+  }
 });
