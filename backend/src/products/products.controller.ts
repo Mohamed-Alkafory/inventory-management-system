@@ -9,11 +9,13 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 
-import { ProductsService, type ProductResponse } from './products.service.js';
+import { ProductsService, type ProductListResponse, type ProductResponse } from './products.service.js';
 import { CreateProductDto } from './dto/create-product.dto.js';
+import { ListProductsQueryDto } from './dto/list-products.query.dto.js';
 import { UpdateProductDto } from './dto/update-product.dto.js';
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
 import { Roles } from '../auth/decorators/roles.decorator.js';
@@ -32,17 +34,21 @@ export class ProductsController {
 
   @Get()
   @ApiOperation({
-    summary: 'List active products',
+    summary: 'List products (search, filters, sorting, pagination)',
     description:
-      'Active products only (AD-001). `costPrice` is included for ADMIN only (AD-004).',
+      'Returns the contract §1 pagination envelope. Active products only unless `isActive` is set (AD-001). `costPrice` is included for ADMIN only (AD-004). `stockStatus=low_stock` compares `quantity <= minStock` (raw SQL, whitelisted ORDER BY).',
   })
   @ApiResponse({
     status: HttpStatus.OK,
-    description: 'Product list (prices as numbers, costPrice ADMIN-only).',
+    description: 'Paginated product list (prices as numbers, costPrice ADMIN-only).',
   })
+  @ApiResponse({ status: HttpStatus.BAD_REQUEST, description: 'Invalid query parameter' })
   @ApiResponse({ status: HttpStatus.UNAUTHORIZED, description: 'Missing or invalid token' })
-  findAll(@CurrentUser() user: AuthenticatedUser): Promise<ProductResponse[]> {
-    return this.productsService.findAll(user.role);
+  findAll(
+    @Query() query: ListProductsQueryDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<ProductListResponse> {
+    return this.productsService.findAll(query, user.role);
   }
 
   @Get(':id')

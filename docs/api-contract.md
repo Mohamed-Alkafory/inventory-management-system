@@ -158,7 +158,7 @@ Errors: `422` when deactivating a category that still has active products (or fo
 
 | Method | Path                        | Role | Request body / query                                                                                                                   | Response                          | Errors                          |
 | ------ | --------------------------- | ---- | -------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- | ------------------------------- |
-| GET    | `/products`                 | any  | `?page&limit&search&categoryId&supplierId&isActive&lowStock&sortBy(name,sku,price,quantity,createdAt)&sortOrder`                        | paginated `Product[]`             | 401                             |
+| GET    | `/products`                 | any  | `?page&limit&search&categoryId&supplierId&isActive&stockStatus(in_stock,low_stock,out_of_stock)&sortBy(name,sku,price,quantity,createdAt)&sortOrder` | paginated `Product[]`             | 400, 401                        |
 | GET    | `/products/:id`             | any  | —                                                                                                                                      | `Product` + `{ category, supplier }` populated          | 401, 404 |
 | POST   | `/products`                 | admin | `{ sku, name, description?, imageUrl?, barcode?, price, costPrice?, quantity?, minStock?, categoryId, supplierId? }`                   | `Product` (201)                   | 400, 401, 403, 404 (bad categoryId/supplierId), 409 (duplicate sku/barcode) |
 | PATCH  | `/products/:id`             | admin | same fields, all optional — **`quantity` not directly editable, use `/stock`**                                                           | `Product`                         | 400, 401, 403, 404, 409, 422 |
@@ -167,7 +167,9 @@ Errors: `422` when deactivating a category that still has active products (or fo
 `Product` shape: `{ id, sku, name, description, imageUrl, barcode, price, costPrice, quantity, minStock, isActive, categoryId, supplierId, createdAt, updatedAt }`.
 
 - `costPrice` is included **only** for ADMIN (see decisions §4). STAFF responses omit the field entirely (not `null`).
-- `lowStock=true` filters `quantity <= minStock` (drives dashboard + notifications).
+- `stockStatus=low_stock` filters `quantity <= minStock`; `in_stock` → `quantity > 0`;
+  `out_of_stock` → `quantity = 0` (drives dashboard + notifications).
+  Invalid query values are rejected with `400 VALIDATION_ERROR`.
 - Errors: `422` when price/cost validation fails (`price < 0`, `costPrice < 0`), or when deleting a product referenced by an active order/purchase order item.
 
 ### 3.5 Suppliers
