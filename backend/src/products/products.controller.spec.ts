@@ -8,8 +8,9 @@ import {
 import { Reflector } from '@nestjs/core';
 
 import { ProductsController } from './products.controller.js';
-import { ProductsService, type ProductResponse } from './products.service.js';
+import { ProductsService, type ProductListResponse, type ProductResponse } from './products.service.js';
 import { CreateProductDto } from './dto/create-product.dto.js';
+import { ListProductsQueryDto } from './dto/list-products.query.dto.js';
 import { UpdateProductDto } from './dto/update-product.dto.js';
 import { ROLES_KEY } from '../auth/decorators/roles.decorator.js';
 
@@ -32,6 +33,16 @@ const sampleProduct: ProductResponse = {
   supplierId: null,
   createdAt: new Date('2026-10-15T00:00:00Z'),
   updatedAt: new Date('2026-10-15T00:00:00Z'),
+};
+
+const samplePage: ProductListResponse = {
+  data: [sampleProduct],
+  meta: { page: 1, limit: 20, total: 1, totalPages: 1 },
+};
+
+const emptyPage: ProductListResponse = {
+  data: [],
+  meta: { page: 1, limit: 20, total: 0, totalPages: 0 },
 };
 
 describe('ProductsController', () => {
@@ -64,22 +75,48 @@ describe('ProductsController', () => {
     reflector = module.get(Reflector);
   });
 
-  it('returns the products provided by the service (existing behavior)', async () => {
-    findAll.mockResolvedValue([sampleProduct]);
+  it('returns the paginated envelope provided by the service', async () => {
+    findAll.mockResolvedValue(samplePage);
+    const query = { page: 2, limit: 10 } as ListProductsQueryDto;
 
-    await expect(controller.findAll(ADMIN)).resolves.toEqual([sampleProduct]);
-    expect(findAll).toHaveBeenCalledWith('ADMIN');
+    await expect(controller.findAll(query, ADMIN)).resolves.toEqual(samplePage);
+    expect(findAll).toHaveBeenCalledWith(query, 'ADMIN');
+  });
+
+  it('returns an empty envelope when nothing matches', async () => {
+    findAll.mockResolvedValue(emptyPage);
+    const query = { search: 'zzz-none' } as ListProductsQueryDto;
+
+    await expect(controller.findAll(query, ADMIN)).resolves.toEqual(emptyPage);
   });
 
   it('passes the requester role for costPrice filtering', async () => {
-    findAll.mockResolvedValue([]);
+    findAll.mockResolvedValue(emptyPage);
     findOne.mockResolvedValue(sampleProduct);
+    const query = {} as ListProductsQueryDto;
 
-    await controller.findAll(STAFF);
+    await controller.findAll(query, STAFF);
     await controller.findOne('some-id', STAFF);
 
-    expect(findAll).toHaveBeenCalledWith('STAFF');
+    expect(findAll).toHaveBeenCalledWith(query, 'STAFF');
     expect(findOne).toHaveBeenCalledWith('some-id', 'STAFF');
+  });
+
+  it('forwards each list filter to the service', async () => {
+    findAll.mockResolvedValue(emptyPage);
+    const query = {
+      search: 'pen',
+      categoryId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      supplierId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+      isActive: false,
+      stockStatus: 'low_stock',
+      sortBy: 'name',
+      sortOrder: 'asc',
+    } as ListProductsQueryDto;
+
+    await controller.findAll(query, ADMIN);
+
+    expect(findAll).toHaveBeenCalledWith(query, 'ADMIN');
   });
 
   it('creates a product via the service', async () => {
@@ -127,8 +164,7 @@ describe('ProductsController', () => {
     const codeOf = (handler: (...args: never[]) => unknown) =>
       Reflect.getMetadata('__httpCode__', handler) ?? HttpStatus.OK;
 
-    // Nest's defaults: GET/PATCH → 200, POST → 201 (no metadata set means 201
-    // via RequestMapping default), DELETE explicitly decorated with 204.
+    // Nest's defaults: GET/PATCH → 200, POST → 201; DELETE explicitly 204.
     expect(codeOf(ProductsController.prototype.findOne)).toBe(HttpStatus.OK);
     expect(codeOf(ProductsController.prototype.update)).toBe(HttpStatus.OK);
     expect(Reflect.getMetadata('__httpCode__', ProductsController.prototype.remove)).toBe(
@@ -147,7 +183,7 @@ describe('ProductsController', () => {
     expect(rolesFor(ProductsController.prototype.findOne)).toEqual([]);
   });
 
-  describe('input validation (400)', () => {
+  describe('input validation (400) — body DTOs', () => {
     // The global ValidationPipe whitelist/forbidNonWhitelisted config in main.ts.
     const pipe = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true });
     const validate = (value: unknown, metatype: new () => unknown) =>
@@ -213,4 +249,51 @@ describe('ProductsController', () => {
     });
   });
 
+  describe('input validation (400) — list query params', () => {
+    // Mirrors the global ValidationPipe settings, including ?page=1&isActive=false.
+    const pipe = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true });
+    const validate = (value: unknown) =>
+      pipe.transform(value, { type: 'query', metatype: ListProductsQueryDto });
+
+    it.each([
+      ['page below 1', { page: 0 }],
+      ['non-numeric page', { page: 'first' }],
+      ['limit above 100', { limit: 101 }],
+      ['non-integer limit', { limit: 2.5 }],
+      ['invalid sortBy', { sortBy: 'barcode' }],
+      ['invalid sortOrder', { sortOrder: 'up' }],
+      ['invalid stockStatus', { stockStatus: 'critical' }],
+      ['non-UUID categoryId', { categoryId: 'not-a-uuid' }],
+      ['non-UUID supplierId', { supplierId: 'not-a-uuid' }],
+      ['non-boolean isActive', { isActive: 'maybe' }],
+      ['over-long search', { search: 'x'.repeat(101) }],
+      ['unknown non-whitelisted param', { q: 'pen' }],
+    ])('rejects %s with 400', async (_name, bad) => {
+      await expect(validate(bad)).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('accepts a valid combined query and applies defaults', async () => {
+      const transformed = await validate({
+        search: 'pen',
+        categoryId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+        supplierId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+        isActive: 'false',
+        stockStatus: 'low_stock',
+        sortBy: 'price',
+        sortOrder: 'asc',
+      });
+
+      expect(transformed).toMatchObject({
+        search: 'pen',
+        categoryId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+        supplierId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+        isActive: false,
+        stockStatus: 'low_stock',
+        sortBy: 'price',
+        sortOrder: 'asc',
+        page: 1,
+        limit: 20,
+      });
+    });
+  });
 });

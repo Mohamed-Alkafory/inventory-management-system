@@ -2,8 +2,9 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
-import { CreateProductDto } from './dto/create-product.dto.js';
-import { UpdateProductDto } from './dto/update-product.dto.js';
+import { type CreateProductDto } from './dto/create-product.dto.js';
+import { type ListProductsQueryDto } from './dto/list-products.query.dto.js';
+import { type UpdateProductDto } from './dto/update-product.dto.js';
 import { ProductsService } from './products.service.js';
 
 const CATEGORY_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
@@ -12,9 +13,11 @@ const SUPPLIER_ID = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 describe('ProductsService', () => {
   let service: ProductsService;
   const productFindMany = vi.fn();
+  const productCount = vi.fn();
   const productFindUnique = vi.fn();
   const productCreate = vi.fn();
   const productUpdate = vi.fn();
+  const $queryRaw = vi.fn();
   const categoryFindUnique = vi.fn();
   const supplierFindUnique = vi.fn();
 
@@ -43,15 +46,20 @@ describe('ProductsService', () => {
 
   beforeEach(async () => {
     productFindMany.mockReset();
+    productCount.mockReset();
     productFindUnique.mockReset();
     productCreate.mockReset();
     productUpdate.mockReset();
+    $queryRaw.mockReset();
     categoryFindUnique.mockReset();
     supplierFindUnique.mockReset();
     // FK lookups "succeed" unless a test says otherwise.
     categoryFindUnique.mockResolvedValue({ id: CATEGORY_ID });
     supplierFindUnique.mockResolvedValue({ id: SUPPLIER_ID });
     productUpdate.mockResolvedValue(productRow());
+    // Default list mocks: one matching product.
+    productCount.mockResolvedValue(1);
+    productFindMany.mockResolvedValue([productRow()]);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -61,10 +69,12 @@ describe('ProductsService', () => {
           useValue: {
             product: {
               findMany: productFindMany,
+              count: productCount,
               findUnique: productFindUnique,
               create: productCreate,
               update: productUpdate,
             },
+            $queryRaw,
             category: { findUnique: categoryFindUnique },
             supplier: { findUnique: supplierFindUnique },
           },
@@ -75,81 +85,262 @@ describe('ProductsService', () => {
     service = module.get<ProductsService>(ProductsService);
   });
 
-  describe('findAll', () => {
-    it('keeps the original behavior: active products, name asc, numeric price', async () => {
-      productFindMany.mockResolvedValue([productRow()]);
+  describe('findAll — defaults and envelope', () => {
+    it('returns the contract pagination envelope with safe defaults', async () => {
+      const result = await service.findAll({} as ListProductsQueryDto, 'ADMIN');
 
-      await expect(service.findAll('STAFF')).resolves.toEqual([
-        {
-          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-          sku: 'OFF-PEN-002',
-          name: 'Ballpoint Pen',
-          description: null,
-          imageUrl: null,
-          barcode: null,
-          price: 1.99,
-          quantity: 500,
-          minStock: 50,
-          isActive: true,
-          categoryId: CATEGORY_ID,
-          supplierId: SUPPLIER_ID,
-          createdAt: new Date('2026-10-15T00:00:00Z'),
-          updatedAt: new Date('2026-10-15T00:00:00Z'),
-        },
-      ]);
-
-      expect(productFindMany).toHaveBeenCalledWith({
-        where: { isActive: true },
-        orderBy: { name: 'asc' },
-        select: expect.objectContaining({ id: true, sku: true, price: true }),
+      expect(result.meta).toEqual({
+        page: 1,
+        limit: 20,
+        total: 1,
+        totalPages: 1,
       });
+      expect(result.data[0]).toMatchObject({
+        sku: 'OFF-PEN-002',
+        price: 1.99,
+        quantity: 500,
+      });
+      expect(productCount).toHaveBeenCalledWith({
+        where: { isActive: true },
+      });
+      expect(productFindMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { isActive: true },
+          skip: 0,
+          take: 20,
+          // Default sort (contract: createdAt desc) + deterministic id tie-break.
+          orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+          select: expect.objectContaining({ id: true, sku: true, price: true }),
+        }),
+      );
     });
 
-    it('returns assignments without side effects', async () => {
-      productFindMany.mockResolvedValue([productRow()]);
-      await service.findAll('ADMIN');
-      // No extra queries (category/supplier are selected inline).
+    it('keeps the response fields compatible; no extra queries per page', async () => {
+      const [row] = (await service.findAll({} as ListProductsQueryDto, 'ADMIN'))
+        .data;
+
+      expect(row).toEqual({
+        id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        sku: 'OFF-PEN-002',
+        name: 'Ballpoint Pen',
+        description: null,
+        imageUrl: null,
+        barcode: null,
+        price: 1.99,
+        costPrice: 0.6,
+        quantity: 500,
+        minStock: 50,
+        isActive: true,
+        categoryId: CATEGORY_ID,
+        supplierId: SUPPLIER_ID,
+        createdAt: new Date('2026-10-15T00:00:00Z'),
+        updatedAt: new Date('2026-10-15T00:00:00Z'),
+      });
+      // Category/supplier come from the select, not extra queries.
       expect(categoryFindUnique).not.toHaveBeenCalled();
       expect(supplierFindUnique).not.toHaveBeenCalled();
     });
+
+    it('applies page and limit (skip = (page - 1) * limit)', async () => {
+      await service.findAll(
+        { page: 3, limit: 10 } as ListProductsQueryDto,
+        'ADMIN',
+      );
+
+      expect(productFindMany).toHaveBeenCalledWith(
+        expect.objectContaining({ skip: 20, take: 10 }),
+      );
+    });
+
+    it('returns an empty list with totalPages 0 when nothing matches', async () => {
+      productCount.mockResolvedValue(0);
+      productFindMany.mockResolvedValue([]);
+
+      const result = await service.findAll({} as ListProductsQueryDto, 'ADMIN');
+
+      expect(result).toEqual({
+        data: [],
+        meta: { page: 1, limit: 20, total: 0, totalPages: 0 },
+      });
+    });
+
+    it('returns an empty list (not an error) when the page is beyond the last', async () => {
+      productCount.mockResolvedValue(3);
+      productFindMany.mockResolvedValue([]);
+
+      const result = await service.findAll(
+        { page: 5, limit: 20 } as ListProductsQueryDto,
+        'ADMIN',
+      );
+
+      expect(result.data).toEqual([]);
+      expect(result.meta).toEqual({
+        page: 5,
+        limit: 20,
+        total: 3,
+        totalPages: 1,
+      });
+    });
   });
 
-  describe('costPrice visibility (AD-004)', () => {
-    it('hides costPrice for STAFF in list, detail, create and update', async () => {
-      productFindMany.mockResolvedValue([productRow()]);
-      productFindUnique.mockResolvedValue(productRow());
-      productCreate.mockResolvedValue(productRow());
+  describe('findAll — filters and sorting', () => {
+    it('searches name and SKU case-insensitively', async () => {
+      await service.findAll(
+        { search: 'pen' } as ListProductsQueryDto,
+        'ADMIN',
+      );
 
-      const [listItem] = await service.findAll('STAFF');
-      expect(listItem).not.toHaveProperty('costPrice');
-
-      const detail = await service.findOne('aaaa', 'STAFF');
-      expect(detail).not.toHaveProperty('costPrice');
-
-      const created = await service.create(validCreateDto());
-      expect(created).toHaveProperty('costPrice'); // create is ADMIN-only
-
-      // update responses are ADMIN-only by construction, but the serializer
-      // honors the role parameter either way.
-      const staffLike = await service.findAll('STAFF');
-      expect(staffLike[0]).not.toHaveProperty('costPrice');
+      expect(productFindMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            isActive: true,
+            OR: [
+              { name: { contains: 'pen', mode: 'insensitive' } },
+              { sku: { contains: 'pen', mode: 'insensitive' } },
+            ],
+          },
+        }),
+      );
     });
 
-    it('returns costPrice as a number for ADMIN', async () => {
-      productFindUnique.mockResolvedValue(productRow());
+    it('combines categoryId, supplierId and isActive filters', async () => {
+      await service.findAll(
+        { categoryId: CATEGORY_ID, supplierId: SUPPLIER_ID, isActive: false } as ListProductsQueryDto,
+        'ADMIN',
+      );
 
-      const detail = await service.findOne('aaaa', 'ADMIN');
-
-      expect(detail.costPrice).toBe(0.6);
-      expect(detail.price).toBe(1.99);
+      expect(productCount).toHaveBeenCalledWith({
+        where: {
+          isActive: false,
+          categoryId: CATEGORY_ID,
+          supplierId: SUPPLIER_ID,
+        },
+      });
+      expect(productFindMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            isActive: false,
+            categoryId: CATEGORY_ID,
+            supplierId: SUPPLIER_ID,
+          },
+          orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+        }),
+      );
     });
 
-    it('serializes a null costPrice as null for ADMIN', async () => {
-      productFindUnique.mockResolvedValue(productRow({ costPrice: null }));
+    it('filters in_stock (quantity > 0)', async () => {
+      await service.findAll(
+        { stockStatus: 'in_stock' } as ListProductsQueryDto,
+        'ADMIN',
+      );
 
-      const detail = await service.findOne('aaaa', 'ADMIN');
+      expect(productFindMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { isActive: true, quantity: { gt: 0 } },
+        }),
+      );
+    });
 
-      expect(detail).toHaveProperty('costPrice', null);
+    it('filters out_of_stock (quantity = 0)', async () => {
+      await service.findAll(
+        { stockStatus: 'out_of_stock' } as ListProductsQueryDto,
+        'ADMIN',
+      );
+
+      expect(productFindMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { isActive: true, quantity: { equals: 0 } },
+        }),
+      );
+    });
+
+    it.each([
+      ['name', 'name'],
+      ['sku', 'sku'],
+      ['price', 'price'],
+      ['quantity', 'quantity'],
+      ['createdAt', 'createdAt'],
+    ])('sorts by %s whitelisted', async (sortBy, column) => {
+      await service.findAll(
+        { sortBy, sortOrder: 'asc' } as ListProductsQueryDto,
+        'ADMIN',
+      );
+
+      expect(productFindMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderBy: [{ [column]: 'asc' }, { id: 'asc' }],
+        }),
+      );
+    });
+  });
+
+  describe('findAll — stockStatus=low_stock (raw query)', () => {
+    it('compares quantity <= minStock with a whitelisted raw ORDER BY', async () => {
+      $queryRaw
+        .mockResolvedValueOnce([{ total: 1 }])
+        .mockResolvedValueOnce([productRow()]);
+
+      const result = await service.findAll(
+        { stockStatus: 'low_stock' } as ListProductsQueryDto,
+        'ADMIN',
+      );
+
+      // One raw SELECT for the matching count, one for the page rows.
+      expect($queryRaw).toHaveBeenCalledTimes(2);
+      expect(result.meta).toEqual({
+        page: 1,
+        limit: 20,
+        total: 1,
+        totalPages: 1,
+      });
+      expect(result.data[0].price).toBe(1.99);
+    });
+
+    it('keeps costPrice ADMIN-only on the raw path and hides it for STAFF', async () => {
+      $queryRaw
+        .mockResolvedValueOnce([{ total: 1 }])
+        .mockResolvedValueOnce([productRow()]);
+
+      const adminResult = await service.findAll(
+        { stockStatus: 'low_stock' } as ListProductsQueryDto,
+        'ADMIN',
+      );
+      expect(adminResult.data[0].costPrice).toBe(0.6);
+
+      $queryRaw.mockReset();
+      $queryRaw
+        .mockResolvedValueOnce([{ total: 1 }])
+        .mockResolvedValueOnce([productRow()]);
+
+      const staffResult = await service.findAll(
+        { stockStatus: 'low_stock' } as ListProductsQueryDto,
+        'STAFF',
+      );
+      expect(staffResult.data[0]).not.toHaveProperty('costPrice');
+    });
+  });
+
+  describe('findAll — costPrice visibility (AD-004)', () => {
+    it('hides costPrice for STAFF and returns it for ADMIN', async () => {
+      const staffResult = await service.findAll(
+        {} as ListProductsQueryDto,
+        'STAFF',
+      );
+      expect(staffResult.data[0]).not.toHaveProperty('costPrice');
+
+      const adminResult = await service.findAll(
+        {} as ListProductsQueryDto,
+        'ADMIN',
+      );
+      expect(adminResult.data[0].costPrice).toBe(0.6);
+    });
+
+    it('returns a null costPrice as null for ADMIN', async () => {
+      productFindMany.mockResolvedValue([productRow({ costPrice: null })]);
+
+      const result = await service.findAll({} as ListProductsQueryDto, 'ADMIN');
+
+      expect(result.data[0]).toHaveProperty('costPrice', null);
     });
   });
 

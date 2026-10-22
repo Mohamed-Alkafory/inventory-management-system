@@ -4,6 +4,10 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { Prisma } from '../generated/prisma/client.js';
 import { CreateProductDto } from './dto/create-product.dto.js';
 import { UpdateProductDto } from './dto/update-product.dto.js';
+import {
+  ListProductsQueryDto,
+  type ProductSortableField,
+} from './dto/list-products.query.dto.js';
 
 /**
  * Contract §3.4 `Product` shape. `price`/`costPrice` are Decimal(12,2) in the
@@ -21,6 +25,34 @@ export interface ProductResponse {
   price: number;
   /** Present only for ADMIN, omitted for STAFF (AD-004). */
   costPrice?: number | null;
+  quantity: number;
+  minStock: number;
+  isActive: boolean;
+  categoryId: string;
+  supplierId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** Contract §3.4 list response — §1 pagination envelope. */
+export interface ProductListResponse {
+  data: ProductResponse[];
+  meta: { page: number; limit: number; total: number; totalPages: number };
+}
+
+/**
+ * A product row as returned by either the typed Prisma client or the
+ * `low_stock` raw query (NUMERIC arrives as Decimal/string there).
+ */
+interface ProductRowLike {
+  id: string;
+  sku: string;
+  name: string;
+  description: string | null;
+  imageUrl: string | null;
+  barcode: string | null;
+  price: Prisma.Decimal | number | string;
+  costPrice: Prisma.Decimal | number | string | null;
   quantity: number;
   minStock: number;
   isActive: boolean;
@@ -50,23 +82,155 @@ const PRODUCT_SELECT = {
 
 const ADMIN_ROLE = 'ADMIN';
 
+/** snake_case columns for the whitelist-ordered raw `low_stock` query. */
+const SORT_COLUMNS: Record<ProductSortableField, string> = {
+  name: 'name',
+  sku: 'sku',
+  price: 'price',
+  quantity: 'quantity',
+  createdAt: 'created_at',
+};
+
 @Injectable()
 export class ProductsService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Default list: active products only (AD-001 — soft-deleted rows disappear
-   * from listing; they still resolve by id). Response shape is kept compatible
-   * with the pre-existing GET /products fields, extended with the full
-   * contract §3.4 shape.
+   * Paginated, filtered and sorted product list (contract §3.4). Response
+   * shape stays compatible with the pre-existing GET /products fields, in the
+   * §1 pagination envelope. Default listing shows active products only
+   * (AD-001 — soft-deleted rows disappear from the listing; they still
+   * resolve by id) — an explicit `isActive` query param overrides that.
    */
-  async findAll(role: string): Promise<ProductResponse[]> {
-    const products = await this.prisma.product.findMany({
-      where: { isActive: true },
-      orderBy: { name: 'asc' },
-      select: PRODUCT_SELECT,
-    });
-    return products.map((product) => serialize(product, role));
+  async findAll(
+    query: ListProductsQueryDto,
+    role: string,
+  ): Promise<ProductListResponse> {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const sortBy = query.sortBy ?? 'createdAt';
+    const sortOrder = query.sortOrder ?? 'desc';
+
+    if (query.stockStatus === 'low_stock') {
+      const { data, total } = await this.findLowStockPage(
+        query,
+        page,
+        limit,
+        sortBy,
+        sortOrder,
+        role,
+      );
+      return this.toPage(data, total, page, limit);
+    }
+
+    const where: Prisma.ProductWhereInput = {
+      isActive: query.isActive ?? true,
+      ...(query.categoryId !== undefined
+        ? { categoryId: query.categoryId }
+        : {}),
+      ...(query.supplierId !== undefined
+        ? { supplierId: query.supplierId }
+        : {}),
+      ...(query.search
+        ? {
+            OR: [
+              { name: { contains: query.search, mode: 'insensitive' } },
+              { sku: { contains: query.search, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+      ...(query.stockStatus === 'in_stock' ? { quantity: { gt: 0 } } : {}),
+      ...(query.stockStatus === 'out_of_stock'
+        ? { quantity: { equals: 0 } }
+        : {}),
+    };
+
+    const [total, products] = await Promise.all([
+      this.prisma.product.count({ where }),
+      this.prisma.product.findMany({
+        where,
+        skip: (page - 1) * limit,
+        take: limit,
+        // Secondary `id` sort keeps the ordering deterministic on ties.
+        orderBy: [
+          { [sortBy]: sortOrder } as Prisma.ProductOrderByWithRelationInput,
+          { id: 'asc' },
+        ],
+        select: PRODUCT_SELECT,
+      }),
+    ]);
+
+    return this.toPage(products.map((product) => serialize(product, role)), total, page, limit);
+  }
+
+  /**
+   * `stockStatus=low_stock` (`quantity <= minStock`) compares two columns,
+   * which typed Prisma filters cannot express. It needs a raw query: the
+   * `WHERE` fragments are built with `Prisma.sql` (bound parameters), and the
+   * ORDER BY identifiers come from a whitelist enum, never from user input.
+   */
+  private async findLowStockPage(
+    query: ListProductsQueryDto,
+    page: number,
+    limit: number,
+    sortBy: ProductSortableField,
+    sortOrder: 'asc' | 'desc',
+    role: string,
+  ): Promise<{ data: ProductResponse[]; total: number }> {
+    const conditions: Prisma.Sql[] = [
+      Prisma.sql`quantity <= min_stock`,
+      Prisma.sql`is_active = ${query.isActive ?? true}`,
+    ];
+
+    if (query.search) {
+      // Escape the LIKE wildcards so `%`/`_` match literally, as they do in
+      // the typed `contains` path.
+      const like = `%${query.search.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+      conditions.push(Prisma.sql`(name ILIKE ${like} OR sku ILIKE ${like})`);
+    }
+    if (query.categoryId !== undefined) {
+      conditions.push(Prisma.sql`category_id = ${query.categoryId}`);
+    }
+    if (query.supplierId !== undefined) {
+      conditions.push(Prisma.sql`supplier_id = ${query.supplierId}`);
+    }
+
+    const where = Prisma.join(conditions, ' AND ');
+    const orderBy = SORT_COLUMNS[sortBy] + ' ' + sortOrder.toUpperCase();
+
+    const [countRows, rows] = await Promise.all([
+      this.prisma.$queryRaw<Array<{ total: number }>>(
+        Prisma.sql`SELECT COUNT(*)::int AS total FROM products WHERE ${where}`,
+      ),
+      this.prisma.$queryRaw<Array<ProductRowLike>>(
+        Prisma.sql`SELECT id, sku, name, description,
+                 image_url AS "imageUrl", barcode, price, cost_price AS "costPrice",
+                 quantity, min_stock AS "minStock", is_active AS "isActive",
+                 category_id AS "categoryId", supplier_id AS "supplierId",
+                 created_at AS "createdAt", updated_at AS "updatedAt"
+               FROM products
+               WHERE ${where}
+               ORDER BY ${Prisma.raw(orderBy)}, id ASC
+               LIMIT ${limit} OFFSET ${(page - 1) * limit}`,
+      ),
+    ]);
+
+    return {
+      data: rows.map((row) => serialize(row, role)),
+      total: Number(countRows[0]?.total ?? 0),
+    };
+  }
+
+  private toPage(
+    data: ProductResponse[],
+    total: number,
+    page: number,
+    limit: number,
+  ): ProductListResponse {
+    return {
+      data,
+      meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    };
   }
 
   /**
@@ -226,10 +390,7 @@ export class ProductsService {
   }
 }
 
-function serialize(
-  product: Prisma.ProductGetPayload<{ select: typeof PRODUCT_SELECT }>,
-  role: string,
-): ProductResponse {
+function serialize(product: ProductRowLike, role: string): ProductResponse {
   const { price, costPrice, ...rest } = product;
   const response: ProductResponse = {
     ...rest,
