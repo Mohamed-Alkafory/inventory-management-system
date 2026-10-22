@@ -22,7 +22,6 @@
 [![Vitest](https://img.shields.io/badge/Vitest-Tests-6E9F18?style=for-the-badge&logo=vitest&logoColor=white)](https://vitest.dev/)
 [![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
 
-
 </div>
 
 An inventory and order management system designed to bring product tracking, supplier management, and order operations into one place.
@@ -62,20 +61,21 @@ The architecture represents the intended application design. Frontend-to-backend
 
 ## Current Status
 
-| Component | Current state |
-|---|---|
-| Frontend | Initial React and Vite application |
-| Backend | Initial NestJS REST API |
-| Database | PostgreSQL container configured |
-| Prisma | Initial configuration; no application models or migrations yet |
-| Automated checks | GitHub Actions CI for backend and frontend |
-| Inventory and order features | Not implemented yet |
+| Component                    | Current state                                                  |
+| ---------------------------- | -------------------------------------------------------------- |
+| Frontend                     | Initial React and Vite application                             |
+| Backend                      | Initial NestJS REST API                                        |
+| Database                     | PostgreSQL container configured                                |
+| Prisma                       | Initial configuration; no application models or migrations yet |
+| Automated checks             | GitHub Actions CI for backend and frontend                     |
+| Inventory and order features | Not implemented yet                                            |
 
 The backend currently exposes `GET /`, which returns `"Hello World!"`. The frontend is still an initial application shell, and API calls have not yet been integrated.
 
 ## Tech Stack
 
 ### Frontend
+
 - React 19
 - TypeScript
 - Vite
@@ -87,6 +87,7 @@ The backend currently exposes `GET /`, which returns `"Hello World!"`. The front
 - Axios
 
 ### Backend
+
 - NestJS 12
 - TypeScript
 - Prisma 7
@@ -94,6 +95,7 @@ The backend currently exposes `GET /`, which returns `"Hello World!"`. The front
 - Vitest
 
 ### Development and Quality
+
 - Docker Compose
 - npm
 - ESLint
@@ -101,19 +103,56 @@ The backend currently exposes `GET /`, which returns `"Hello World!"`. The front
 - Prettier
 - GitHub Actions
 
+## Running with Docker Compose
+
+### Prerequisites
+
+- Docker Desktop or Docker Engine with Docker Compose.
+- Configured local environment files based on the provided examples.
+
+### Setup
+
+Create the root `.env` from `.env.example` and `backend/.env` from `backend/.env.example`. Configure the database credentials and required application secrets. Never commit real secrets.
+
+### Start the application
+
+From the repository root:
+
+```bash
+docker compose up --build -d
+```
+
+The backend waits for PostgreSQL to become healthy and applies pending Prisma migrations before starting.
+
+If port `3000` is already in use on your machine, publish the API on another host port by setting `BACKEND_PORT` for that command, e.g. `BACKEND_PORT=3001 docker compose up --build -d`.
+
+- API base URL: `http://localhost:3000/api/v1`
+- Health endpoint: `http://localhost:3000/api/v1/health`
+- Swagger UI: `http://localhost:3000/api/docs`
+
+### Stop the application
+
+```bash
+docker compose down
+```
+
+The PostgreSQL data volume is preserved when using `docker compose down`.
+
+**Warning:** `docker compose down -v` removes the PostgreSQL volume and deletes the persisted database data.
+
 ## Getting Started
 
 Follow these steps to run the project locally.
 
 ### Prerequisites
 
-| Tool | Version | Verification |
-|---|---|---|
-| Git | Recent version | `git --version` |
-| Node.js | 22 (reference version) | `node --version` |
-| npm | Included with Node.js | `npm --version` |
-| Docker | Recent version | `docker --version` |
-| Docker Compose | Compose v2 | `docker compose version` |
+| Tool           | Version                | Verification             |
+| -------------- | ---------------------- | ------------------------ |
+| Git            | Recent version         | `git --version`          |
+| Node.js        | 22 (reference version) | `node --version`         |
+| npm            | Included with Node.js  | `npm --version`          |
+| Docker         | Recent version         | `docker --version`       |
+| Docker Compose | Compose v2             | `docker compose version` |
 
 Node.js 22 is the reference version used by CI. Other versions may work locally, but use Node.js 22 when troubleshooting environment-specific issues.
 
@@ -190,26 +229,26 @@ npm run dev
 
 ### 7. Open the applications
 
-| Service | URL |
-|---|---|
-| Frontend | http://localhost:5173 |
+| Service     | URL                   |
+| ----------- | --------------------- |
+| Frontend    | http://localhost:5173 |
 | Backend API | http://localhost:3000 |
-| PostgreSQL | localhost:5432 |
+| PostgreSQL  | localhost:5432        |
 
 The frontend currently displays the initial application shell. The backend's root endpoint responds to `GET /` with `"Hello World!"`.
 
 ## Environment Variables
 
-| Variable | Purpose |
-|---|---|
-| `POSTGRES_USER` | PostgreSQL username |
-| `POSTGRES_PASSWORD` | PostgreSQL password |
-| `POSTGRES_DB` | Database name |
-| `POSTGRES_PORT` | Host port mapped to PostgreSQL |
-| `DATABASE_URL` | Database connection string used by Prisma |
-| `PORT` | Backend API port; defaults to `3000` |
-| `JWT_SECRET` | Reserved for future authentication |
-| `VITE_API_URL` | Reserved for future frontend API integration |
+| Variable            | Purpose                                      |
+| ------------------- | -------------------------------------------- |
+| `POSTGRES_USER`     | PostgreSQL username                          |
+| `POSTGRES_PASSWORD` | PostgreSQL password                          |
+| `POSTGRES_DB`       | Database name                                |
+| `POSTGRES_PORT`     | Host port mapped to PostgreSQL               |
+| `DATABASE_URL`      | Database connection string used by Prisma    |
+| `PORT`              | Backend API port; defaults to `3000`         |
+| `JWT_SECRET`        | Reserved for future authentication           |
+| `VITE_API_URL`      | Reserved for future frontend API integration |
 
 The JWT and frontend API variables are reserved for planned functionality; the current application does not yet consume them.
 
@@ -221,30 +260,30 @@ Environment templates contain placeholders only. Keep actual secrets in ignored 
 
 Run commands from `backend/`.
 
-| Command | Description |
-|---|---|
-| `npm run start:dev` | Start in watch mode |
-| `npm run start:debug` | Start with debugging |
-| `npm run start` | Start the application |
-| `npm run build` | Build the production application |
-| `npm run start:prod` | Run the production build |
-| `npm run lint` | Run oxlint |
-| `npm run format` | Format source and test files |
-| `npm test` | Run unit tests |
-| `npm run test:e2e` | Run end-to-end tests |
-| `npm run test:cov` | Run tests with coverage |
-| `npm run test:watch` | Run tests in watch mode |
+| Command               | Description                      |
+| --------------------- | -------------------------------- |
+| `npm run start:dev`   | Start in watch mode              |
+| `npm run start:debug` | Start with debugging             |
+| `npm run start`       | Start the application            |
+| `npm run build`       | Build the production application |
+| `npm run start:prod`  | Run the production build         |
+| `npm run lint`        | Run oxlint                       |
+| `npm run format`      | Format source and test files     |
+| `npm test`            | Run unit tests                   |
+| `npm run test:e2e`    | Run end-to-end tests             |
+| `npm run test:cov`    | Run tests with coverage          |
+| `npm run test:watch`  | Run tests in watch mode          |
 
 ### Frontend
 
 Run commands from `frontend/`.
 
-| Command | Description |
-|---|---|
-| `npm run dev` | Start the development server |
-| `npm run build` | Type-check and build the application |
-| `npm run preview` | Preview the production build |
-| `npm run lint` | Run ESLint |
+| Command           | Description                          |
+| ----------------- | ------------------------------------ |
+| `npm run dev`     | Start the development server         |
+| `npm run build`   | Type-check and build the application |
+| `npm run preview` | Preview the production build         |
+| `npm run lint`    | Run ESLint                           |
 
 ## Database
 
