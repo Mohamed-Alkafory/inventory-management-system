@@ -1,11 +1,15 @@
 {
   "name": "backend",
   "version": "0.0.1",
-  "type": "module",
-  "description": "",
-  "author": "",
   "private": true,
+  "description": "NestJS 12 + TypeScript REST API with Prisma 7 (PostgreSQL) and Vitest.\r Full local setup lives in the [root README](../README.md); this file is the\r backend cheat sheet.",
   "license": "MIT",
+  "author": "",
+  "type": "module",
+  "main": "index.js",
+  "directories": {
+    "test": "test"
+  },
   "scripts": {
     "build": "nest build",
     "deploy": "nest deploy",
