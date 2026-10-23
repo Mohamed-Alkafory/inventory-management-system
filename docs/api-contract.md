@@ -174,15 +174,16 @@ Errors: `409` when deleting (or renaming to) a category while another category a
 
 ### 3.5 Suppliers
 
-| Method | Path             | Role  | Request body / query                                    | Response                    | Errors                  |
-| ------ | ---------------- | ----- | ------------------------------------------------------- | --------------------------- | ----------------------- |
-| GET    | `/suppliers`     | any   | `?page&limit&search&isActive` / `?all=true`             | paginated `Supplier[]`      | 401                     |
-| GET    | `/suppliers/:id` | any   | —                                                       | `Supplier` + `productCount` | 401, 404                |
-| POST   | `/suppliers`     | admin | `{ companyName, email?, phone?, address? }`             | `Supplier` (201)            | 400, 401, 403           |
-| PATCH  | `/suppliers/:id` | admin | `{ companyName?, email?, phone?, address?, isActive? }` | `Supplier`                  | 400, 401, 403, 404, 422 |
-| DELETE | `/suppliers/:id` | admin | —                                                       | `204` (soft delete)         | 401, 403, 404, 422      |
+| Method | Path             | Role  | Request body / query                                    | Response                                                | Errors                          |
+| ------ | ---------------- | ----- | ------------------------------------------------------- | ------------------------------------------------------- | ------------------------------- |
+| GET    | `/suppliers`     | any   | `?page&limit&search&isActive`                           | paginated `Supplier[]` (active only by default, AD-001) | 400, 401                        |
+| GET    | `/suppliers/:id` | any   | —                                                       | `Supplier` + `productCount`                             | 400 (invalid id), 401, 404      |
+| POST   | `/suppliers`     | admin | `{ companyName, email?, phone?, address? }`             | `Supplier` (201)                                        | 400, 401, 403                   |
+| PATCH  | `/suppliers/:id` | admin | `{ companyName?, email?, phone?, address?, isActive? }` | `Supplier`                                              | 400, 401, 403, 404              |
+| DELETE | `/suppliers/:id` | admin | —                                                       | `204` (soft delete)                                     | 400 (invalid id), 401, 403, 404 |
 
 `Supplier`: `{ id, companyName, email, phone, address, isActive, createdAt, updatedAt }`.
+Soft delete (AD-001): rows are never removed, so linked `products` and `purchase_orders` (FK `ON DELETE RESTRICT`) keep their references intact; deactivation only drops the supplier from the default listing.
 
 ### 3.6 Stock
 
