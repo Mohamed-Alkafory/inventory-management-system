@@ -187,16 +187,17 @@ Soft delete (AD-001): rows are never removed, so linked `products` and `purchase
 
 ### 3.6 Stock
 
-| Method | Path                 | Role | Request body                                                          | Response                                                    | Errors                              |
-| ------ | -------------------- | ---- | --------------------------------------------------------------------- | ----------------------------------------------------------- | ----------------------------------- |
-| GET    | `/stock/movements`   | any  | `?page&limit&productId&type&orderId&purchaseOrderId&sortBy&sortOrder` | paginated `StockMovement[]`                                 | 401                                 |
-| POST   | `/stock/adjustments` | any  | `{ productId, quantityChange, reason }` (quantityChange ≠ 0)          | `{ movement: StockMovement, product: Product }` (201)       | 400, 401, 403 (see below), 404, 422 |
-| GET    | `/stock/low-stock`   | any  | `?page&limit`                                                         | paginated `Product[]` (`quantity <= minStock`, active only) | 401                                 |
+| Method | Path                      | Role | Request body / query                                                          | Response                                                    | Errors                           |
+| ------ | ------------------------- | ---- | ----------------------------------------------------------------------------- | ----------------------------------------------------------- | -------------------------------- |
+| GET    | `/stock/movements`        | any  | `?page&limit&productId&type&orderId&purchaseOrderId&from&to&sortBy&sortOrder` | paginated `StockMovement[]`                                 | 400, 401                         |
+| GET    | `/products/:id/movements` | any  | `?page&limit&type&orderId&purchaseOrderId&from&to&sortBy&sortOrder`           | paginated `StockMovement[]` (forced to the path product)    | 400 (invalid id/query), 401, 404 |
+| POST   | `/stock/adjustments`      | any  | `{ productId, quantityChange, reason }` (quantityChange ≠ 0)                  | `{ movement: StockMovement, product: Product }` (201)       | 400, 401, 404, 409, 422          |
+| GET    | `/stock/low-stock`        | any  | `?page&limit`                                                                 | paginated `Product[]` (`quantity <= minStock`, active only) | 400, 401                         |
 
 - `StockMovement` shape: `{ id, productId, type, quantityChange, quantityAfter, reason, orderId, purchaseOrderId, createdById, createdAt }`.
 - `type` on adjustments is always `ADJUSTMENT`; `SALE`/`PURCHASE_RECEIPT`/`RETURN` are system-generated from orders/purchase orders.
 - Role: STAFF may adjust stock (they run the till); `RETURN` and other system types cannot be created manually.
-- Errors: `422` when the resulting quantity would go below 0, or `quantityChange = 0`.
+- Errors: `409` when the quantity would go below zero (atomic guard, issue-specified); `422` when the product is inactive; `quantityChange = 0` is a `400` field error. The write is one conditional atomic `updateMany` (quantity guard + `increment`) inside a Serializable transaction, so two concurrent decreases can never push the quantity below zero.
 - Product quantity and the movement row are written in **one transaction** (`quantityAfter` computed server-side, never sent by client).
 
 ### 3.7 Orders
