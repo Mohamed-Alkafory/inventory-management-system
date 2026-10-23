@@ -14,5 +14,8 @@ import { StockService } from './stock.service.js';
   imports: [ProductsModule],
   controllers: [StockController, ProductMovementsController],
   providers: [StockService],
+  // Shared with orders (#28) and purchase orders (#32): applyStockChange
+  // keeps quantity, movement history and order rows consistent in ONE tx.
+  exports: [StockService],
 })
 export class StockModule {}
