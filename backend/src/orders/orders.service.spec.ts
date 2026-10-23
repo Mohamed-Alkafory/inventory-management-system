@@ -43,13 +43,21 @@ describe('OrdersService', () => {
   const txProductFindMany = vi.fn();
   const txOrderCount = vi.fn();
   const txOrderCreate = vi.fn();
+  const txOrderFindUnique = vi.fn();
+  const txOrderUpdateMany = vi.fn();
   const txOrderItemCreate = vi.fn();
+  const txOrderItemFindMany = vi.fn();
   const applyStockChange = vi.fn();
 
   const tx = {
     product: { findMany: txProductFindMany },
-    order: { count: txOrderCount, create: txOrderCreate },
-    orderItem: { create: txOrderItemCreate },
+    order: {
+      count: txOrderCount,
+      create: txOrderCreate,
+      findUnique: txOrderFindUnique,
+      updateMany: txOrderUpdateMany,
+    },
+    orderItem: { create: txOrderItemCreate, findMany: txOrderItemFindMany },
   };
 
   beforeEach(async () => {
@@ -97,6 +105,14 @@ describe('OrdersService', () => {
       movement: { id: 'movement-id' },
       product: { id: PRODUCT_A },
     });
+    txOrderFindUnique.mockReset().mockResolvedValue({
+      id: ORDER_ID,
+      orderNumber: 'ORD-0001',
+      status: 'PENDING',
+      cancelledAt: null,
+    });
+    txOrderUpdateMany.mockReset().mockResolvedValue({ count: 1 });
+    txOrderItemFindMany.mockReset().mockResolvedValue([]);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -477,6 +493,344 @@ describe('OrdersService', () => {
         ),
       ).rejects.toBe(boom);
       expect($transaction).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('updateStatus — transitions and cancellation (#29)', () => {
+    const statusDto = (newStatus: OrderStatus) => ({ newStatus }) as never;
+    const instrumentItem = (productId: string, quantity: number) => ({
+      id: '11111111-1111-4111-8111-111111111111',
+      orderId: ORDER_ID,
+      productId,
+      productName:
+        productId === PRODUCT_A ? 'Ballpoint Pen' : 'Ring Notebook A5',
+      sku: productId === PRODUCT_A ? 'OFF-PEN-002' : 'OFF-NB-001',
+      quantity,
+      unitPrice:
+        productId === PRODUCT_A
+          ? new Prisma.Decimal('1.99')
+          : new Prisma.Decimal('3.5'),
+      lineTotal:
+        productId === PRODUCT_A
+          ? new Prisma.Decimal('3.98')
+          : new Prisma.Decimal('10.5'),
+    });
+    /** A post-update order row for the response re-read. */
+    const updatedOrderRow = (
+      status: OrderStatus,
+      cancelledAt: Date | null,
+    ) => ({
+      id: ORDER_ID,
+      orderNumber: 'ORD-0001',
+      status,
+      customerName: null,
+      customerPhone: null,
+      notes: null,
+      totalAmount: new Prisma.Decimal('14.48'),
+      createdById: USER_ID,
+      cancelledAt,
+      createdAt: new Date('2026-10-23T12:00:00Z'),
+      updatedAt: new Date('2026-10-23T13:00:00Z'),
+    });
+
+    it('runs the status write in ONE Serializable transaction', async () => {
+      txOrderFindUnique
+        .mockResolvedValueOnce({
+          id: ORDER_ID,
+          orderNumber: 'ORD-0001',
+          status: 'PENDING',
+          cancelledAt: null,
+        })
+        .mockResolvedValueOnce(updatedOrderRow(OrderStatus.CONFIRMED, null));
+
+      await service.updateStatus(
+        ORDER_ID,
+        statusDto(OrderStatus.CONFIRMED),
+        USER_ID,
+        'ADMIN',
+      );
+
+      expect($transaction).toHaveBeenCalledTimes(1);
+      expect($transaction.mock.calls[0][1]).toEqual({
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      });
+    });
+
+    it('PENDING → CONFIRMED — plain status write, nothing restored', async () => {
+      txOrderFindUnique
+        .mockResolvedValueOnce({
+          id: ORDER_ID,
+          orderNumber: 'ORD-0001',
+          status: 'PENDING',
+          cancelledAt: null,
+        })
+        .mockResolvedValueOnce(updatedOrderRow(OrderStatus.CONFIRMED, null));
+
+      await service.updateStatus(
+        ORDER_ID,
+        statusDto(OrderStatus.CONFIRMED),
+        USER_ID,
+        'ADMIN',
+      );
+
+      expect(txOrderUpdateMany).toHaveBeenCalledWith({
+        where: { id: ORDER_ID, status: OrderStatus.PENDING },
+        data: { status: OrderStatus.CONFIRMED },
+      });
+      expect(applyStockChange).not.toHaveBeenCalled();
+    });
+
+    it('PENDING → CANCELLED restores every line with RETURN movements in the same tx', async () => {
+      txOrderFindUnique
+        .mockResolvedValueOnce({
+          id: ORDER_ID,
+          orderNumber: 'ORD-0001',
+          status: 'PENDING',
+          cancelledAt: null,
+        })
+        .mockResolvedValueOnce(
+          updatedOrderRow(
+            OrderStatus.CANCELLED,
+            new Date('2026-10-23T13:00:00Z'),
+          ),
+        );
+      txOrderItemFindMany
+        .mockResolvedValueOnce([
+          instrumentItem(PRODUCT_A, 2),
+          instrumentItem(PRODUCT_B, 3),
+        ])
+        .mockResolvedValueOnce([
+          instrumentItem(PRODUCT_A, 2),
+          instrumentItem(PRODUCT_B, 3),
+        ]);
+
+      const result = await service.updateStatus(
+        ORDER_ID,
+        statusDto(OrderStatus.CANCELLED),
+        USER_ID,
+        'ADMIN',
+      );
+
+      expect(txOrderUpdateMany).toHaveBeenCalledWith({
+        where: { id: ORDER_ID, status: OrderStatus.PENDING },
+        data: {
+          status: OrderStatus.CANCELLED,
+          cancelledAt: expect.any(Date),
+        },
+      });
+      expect(applyStockChange).toHaveBeenCalledTimes(2);
+      expect(applyStockChange).toHaveBeenCalledWith(
+        tx,
+        PRODUCT_A,
+        2,
+        StockMovementType.RETURN,
+        'Cancelled order ORD-0001',
+        USER_ID,
+        'ADMIN',
+        {
+          orderId: ORDER_ID,
+          allowInactive: true,
+        },
+      );
+      expect(applyStockChange).toHaveBeenCalledWith(
+        tx,
+        PRODUCT_B,
+        3,
+        StockMovementType.RETURN,
+        'Cancelled order ORD-0001',
+        USER_ID,
+        'ADMIN',
+        {
+          orderId: ORDER_ID,
+          allowInactive: true,
+        },
+      );
+      expect(result.status).toBe(OrderStatus.CANCELLED);
+      expect(result.cancelledAt).toEqual(new Date('2026-10-23T13:00:00Z'));
+      // money serialized as numbers
+      expect(result.totalAmount).toBe(14.48);
+      expect(result.items[0]).toMatchObject({
+        productId: PRODUCT_A,
+        quantity: 2,
+        unitPrice: 1.99,
+        lineTotal: 3.98,
+      });
+    });
+
+    it('CONFIRMED → CANCELLED is allowed and records the caller identity (STAFF)', async () => {
+      txOrderFindUnique
+        .mockResolvedValueOnce({
+          id: ORDER_ID,
+          orderNumber: 'ORD-0001',
+          status: 'CONFIRMED',
+          cancelledAt: null,
+        })
+        .mockResolvedValueOnce(
+          updatedOrderRow(
+            OrderStatus.CANCELLED,
+            new Date('2026-10-23T13:00:00Z'),
+          ),
+        );
+      txOrderItemFindMany.mockResolvedValue([instrumentItem(PRODUCT_A, 2)]);
+
+      await service.updateStatus(
+        ORDER_ID,
+        statusDto(OrderStatus.CANCELLED),
+        USER_ID,
+        'STAFF',
+      );
+
+      expect(txOrderUpdateMany).toHaveBeenCalledWith({
+        where: { id: ORDER_ID, status: OrderStatus.CONFIRMED },
+        data: { status: OrderStatus.CANCELLED, cancelledAt: expect.any(Date) },
+      });
+      expect(applyStockChange).toHaveBeenCalledWith(
+        tx,
+        PRODUCT_A,
+        2,
+        StockMovementType.RETURN,
+        'Cancelled order ORD-0001',
+        USER_ID,
+        'STAFF',
+        {
+          orderId: ORDER_ID,
+          allowInactive: true,
+        },
+      );
+    });
+
+    it.each([
+      [
+        'PENDING → PENDING (same-status no-op)',
+        OrderStatus.PENDING,
+        OrderStatus.PENDING,
+      ],
+      [
+        'CONFIRMED → PENDING (backwards)',
+        OrderStatus.CONFIRMED,
+        OrderStatus.PENDING,
+      ],
+      [
+        'CONFIRMED → CONFIRMED (same-status no-op)',
+        OrderStatus.CONFIRMED,
+        OrderStatus.CONFIRMED,
+      ],
+      [
+        'CANCELLED → PENDING (un-cancel)',
+        OrderStatus.CANCELLED,
+        OrderStatus.PENDING,
+      ],
+      ['CANCELLED → CONFIRMED', OrderStatus.CANCELLED, OrderStatus.CONFIRMED],
+      [
+        'CANCELLED → CANCELLED (double cancel)',
+        OrderStatus.CANCELLED,
+        OrderStatus.CANCELLED,
+      ],
+    ] as const)('rejects %s with 409', async (_name, from, to) => {
+      txOrderFindUnique
+        .mockResolvedValue({
+          id: ORDER_ID,
+          orderNumber: 'ORD-0001',
+          status: from,
+          cancelledAt: from === OrderStatus.CANCELLED ? new Date() : null,
+        })
+        .mockResolvedValue({
+          id: ORDER_ID,
+          orderNumber: 'ORD-0001',
+          status: from,
+          cancelledAt: from === OrderStatus.CANCELLED ? new Date() : null,
+        });
+
+      await expect(
+        service.updateStatus(ORDER_ID, statusDto(to), USER_ID, 'ADMIN'),
+      ).rejects.toBeInstanceOf(ConflictException);
+
+      // Terminal or invalid transitions never touch the DB or the stock.
+      expect(txOrderUpdateMany).not.toHaveBeenCalled();
+      expect(applyStockChange).not.toHaveBeenCalled();
+    });
+
+    it('cancelling twice never restores stock twice', async () => {
+      txOrderFindUnique.mockResolvedValue({
+        id: ORDER_ID,
+        orderNumber: 'ORD-0001',
+        status: OrderStatus.CANCELLED,
+        cancelledAt: new Date('2026-10-23T13:00:00Z'),
+      });
+
+      await expect(
+        service.updateStatus(
+          ORDER_ID,
+          statusDto(OrderStatus.CANCELLED),
+          USER_ID,
+          'ADMIN',
+        ),
+      ).rejects.toThrow(/CANCELLED/);
+
+      expect(applyStockChange).not.toHaveBeenCalled();
+      expect(txOrderItemFindMany).not.toHaveBeenCalled();
+    });
+
+    it('rejects a missing order with 404 before any write', async () => {
+      txOrderFindUnique.mockReset().mockResolvedValue(null);
+
+      await expect(
+        service.updateStatus(
+          'no-such-order',
+          statusDto(OrderStatus.CONFIRMED),
+          USER_ID,
+          'ADMIN',
+        ),
+      ).rejects.toBeInstanceOf(NotFoundException);
+
+      expect(txOrderUpdateMany).not.toHaveBeenCalled();
+      expect(applyStockChange).not.toHaveBeenCalled();
+    });
+
+    it('409s from the status-conditional backstop when the state changed concurrently (no restore)', async () => {
+      txOrderUpdateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        service.updateStatus(
+          ORDER_ID,
+          statusDto(OrderStatus.CANCELLED),
+          USER_ID,
+          'ADMIN',
+        ),
+      ).rejects.toThrow(/changed status concurrently/);
+
+      expect(applyStockChange).not.toHaveBeenCalled();
+    });
+
+    it('retries a P2034 conflict once for status writes', async () => {
+      const conflict = new PrismaClientKnownRequestError('write conflict', {
+        code: 'P2034',
+        clientVersion: 'test',
+      });
+      $transaction
+        .mockReset()
+        .mockRejectedValueOnce(conflict)
+        .mockImplementation((fn: (t: typeof tx) => unknown) => fn(tx));
+      txOrderFindUnique
+        .mockResolvedValueOnce({
+          id: ORDER_ID,
+          orderNumber: 'ORD-0001',
+          status: 'PENDING',
+          cancelledAt: null,
+        })
+        .mockResolvedValueOnce(updatedOrderRow(OrderStatus.CONFIRMED, null));
+
+      await expect(
+        service.updateStatus(
+          ORDER_ID,
+          statusDto(OrderStatus.CONFIRMED),
+          USER_ID,
+          'ADMIN',
+        ),
+      ).resolves.toBeDefined();
+      expect($transaction).toHaveBeenCalledTimes(2);
+      // Fresh transaction started cleanly — only one write happened.
+      expect(txOrderUpdateMany).toHaveBeenCalledTimes(1);
     });
   });
 });

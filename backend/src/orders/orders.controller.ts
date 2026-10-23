@@ -1,4 +1,12 @@
-import { Body, Controller, HttpStatus, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  HttpStatus,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -8,6 +16,7 @@ import {
 
 import { OrdersService, type CreatedOrderResponse } from './orders.service.js';
 import { CreateOrderDto } from './dto/create-order.dto.js';
+import { UpdateOrderStatusDto } from './dto/update-order-status.dto.js';
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
 
 /** JWT role claim resolved from the database by the global JwtAuthGuard. */
@@ -64,5 +73,47 @@ export class OrdersController {
     @CurrentUser() user: AuthenticatedUser,
   ): Promise<CreatedOrderResponse> {
     return this.ordersService.create(dto, user.sub, user.role);
+  }
+
+  /**
+   * PATCH /orders/:id/status (issue #29) — PENDING → CONFIRMED,
+   * PENDING → CANCELLED, CONFIRMED → CANCELLED; every other combination
+   * (including touching a cancelled order) is 409. Cancelling restores
+   * each item's stock with `RETURN` movements in the same transaction, so
+   * cancelling twice can never restore stock twice.
+   */
+  @Patch(':id/status')
+  @ApiOperation({
+    summary: 'Change order status (STAFF and ADMIN)',
+    description:
+      'Allowed transitions: PENDING → CONFIRMED, PENDING → CANCELLED, CONFIRMED → CANCELLED. All others — including re-confirming, un-cancelling, or the same status — answer 409, and a cancelled order is terminal. Cancellation restores stock for every line (one RETURN movement per line) and stamps cancelledAt inside ONE transaction; cancelling twice is a 409 and never restores stock twice.',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Updated order with its item snapshots',
+  })
+  @ApiResponse({
+    status: HttpStatus.BAD_REQUEST,
+    description:
+      'Validation failed (malformed id or a status outside the OrderStatus enum)',
+  })
+  @ApiResponse({
+    status: HttpStatus.UNAUTHORIZED,
+    description: 'Missing or invalid token',
+  })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    description: 'Order does not exist',
+  })
+  @ApiResponse({
+    status: HttpStatus.CONFLICT,
+    description: 'Invalid transition (or the status changed concurrently)',
+  })
+  updateStatus(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateOrderStatusDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<CreatedOrderResponse> {
+    return this.ordersService.updateStatus(id, dto, user.sub, user.role);
   }
 }

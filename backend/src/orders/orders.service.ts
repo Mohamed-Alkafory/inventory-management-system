@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
   UnprocessableEntityException,
@@ -10,6 +11,7 @@ import { Prisma, OrderStatus } from '../generated/prisma/client.js';
 import { StockMovementType } from '../generated/prisma/enums.js';
 import { StockService } from '../stock/stock.service.js';
 import { CreateOrderDto } from './dto/create-order.dto.js';
+import { UpdateOrderStatusDto } from './dto/update-order-status.dto.js';
 
 /**
  * Contract §3.7 `Order` scalar shape. `totalAmount` is Decimal(12,2) in the
@@ -70,6 +72,16 @@ const ORDER_ITEM_SELECT = {
   unitPrice: true,
   lineTotal: true,
 } satisfies Prisma.OrderItemSelect;
+
+/**
+ * Issue #29 transition rules. A cancelled order is terminal; going back to
+ * PENDING or staying in the same status is a rejected transition (409).
+ */
+const STATUS_TRANSITIONS: Record<OrderStatus, readonly OrderStatus[]> = {
+  PENDING: [OrderStatus.CONFIRMED, OrderStatus.CANCELLED],
+  CONFIRMED: [OrderStatus.CANCELLED],
+  CANCELLED: [],
+};
 
 const P2034_RETRY_DELAY_MS = 50;
 
@@ -209,6 +221,110 @@ export class OrdersService {
     }
 
     return { ...serializeOrder(order), items };
+  }
+
+  /**
+   * Move an order through its statuses (#29). Valid transitions: PENDING →
+   * CONFIRMED, PENDING → CANCELLED, CONFIRMED → CANCELLED; anything else —
+   * including re-touching the current status or a cancelled order — is 409.
+   *
+   * Cancelling RESTORES stock for every line in the SAME Serializable
+   * transaction (`RETURN` movements referencing the order): a
+   * status-conditional write makes double-cancels a no-op (409), so stock
+   * can never be restored twice. The whole write is retried once on
+   * transaction conflicts.
+   */
+  async updateStatus(
+    id: string,
+    dto: UpdateOrderStatusDto,
+    userId: string,
+    role: string,
+  ): Promise<CreatedOrderResponse> {
+    return this.withWriteRetry(() =>
+      this.prisma.$transaction(
+        (tx) => this.updateOrderStatus(tx, id, dto, userId, role),
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      ),
+    );
+  }
+
+  private async updateOrderStatus(
+    tx: Prisma.TransactionClient,
+    id: string,
+    dto: UpdateOrderStatusDto,
+    userId: string,
+    role: string,
+  ): Promise<CreatedOrderResponse> {
+    const order = await tx.order.findUnique({
+      where: { id },
+      select: { id: true, orderNumber: true, status: true, cancelledAt: true },
+    });
+
+    if (!order) {
+      throw new NotFoundException(`Order ${id} not found`);
+    }
+
+    if (!STATUS_TRANSITIONS[order.status].includes(dto.newStatus)) {
+      throw new ConflictException(
+        `Order ${order.orderNumber} cannot transition from ${order.status} to ${dto.newStatus}`,
+      );
+    }
+
+    // Backstop against races the isolation level may let through: the write
+    // is still conditioned on the status we validated a moment ago.
+    const { count } = await tx.order.updateMany({
+      where: { id, status: order.status },
+      data:
+        dto.newStatus === OrderStatus.CANCELLED
+          ? { status: dto.newStatus, cancelledAt: new Date() }
+          : { status: dto.newStatus },
+    });
+    if (count === 0) {
+      throw new ConflictException(
+        `Order ${order.orderNumber} changed status concurrently`,
+      );
+    }
+
+    // Cancellation restores every line's quantity and records one `RETURN`
+    // movement per line, all inside this same transaction. Soft-deleted
+    // (inactive) products still receive their stock back (AD-001 rows are
+    // never removed) — the allowance is passed via the shared stock refs.
+    if (dto.newStatus === OrderStatus.CANCELLED) {
+      const lines = await tx.orderItem.findMany({
+        where: { orderId: id },
+        select: { productId: true, quantity: true },
+      });
+
+      for (const line of lines) {
+        await this.stock.applyStockChange(
+          tx,
+          line.productId,
+          line.quantity,
+          StockMovementType.RETURN,
+          `Cancelled order ${order.orderNumber}`,
+          userId,
+          role,
+          { orderId: order.id, allowInactive: true },
+        );
+      }
+    }
+
+    const updated = await tx.order.findUnique({
+      where: { id },
+      select: ORDER_SELECT,
+    });
+
+    // The conditional write above matched, so the row exists; satisfies TS.
+    if (!updated) {
+      throw new NotFoundException(`Order ${id} not found`);
+    }
+
+    const items = await tx.orderItem.findMany({
+      where: { orderId: id },
+      select: ORDER_ITEM_SELECT,
+    });
+
+    return { ...serializeOrder(updated), items: items.map(serializeItem) };
   }
 
   /** Users-module pattern: retry a Serializable write conflict once. */

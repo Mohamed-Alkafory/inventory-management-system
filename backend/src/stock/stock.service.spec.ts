@@ -285,6 +285,48 @@ describe('StockService', () => {
         select: expect.anything(),
       });
     });
+
+    it('allowInactive drops the active-product requirement (cancellation restore)', async () => {
+      await service.applyStockChange(
+        tx as never,
+        ADJUSTMENT_DTO.productId,
+        2,
+        StockMovementType.RETURN,
+        'Cancelled order ORD-0001',
+        USER_ID,
+        'ADMIN',
+        {
+          orderId: '22222222-2222-4222-8222-222222222222',
+          allowInactive: true,
+        },
+      );
+
+      expect(txProductUpdateMany).toHaveBeenCalledWith({
+        where: { id: ADJUSTMENT_DTO.productId },
+        data: { quantity: { increment: 2 } },
+      });
+    });
+
+    it('with allowInactive an inactive product is classified as insufficient (409), not 422', async () => {
+      txProductUpdateMany.mockResolvedValue({ count: 0 });
+      txProductFindUnique.mockResolvedValue({ isActive: false });
+
+      await expect(
+        service.applyStockChange(
+          tx as never,
+          ADJUSTMENT_DTO.productId,
+          2,
+          StockMovementType.RETURN,
+          'Cancelled order',
+          USER_ID,
+          'ADMIN',
+          {
+            orderId: '22222222-2222-4222-8222-222222222222',
+            allowInactive: true,
+          },
+        ),
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
   });
 
   describe('findAll (movement history)', () => {
