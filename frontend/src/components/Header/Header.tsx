@@ -1,14 +1,17 @@
+import { Link } from "react-router-dom";
 import { useState } from "react";
 import { FaBars, FaTimes, FaUser } from "react-icons/fa";
 import ProdexaLogo from "../Logo";
 import "./Header.css";
 
+
 const NAV_LINKS = [
   { label: "Home", href: "/" },
   { label: "Products", href: "#products" },
-  { label: "About", href: "#about" },
-  { label: "Contact", href: "#contact" },
+  { label: "About", href: "/about" },
+  { label: "Contact", href: "/contact" },
 ];
+
 
 export default function Header() {
   const [open, setOpen] = useState(false);
@@ -25,19 +28,21 @@ export default function Header() {
           className={`header__nav ${open ? "is-open" : ""}`}
           aria-label="Main"
         >
+          
           <ul className="nav-list">
             {NAV_LINKS.map((link) => (
               <li key={link.label}>
-                <a
-                  href={link.href}
+                <Link
+                  to={link.href}
                   className="nav-link"
                   onClick={() => setOpen(false)}
                 >
                   {link.label}
-                </a>
+                </Link>
               </li>
             ))}
           </ul>
+
 
           {/* Shown inside the mobile menu only */}
           <div className="header__actions header__actions--mobile">
