@@ -44,10 +44,16 @@ export interface AdjustedStockResponse {
   product: ProductResponse;
 }
 
-/** Optional relation stamps written onto the movement row (orders/POs). */
+/**
+ * Optional relation stamps passed by callers onto the movement row, plus
+ * an option flag for special flows: `allowInactive` lets order
+ * cancellations (#29) restore stock even if the product was soft-deleted
+ * after the sale — the restore never fails for a deactivated product.
+ */
 interface MovementRefs {
   orderId?: string;
   purchaseOrderId?: string;
+  allowInactive?: boolean;
 }
 
 const MOVEMENT_SELECT = {
@@ -130,8 +136,16 @@ export class StockService {
     const guard: Prisma.ProductWhereInput =
       quantityChange < 0 ? { quantity: { gte: Math.abs(quantityChange) } } : {};
 
+    // Cancellations restore stock even for soft-deleted products unless the
+    // caller opted out of the active-product requirement via the refs.
+    const { allowInactive = false, ...relationRefs } = refs;
+
     const { count } = await tx.product.updateMany({
-      where: { id: productId, isActive: true, ...guard },
+      where: {
+        id: productId,
+        ...(allowInactive ? {} : { isActive: true }),
+        ...guard,
+      },
       data: { quantity: { increment: quantityChange } },
     });
 
@@ -146,7 +160,7 @@ export class StockService {
       if (!row) {
         throw new NotFoundException(`Product ${productId} not found`);
       }
-      if (!row.isActive) {
+      if (!row.isActive && !allowInactive) {
         throw new UnprocessableEntityException(
           `Product ${productId} is inactive`,
         );
@@ -176,8 +190,8 @@ export class StockService {
         quantityChange,
         quantityAfter,
         reason,
-        orderId: refs.orderId,
-        purchaseOrderId: refs.purchaseOrderId,
+        orderId: relationRefs.orderId,
+        purchaseOrderId: relationRefs.purchaseOrderId,
         createdById,
       },
       select: MOVEMENT_SELECT,

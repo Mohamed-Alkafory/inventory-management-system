@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import {
   BadRequestException,
   ConflictException,
+  HttpStatus,
   NotFoundException,
   UnprocessableEntityException,
   ValidationPipe,
@@ -11,11 +12,13 @@ import { Reflector } from '@nestjs/core';
 import { OrdersController } from './orders.controller.js';
 import { OrdersService } from './orders.service.js';
 import { CreateOrderDto } from './dto/create-order.dto.js';
+import { UpdateOrderStatusDto } from './dto/update-order-status.dto.js';
 import { ROLES_KEY } from '../auth/decorators/roles.decorator.js';
 
 const PRODUCT_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const PRODUCT_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const USER_ID_FAKE = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+const ORDER_ID = '22222222-2222-4222-8222-222222222222';
 
 const ADMIN = { sub: 'admin-id', role: 'ADMIN' } as const;
 const STAFF = { sub: 'staff-id', role: 'STAFF' } as const;
@@ -50,13 +53,19 @@ describe('OrdersController', () => {
   let controller: OrdersController;
   let reflector: Reflector;
   const create = vi.fn();
+  const updateStatus = vi.fn();
 
   beforeEach(async () => {
     create.mockReset().mockResolvedValue(sampleCreated);
+    updateStatus
+      .mockReset()
+      .mockResolvedValue({ ...sampleCreated, status: 'CONFIRMED' });
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [OrdersController],
-      providers: [{ provide: OrdersService, useValue: { create } }],
+      providers: [
+        { provide: OrdersService, useValue: { create, updateStatus } },
+      ],
     }).compile();
 
     controller = module.get<OrdersController>(OrdersController);
@@ -112,6 +121,111 @@ describe('OrdersController', () => {
     await expect(controller.create({} as never, ADMIN)).rejects.toBeInstanceOf(
       UnprocessableEntityException,
     );
+  });
+
+  describe('PATCH /orders/:id/status (issue #29)', () => {
+    it('changes the status through the service, passing id path param and user', async () => {
+      const dto = { newStatus: 'CONFIRMED' } as UpdateOrderStatusDto;
+
+      await expect(
+        controller.updateStatus(ORDER_ID, dto, ADMIN),
+      ).resolves.toMatchObject({
+        status: 'CONFIRMED',
+        orderNumber: 'ORD-0001',
+      });
+      expect(updateStatus).toHaveBeenCalledWith(
+        ORDER_ID,
+        dto,
+        'admin-id',
+        'ADMIN',
+      );
+    });
+
+    it('passes STAFF identity and role through (any role may manage the till)', async () => {
+      await controller.updateStatus(
+        ORDER_ID,
+        { newStatus: 'CANCELLED' } as UpdateOrderStatusDto,
+        STAFF,
+      );
+
+      expect(updateStatus).toHaveBeenCalledWith(
+        ORDER_ID,
+        expect.anything(),
+        'staff-id',
+        'STAFF',
+      );
+    });
+
+    it('uses the documented metadata — any role, PATCH default 200', () => {
+      const handler = OrdersController.prototype.updateStatus;
+
+      expect(reflector.get<string[]>(ROLES_KEY, handler) ?? []).toEqual([]);
+      expect(
+        Reflect.getMetadata('__httpCode__', handler) ?? HttpStatus.OK,
+      ).toBe(HttpStatus.OK);
+    });
+
+    it('propagates the service 404 / 409 for invalid transitions', async () => {
+      updateStatus
+        .mockRejectedValueOnce(
+          new NotFoundException(`Order ${ORDER_ID} not found`),
+        )
+        .mockRejectedValueOnce(
+          new ConflictException(
+            'Order ORD-0001 cannot transition from CANCELLED to CONFIRMED',
+          ),
+        );
+
+      await expect(
+        controller.updateStatus(ORDER_ID, {} as never, ADMIN),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      await expect(
+        controller.updateStatus(ORDER_ID, {} as never, ADMIN),
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    describe('input validation (400) — status body', () => {
+      const pipe = new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      });
+      const validate = (value: unknown) =>
+        pipe.transform(value, { type: 'body', metatype: UpdateOrderStatusDto });
+
+      it.each([
+        ['a body without newStatus', {}],
+        ['an unknown status value', { newStatus: 'SHIPPED' }],
+        [
+          'a lowercase status (enums are case-sensitive)',
+          { newStatus: 'confirmed' },
+        ],
+        ['a numeric status', { newStatus: 1 }],
+        ['a null status', { newStatus: null }],
+      ] as const)('rejects %s with 400', async (_name, body) => {
+        await expect(validate(body)).rejects.toBeInstanceOf(
+          BadRequestException,
+        );
+      });
+
+      it('accepts CONFIRMED and CANCELLED (PENDING is enum-valid but answers 409 at the service)', async () => {
+        await expect(
+          validate({ newStatus: 'CONFIRMED' }),
+        ).resolves.toMatchObject({
+          newStatus: 'CONFIRMED',
+        });
+        await expect(
+          validate({ newStatus: 'CANCELLED' }),
+        ).resolves.toMatchObject({
+          newStatus: 'CANCELLED',
+        });
+        await expect(validate({ newStatus: 'PENDING' })).resolves.toMatchObject(
+          {
+            newStatus: 'PENDING',
+          },
+        );
+      });
+    });
   });
 
   describe('input validation (400) — POST /orders body', () => {
