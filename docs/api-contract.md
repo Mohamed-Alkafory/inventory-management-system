@@ -202,15 +202,25 @@ Soft delete (AD-001): rows are never removed, so linked `products` and `purchase
 
 ### 3.7 Orders
 
-| Method | Path                 | Role | Request body / query                                                                                                                                  | Response                          | Errors                                                                                                                   |
-| ------ | -------------------- | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| GET    | `/orders`            | any  | `?page&limit&status&search(customerName,orderNumber)&createdById&sortBy(status,createdAt)&sortOrder`                                                  | paginated `Order[]`               | 401                                                                                                                      |
-| GET    | `/orders/:id`        | any  | —                                                                                                                                                     | `Order` + `items[]` + `createdBy` | 401, 404                                                                                                                 |
-| POST   | `/orders`            | any  | `type CreateOrderRequest = { items: Array<{ productId: string; quantity: number }>; customerName?: string; customerPhone?: string; notes?: string; }` | `Order` + `items` (201)           | 400 (validation or duplicate productIds), 401, 404 (product not found), 409 (insufficient stock), 422 (product inactive) |
-| PATCH  | `/orders/:id`        | any  | `{ customerName?, customerPhone?, notes? }` — only while `PENDING`                                                                                    | `Order`                           | 401, 404, 422 (not editable after PENDING)                                                                               |
-| PATCH  | `/orders/:id/status` | any  | `{ newStatus: "CONFIRMED" }` or `{ newStatus: "CANCELLED" }`                                                                                          | `Order` + `items`                 | 400, 401, 404, 409 (invalid transition)                                                                                  |
+| Method | Path                      | Role | Request body / query                                                             | Response                                   | Errors                                            |
+| ------ | ------------------------- | ---- | -------------------------------------------------------------------------------- | ------------------------------------------ | ------------------------------------------------- |
+| GET    | `/orders`                 | any  | `?page&limit&status&search(customerName,orderNumber)&createdById&sortBy(status,createdAt)&sortOrder` | paginated `Order[]`          | 401                                               |
+| GET    | `/orders/:id`             | any  | —                                                                                | `Order` + `items[]` + `createdBy`          | 401, 404                                          |
+| POST   | `/orders`                 | any  | `type CreateOrderRequest = { items: Array<{ productId: string; quantity: number }>; customerName?: string; customerPhone?: string; notes?: string; }` | `Order` + `items` (201) | 400, 401, 404 (product not found / inactive), 422 (insufficient stock) |
+| PATCH  | `/orders/:id`             | any  | `{ customerName?, customerPhone?, notes? }` — only while `PENDING`               | `Order`                                    | 401, 404, 422 (not editable after PENDING)        |
+| POST   | `/orders/:id/confirm`     | any  | —                                                                                | `Order` (status → `CONFIRMED`)             | 401, 404, 409 (already transitioned), 422         |
+| POST   | `/orders/:id/cancel`     | any  | `{ reason }`                                                                     | `Order` (status → `CANCELLED`)             | 401, 404, 409, 422                                |
 
 - `Order` shape: `{ id, orderNumber, status, customerName, customerPhone, notes, totalAmount, createdById, cancelledAt, createdAt, updatedAt, items?: OrderItem[] }`.
+- `GET /orders`: `page` defaults to 1, `limit` defaults to 20 (max 100); default sort is
+  `createdAt DESC` with `id ASC` as the deterministic tie-breaker. `status` accepts
+  `PENDING | CONFIRMED | CANCELLED`; `search` matches `orderNumber` or `customerName`
+  case-insensitively; `createdById` is a UUID. `from` and `to` are inclusive ISO 8601
+  bounds on `createdAt`; an invalid date or `from > to` returns 400. Unknown query
+  parameters return 400.
+- `GET /orders/:id`: returns the order fields plus `items[]` (the API property is
+  `items`, not `orderItems`), `createdBy` (`id`, `name`, `email`) and the related
+  `stockMovements[]`. A non-UUID id returns 400; a missing order returns 404.
 - `OrderItem` shape: `{ id, orderId, productId, productName, sku, quantity, unitPrice, lineTotal }` — snapshots, client must not expect them to track later product edits.
 - `totalAmount` is always computed server-side from the item snapshots' `unitPrice`; client-sent prices are ignored.
 - **Stock is deducted at `PENDING` creation** and fully restored on cancel (see decisions §2).
