@@ -152,7 +152,7 @@ export class StockService {
         );
       }
       throw new ConflictException(
-        `Insufficient stock: adjusting product ${productId} by ${quantityChange} would push the quantity below zero`,
+        `Insufficient stock: product ${productId} change ${quantityChange} would push the quantity below zero`,
       );
     }
 

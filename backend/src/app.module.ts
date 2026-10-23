@@ -7,6 +7,7 @@ import { ProductsModule } from './products/products.module.js';
 import { CategoriesModule } from './categories/categories.module.js';
 import { SuppliersModule } from './suppliers/suppliers.module.js';
 import { StockModule } from './stock/stock.module.js';
+import { OrdersModule } from './orders/orders.module.js';
 import { HealthModule } from './health/health.module.js';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
@@ -28,6 +29,7 @@ import { UsersModule } from './users/users.module.js';
     CategoriesModule,
     SuppliersModule,
     StockModule,
+    OrdersModule,
     HealthModule,
     AuthModule,
     UsersModule,
