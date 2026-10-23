@@ -80,6 +80,9 @@ const PRODUCT_SELECT = {
   updatedAt: true,
 } satisfies Prisma.ProductSelect;
 
+/** Shared with the stock module (adjustment responses, low-stock listing). */
+export { PRODUCT_SELECT };
+
 const ADMIN_ROLE = 'ADMIN';
 
 /** snake_case columns for the whitelist-ordered raw `low_stock` query. */
@@ -160,7 +163,12 @@ export class ProductsService {
       }),
     ]);
 
-    return this.toPage(products.map((product) => serialize(product, role)), total, page, limit);
+    return this.toPage(
+      products.map((product) => serializeProduct(product, role)),
+      total,
+      page,
+      limit,
+    );
   }
 
   /**
@@ -216,7 +224,7 @@ export class ProductsService {
     ]);
 
     return {
-      data: rows.map((row) => serialize(row, role)),
+      data: rows.map((row) => serializeProduct(row, role)),
       total: Number(countRows[0]?.total ?? 0),
     };
   }
@@ -248,7 +256,7 @@ export class ProductsService {
       throw new NotFoundException(`Product ${id} not found`);
     }
 
-    return serialize(product, role);
+    return serializeProduct(product, role);
   }
 
   async create(dto: CreateProductDto): Promise<ProductResponse> {
@@ -277,7 +285,7 @@ export class ProductsService {
       select: PRODUCT_SELECT,
     });
 
-    return serialize(product, ADMIN_ROLE);
+    return serializeProduct(product, ADMIN_ROLE);
   }
 
   /**
@@ -343,7 +351,7 @@ export class ProductsService {
       select: PRODUCT_SELECT,
     });
 
-    return serialize(product, ADMIN_ROLE);
+    return serializeProduct(product, ADMIN_ROLE);
   }
 
   /**
@@ -390,7 +398,15 @@ export class ProductsService {
   }
 }
 
-function serialize(product: ProductRowLike, role: string): ProductResponse {
+/**
+ * Serializes a product row for API responses. Prices are Numbers; `costPrice`
+ * is included only for ADMIN (AD-004) — STAFF responses omit the field.
+ * Shared with the stock module (adjustment responses, low-stock listing).
+ */
+export function serializeProduct(
+  product: ProductRowLike,
+  role: string,
+): ProductResponse {
   const { price, costPrice, ...rest } = product;
   const response: ProductResponse = {
     ...rest,
