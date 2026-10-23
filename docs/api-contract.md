@@ -86,27 +86,27 @@ Every non-2xx response uses this shape:
 }
 ```
 
-| Field         | Type                | Always present | Notes                                                          |
-| ------------- | ------------------- | -------------- | -------------------------------------------------------------- |
-| `statusCode`  | number              | yes            | HTTP status, duplicated in the body                            |
-| `message`     | string \| string[]  | yes            | Human-readable summary; arrays allowed (Nest default)          |
-| `error`       | string              | yes            | Machine-readable error `CODE` (see table)                      |
-| `fieldErrors` | Record<string, string[]> | no        | Only for validation errors; maps JSON key → messages           |
-| `path`        | string              | yes            | Request URL                                                    |
-| `timestamp`   | string              | yes            | ISO 8601 UTC                                                   |
+| Field         | Type                     | Always present | Notes                                                 |
+| ------------- | ------------------------ | -------------- | ----------------------------------------------------- |
+| `statusCode`  | number                   | yes            | HTTP status, duplicated in the body                   |
+| `message`     | string \| string[]       | yes            | Human-readable summary; arrays allowed (Nest default) |
+| `error`       | string                   | yes            | Machine-readable error `CODE` (see table)             |
+| `fieldErrors` | Record<string, string[]> | no             | Only for validation errors; maps JSON key → messages  |
+| `path`        | string                   | yes            | Request URL                                           |
+| `timestamp`   | string                   | yes            | ISO 8601 UTC                                          |
 
 Error codes:
 
-| Code                   | HTTP | Meaning                                        |
-| ---------------------- | ---- | ---------------------------------------------- |
-| `VALIDATION_ERROR`     | 400  | Body/query failed Zod/class-validator checks   |
-| `UNAUTHORIZED`         | 401  | Missing/expired/invalid token                  |
-| `FORBIDDEN`            | 403  | Authenticated but role insufficient            |
-| `NOT_FOUND`            | 404  | Resource does not exist                        |
-| `CONFLICT`             | 409  | Duplicate unique field (e.g. SKU, email)       |
-| `BUSINESS_RULE_ERROR`  | 422  | Semantically invalid (e.g. stock below zero, invalid status transition) |
-| `INTERNAL_ERROR`       | 500  | Unexpected server failure                      |
-| `SERVICE_UNAVAILABLE`  | 503  | Database or dependency down                    |
+| Code                  | HTTP | Meaning                                                                 |
+| --------------------- | ---- | ----------------------------------------------------------------------- |
+| `VALIDATION_ERROR`    | 400  | Body/query failed Zod/class-validator checks                            |
+| `UNAUTHORIZED`        | 401  | Missing/expired/invalid token                                           |
+| `FORBIDDEN`           | 403  | Authenticated but role insufficient                                     |
+| `NOT_FOUND`           | 404  | Resource does not exist                                                 |
+| `CONFLICT`            | 409  | Duplicate unique field (e.g. SKU, email)                                |
+| `BUSINESS_RULE_ERROR` | 422  | Semantically invalid (e.g. stock below zero, invalid status transition) |
+| `INTERNAL_ERROR`      | 500  | Unexpected server failure                                               |
+| `SERVICE_UNAVAILABLE` | 503  | Database or dependency down                                             |
 
 ---
 
@@ -116,14 +116,14 @@ Legend: 🔓 public · Role: `any` / `admin` · Paginated unless marked "no pagi
 
 ### 3.1 Auth
 
-| Method | Path              | Role | Request body                                   | Response                                          | Errors                          |
-| ------ | ----------------- | ---- | ---------------------------------------------- | ------------------------------------------------- | ------------------------------- |
-| POST 🔓 | `/auth/login`     | —    | `{ email, password }`                          | `{ user: User, accessToken, refreshToken }`       | 400, 401                        |
-| POST 🔓 | `/auth/register`  | —    | `{ name, email, password }`                    | `{ user: User, accessToken, refreshToken }`       | 400, 409                        |
-| POST 🔓 | `/auth/refresh`   | —    | `{ refreshToken }`                             | `{ accessToken, refreshToken }`                   | 400, 401                        |
-| POST    | `/auth/logout`    | any  | `{ refreshToken }`                             | `204` (empty)                                     | 401                             |
-| GET     | `/auth/me`        | any  | —                                              | `User` (no `passwordHash`)                        | 401                             |
-| PATCH   | `/auth/me`        | any  | `{ name?, password?{ current, next } }`        | `User`                                            | 400, 401, 422                   |
+| Method  | Path             | Role | Request body                            | Response                                    | Errors        |
+| ------- | ---------------- | ---- | --------------------------------------- | ------------------------------------------- | ------------- |
+| POST 🔓 | `/auth/login`    | —    | `{ email, password }`                   | `{ user: User, accessToken, refreshToken }` | 400, 401      |
+| POST 🔓 | `/auth/register` | —    | `{ name, email, password }`             | `{ user: User, accessToken, refreshToken }` | 400, 409      |
+| POST 🔓 | `/auth/refresh`  | —    | `{ refreshToken }`                      | `{ accessToken, refreshToken }`             | 400, 401      |
+| POST    | `/auth/logout`   | any  | `{ refreshToken }`                      | `204` (empty)                               | 401           |
+| GET     | `/auth/me`       | any  | —                                       | `User` (no `passwordHash`)                  | 401           |
+| PATCH   | `/auth/me`       | any  | `{ name?, password?{ current, next } }` | `User`                                      | 400, 401, 422 |
 
 `User` shape: `{ id, name, email, role, isActive, createdAt, updatedAt }` — `passwordHash` is **never** returned by any endpoint.
 
@@ -131,38 +131,38 @@ When `register` is disabled in config (ADMIN-created accounts only) it returns `
 
 ### 3.2 Users
 
-| Method | Path                  | Role  | Request body                                              | Response                     | Errors           |
-| ------ | --------------------- | ----- | --------------------------------------------------------- | ---------------------------- | ---------------- |
-| GET    | `/users`              | admin | `?page&limit&search&role&sortBy&sortOrder`                | paginated `User[]`           | 401, 403         |
-| GET    | `/users/:id`          | admin | —                                                         | `User`                       | 401, 403, 404    |
-| POST   | `/users`              | admin | `{ name, email, password, role }`                         | `User` (201)                 | 400, 401, 403, 409 |
-| PATCH  | `/users/:id`          | admin | `{ name?, email?, role?, isActive? }`                     | `User`                       | 400, 403, 404, 409, 422 |
-| DELETE | `/users/:id`          | admin | —                                                         | `204` (soft delete, see decisions) | 401, 403, 404, 422 |
+| Method | Path         | Role  | Request body                               | Response                           | Errors                  |
+| ------ | ------------ | ----- | ------------------------------------------ | ---------------------------------- | ----------------------- |
+| GET    | `/users`     | admin | `?page&limit&search&role&sortBy&sortOrder` | paginated `User[]`                 | 401, 403                |
+| GET    | `/users/:id` | admin | —                                          | `User`                             | 401, 403, 404           |
+| POST   | `/users`     | admin | `{ name, email, password, role }`          | `User` (201)                       | 400, 401, 403, 409      |
+| PATCH  | `/users/:id` | admin | `{ name?, email?, role?, isActive? }`      | `User`                             | 400, 403, 404, 409, 422 |
+| DELETE | `/users/:id` | admin | —                                          | `204` (soft delete, see decisions) | 401, 403, 404, 422      |
 
 Error cases: `422` when deactivating the last active ADMIN, or self-deactivation `/self-role-change`.
 
 ### 3.3 Categories
 
-| Method | Path                    | Role | Request body                                    | Response                             | Errors           |
-| ------ | ----------------------- | ---- | ----------------------------------------------- | ------------------------------------ | ---------------- |
-| GET    | `/categories`           | any  | `?page&limit&search&isActive` / `?all=true`     | paginated `Category[]` (or bare array with `all=true`, no pagination) | 401, 403 |
-| GET    | `/categories/:id`       | any  | —                                               | `Category` + `productCount`          | 401, 404         |
-| POST   | `/categories`           | admin | `{ name, description? }`                       | `Category` (201)                     | 400, 401, 403, 409 |
-| PATCH  | `/categories/:id`       | admin | `{ name?, description?, isActive? }`            | `Category`                           | 400, 401, 403, 404, 409, 422 |
-| DELETE | `/categories/:id`       | admin | —                                               | `204` (soft delete)                  | 401, 403, 404, 422 |
+| Method | Path              | Role  | Request body                         | Response                                                | Errors                               |
+| ------ | ----------------- | ----- | ------------------------------------ | ------------------------------------------------------- | ------------------------------------ |
+| GET    | `/categories`     | any   | `?page&limit&search&isActive`        | paginated `Category[]` (active only by default, AD-001) | 400, 401                             |
+| GET    | `/categories/:id` | any   | —                                    | `Category` + `productCount`                             | 400 (invalid id), 401, 404           |
+| POST   | `/categories`     | admin | `{ name, description? }`             | `Category` (201)                                        | 400, 401, 403, 409                   |
+| PATCH  | `/categories/:id` | admin | `{ name?, description?, isActive? }` | `Category`                                              | 400, 401, 403, 404, 409              |
+| DELETE | `/categories/:id` | admin | —                                    | `204` (soft delete)                                     | 400 (invalid id), 401, 403, 404, 409 |
 
 `Category`: `{ id, name, description, isActive, createdAt, updatedAt }`.
-Errors: `422` when deactivating a category that still has active products (or force-deletes products too — see decisions §1).
+Errors: `409` when deleting (or renaming to) a category while another category already uses the name (unique index), or when deleting a category that still has linked products — `products.category_id` is FK `ON DELETE RESTRICT`, so the product relation must never be broken (AD-001 soft delete keeps rows).
 
 ### 3.4 Products
 
-| Method | Path                        | Role | Request body / query                                                                                                                   | Response                          | Errors                          |
-| ------ | --------------------------- | ---- | -------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- | ------------------------------- |
-| GET    | `/products`                 | any  | `?page&limit&search&categoryId&supplierId&isActive&stockStatus(in_stock,low_stock,out_of_stock)&sortBy(name,sku,price,quantity,createdAt)&sortOrder` | paginated `Product[]`             | 400, 401                        |
-| GET    | `/products/:id`             | any  | —                                                                                                                                      | `Product` + `{ category, supplier }` populated          | 401, 404 |
-| POST   | `/products`                 | admin | `{ sku, name, description?, imageUrl?, barcode?, price, costPrice?, quantity?, minStock?, categoryId, supplierId? }`                   | `Product` (201)                   | 400, 401, 403, 404 (bad categoryId/supplierId), 409 (duplicate sku/barcode) |
-| PATCH  | `/products/:id`             | admin | same fields, all optional — **`quantity` not directly editable, use `/stock`**                                                           | `Product`                         | 400, 401, 403, 404, 409, 422 |
-| DELETE | `/products/:id`             | admin | —                                                                                                                                      | `204` (soft delete)               | 401, 403, 404, 422 |
+| Method | Path            | Role  | Request body / query                                                                                                                                 | Response                                       | Errors                                                                      |
+| ------ | --------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- | --------------------------------------------------------------------------- |
+| GET    | `/products`     | any   | `?page&limit&search&categoryId&supplierId&isActive&stockStatus(in_stock,low_stock,out_of_stock)&sortBy(name,sku,price,quantity,createdAt)&sortOrder` | paginated `Product[]`                          | 400, 401                                                                    |
+| GET    | `/products/:id` | any   | —                                                                                                                                                    | `Product` + `{ category, supplier }` populated | 401, 404                                                                    |
+| POST   | `/products`     | admin | `{ sku, name, description?, imageUrl?, barcode?, price, costPrice?, quantity?, minStock?, categoryId, supplierId? }`                                 | `Product` (201)                                | 400, 401, 403, 404 (bad categoryId/supplierId), 409 (duplicate sku/barcode) |
+| PATCH  | `/products/:id` | admin | same fields, all optional — **`quantity` not directly editable, use `/stock`**                                                                       | `Product`                                      | 400, 401, 403, 404, 409, 422                                                |
+| DELETE | `/products/:id` | admin | —                                                                                                                                                    | `204` (soft delete)                            | 401, 403, 404, 422                                                          |
 
 `Product` shape: `{ id, sku, name, description, imageUrl, barcode, price, costPrice, quantity, minStock, isActive, categoryId, supplierId, createdAt, updatedAt }`.
 
@@ -174,23 +174,23 @@ Errors: `422` when deactivating a category that still has active products (or fo
 
 ### 3.5 Suppliers
 
-| Method | Path                  | Role  | Request body / query                                       | Response                           | Errors                          |
-| ------ | --------------------- | ----- | ---------------------------------------------------------- | ---------------------------------- | ------------------------------- |
-| GET    | `/suppliers`          | any   | `?page&limit&search&isActive` / `?all=true`                | paginated `Supplier[]`             | 401                             |
-| GET    | `/suppliers/:id`      | any   | —                                                          | `Supplier` + `productCount`        | 401, 404                        |
-| POST   | `/suppliers`          | admin | `{ companyName, email?, phone?, address? }`                | `Supplier` (201)                   | 400, 401, 403                   |
-| PATCH  | `/suppliers/:id`      | admin | `{ companyName?, email?, phone?, address?, isActive? }`    | `Supplier`                         | 400, 401, 403, 404, 422         |
-| DELETE | `/suppliers/:id`      | admin | —                                                          | `204` (soft delete)                | 401, 403, 404, 422              |
+| Method | Path             | Role  | Request body / query                                    | Response                    | Errors                  |
+| ------ | ---------------- | ----- | ------------------------------------------------------- | --------------------------- | ----------------------- |
+| GET    | `/suppliers`     | any   | `?page&limit&search&isActive` / `?all=true`             | paginated `Supplier[]`      | 401                     |
+| GET    | `/suppliers/:id` | any   | —                                                       | `Supplier` + `productCount` | 401, 404                |
+| POST   | `/suppliers`     | admin | `{ companyName, email?, phone?, address? }`             | `Supplier` (201)            | 400, 401, 403           |
+| PATCH  | `/suppliers/:id` | admin | `{ companyName?, email?, phone?, address?, isActive? }` | `Supplier`                  | 400, 401, 403, 404, 422 |
+| DELETE | `/suppliers/:id` | admin | —                                                       | `204` (soft delete)         | 401, 403, 404, 422      |
 
 `Supplier`: `{ id, companyName, email, phone, address, isActive, createdAt, updatedAt }`.
 
 ### 3.6 Stock
 
-| Method | Path                                  | Role  | Request body                                                        | Response                        | Errors                            |
-| ------ | ------------------------------------- | ----- | ------------------------------------------------------------------- | ------------------------------- | --------------------------------- |
-| GET    | `/stock/movements`                    | any   | `?page&limit&productId&type&orderId&purchaseOrderId&sortBy&sortOrder` | paginated `StockMovement[]`    | 401                               |
-| POST   | `/stock/adjustments`                  | any   | `{ productId, quantityChange, reason }` (quantityChange ≠ 0)        | `{ movement: StockMovement, product: Product }` (201) | 400, 401, 403 (see below), 404, 422 |
-| GET    | `/stock/low-stock`                    | any   | `?page&limit`                                                        | paginated `Product[]` (`quantity <= minStock`, active only) | 401 |
+| Method | Path                 | Role | Request body                                                          | Response                                                    | Errors                              |
+| ------ | -------------------- | ---- | --------------------------------------------------------------------- | ----------------------------------------------------------- | ----------------------------------- |
+| GET    | `/stock/movements`   | any  | `?page&limit&productId&type&orderId&purchaseOrderId&sortBy&sortOrder` | paginated `StockMovement[]`                                 | 401                                 |
+| POST   | `/stock/adjustments` | any  | `{ productId, quantityChange, reason }` (quantityChange ≠ 0)          | `{ movement: StockMovement, product: Product }` (201)       | 400, 401, 403 (see below), 404, 422 |
+| GET    | `/stock/low-stock`   | any  | `?page&limit`                                                         | paginated `Product[]` (`quantity <= minStock`, active only) | 401                                 |
 
 - `StockMovement` shape: `{ id, productId, type, quantityChange, quantityAfter, reason, orderId, purchaseOrderId, createdById, createdAt }`.
 - `type` on adjustments is always `ADJUSTMENT`; `SALE`/`PURCHASE_RECEIPT`/`RETURN` are system-generated from orders/purchase orders.
@@ -200,14 +200,14 @@ Errors: `422` when deactivating a category that still has active products (or fo
 
 ### 3.7 Orders
 
-| Method | Path                      | Role | Request body / query                                                             | Response                                   | Errors                                            |
-| ------ | ------------------------- | ---- | -------------------------------------------------------------------------------- | ------------------------------------------ | ------------------------------------------------- |
-| GET    | `/orders`                 | any  | `?page&limit&status&search(customerName,orderNumber)&createdById&sortBy(status,createdAt)&sortOrder` | paginated `Order[]`          | 401                                               |
-| GET    | `/orders/:id`             | any  | —                                                                                | `Order` + `items[]` + `createdBy`          | 401, 404                                          |
-| POST   | `/orders`                 | any  | `type CreateOrderRequest = { items: Array<{ productId: string; quantity: number }>; customerName?: string; customerPhone?: string; notes?: string; }` | `Order` + `items` (201) | 400, 401, 404 (product not found / inactive), 422 (insufficient stock) |
-| PATCH  | `/orders/:id`             | any  | `{ customerName?, customerPhone?, notes? }` — only while `PENDING`               | `Order`                                    | 401, 404, 422 (not editable after PENDING)        |
-| POST   | `/orders/:id/confirm`     | any  | —                                                                                | `Order` (status → `CONFIRMED`)             | 401, 404, 409 (already transitioned), 422         |
-| POST   | `/orders/:id/cancel`     | any  | `{ reason }`                                                                     | `Order` (status → `CANCELLED`)             | 401, 404, 409, 422                                |
+| Method | Path                  | Role | Request body / query                                                                                                                                  | Response                          | Errors                                                                 |
+| ------ | --------------------- | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- | ---------------------------------------------------------------------- |
+| GET    | `/orders`             | any  | `?page&limit&status&search(customerName,orderNumber)&createdById&sortBy(status,createdAt)&sortOrder`                                                  | paginated `Order[]`               | 401                                                                    |
+| GET    | `/orders/:id`         | any  | —                                                                                                                                                     | `Order` + `items[]` + `createdBy` | 401, 404                                                               |
+| POST   | `/orders`             | any  | `type CreateOrderRequest = { items: Array<{ productId: string; quantity: number }>; customerName?: string; customerPhone?: string; notes?: string; }` | `Order` + `items` (201)           | 400, 401, 404 (product not found / inactive), 422 (insufficient stock) |
+| PATCH  | `/orders/:id`         | any  | `{ customerName?, customerPhone?, notes? }` — only while `PENDING`                                                                                    | `Order`                           | 401, 404, 422 (not editable after PENDING)                             |
+| POST   | `/orders/:id/confirm` | any  | —                                                                                                                                                     | `Order` (status → `CONFIRMED`)    | 401, 404, 409 (already transitioned), 422                              |
+| POST   | `/orders/:id/cancel`  | any  | `{ reason }`                                                                                                                                          | `Order` (status → `CANCELLED`)    | 401, 404, 409, 422                                                     |
 
 - `Order` shape: `{ id, orderNumber, status, customerName, customerPhone, notes, totalAmount, createdById, cancelledAt, createdAt, updatedAt, items?: OrderItem[] }`.
 - `OrderItem` shape: `{ id, orderId, productId, productName, sku, quantity, unitPrice, lineTotal }` — snapshots, client must not expect them to track later product edits.
@@ -217,16 +217,16 @@ Errors: `422` when deactivating a category that still has active products (or fo
 
 ### 3.8 Purchase orders
 
-| Method | Path                                   | Role  | Request body / query                                                                                              | Response                                                  | Errors                          |
-| ------ | -------------------------------------- | ----- | ----------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- | ------------------------------- |
-| GET    | `/purchase-orders`                     | any   | `?page&limit&status&supplierId&search(orderNumber)&sortBy(status,createdAt)&sortOrder`                             | paginated `PurchaseOrder[]`                               | 401                             |
-| GET    | `/purchase-orders/:id`                 | any   | —                                                                                                                 | `PurchaseOrder` + `items[]` + supplier                    | 401, 404                        |
-| POST   | `/purchase-orders`                     | admin | `{ supplierId, expectedAt?, notes?, items: [{ productId, quantityOrdered, unitCost }] }`                          | `PurchaseOrder` (201, status `DRAFT`)                     | 400, 401, 403, 404, 422         |
-| POST   | `/purchase-orders/:id/order`           | admin | —                                                                                                                 | `PurchaseOrder` (status → `ORDERED`)                      | 401, 403, 404, 409, 422         |
-| POST   | `/purchase-orders/:id/receive`         | any   | `{ items: [{ itemId, quantityReceived }] }` (per-item partial receive)                                            | `PurchaseOrder` (status → `PARTIALLY_RECEIVED`/`RECEIVED`) | 401, 404, 409 (not ORDERED/PARTIALLY_RECEIVED), 422 (over-receipt) |
-| PATCH  | `/purchase-orders/:id`                 | admin | `{ supplierId?, expectedAt?, notes?, items? }` — only while `DRAFT`                                               | `PurchaseOrder`                                           | 401, 403, 404, 422              |
-| POST   | `/purchase-orders/:id/cancel`         | admin | `{ reason }` — only while `DRAFT`/`ORDERED`                                                                       | `PurchaseOrder` (status → `CANCELLED`)                    | 401, 403, 404, 409, 422         |
-| DELETE | `/purchase-orders/:id`                 | admin | —                                                                                                                 | `204` (soft delete; only if `DRAFT`/`CANCELLED`)          | 401, 403, 404, 422              |
+| Method | Path                           | Role  | Request body / query                                                                     | Response                                                   | Errors                                                             |
+| ------ | ------------------------------ | ----- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------ |
+| GET    | `/purchase-orders`             | any   | `?page&limit&status&supplierId&search(orderNumber)&sortBy(status,createdAt)&sortOrder`   | paginated `PurchaseOrder[]`                                | 401                                                                |
+| GET    | `/purchase-orders/:id`         | any   | —                                                                                        | `PurchaseOrder` + `items[]` + supplier                     | 401, 404                                                           |
+| POST   | `/purchase-orders`             | admin | `{ supplierId, expectedAt?, notes?, items: [{ productId, quantityOrdered, unitCost }] }` | `PurchaseOrder` (201, status `DRAFT`)                      | 400, 401, 403, 404, 422                                            |
+| POST   | `/purchase-orders/:id/order`   | admin | —                                                                                        | `PurchaseOrder` (status → `ORDERED`)                       | 401, 403, 404, 409, 422                                            |
+| POST   | `/purchase-orders/:id/receive` | any   | `{ items: [{ itemId, quantityReceived }] }` (per-item partial receive)                   | `PurchaseOrder` (status → `PARTIALLY_RECEIVED`/`RECEIVED`) | 401, 404, 409 (not ORDERED/PARTIALLY_RECEIVED), 422 (over-receipt) |
+| PATCH  | `/purchase-orders/:id`         | admin | `{ supplierId?, expectedAt?, notes?, items? }` — only while `DRAFT`                      | `PurchaseOrder`                                            | 401, 403, 404, 422                                                 |
+| POST   | `/purchase-orders/:id/cancel`  | admin | `{ reason }` — only while `DRAFT`/`ORDERED`                                              | `PurchaseOrder` (status → `CANCELLED`)                     | 401, 403, 404, 409, 422                                            |
+| DELETE | `/purchase-orders/:id`         | admin | —                                                                                        | `204` (soft delete; only if `DRAFT`/`CANCELLED`)           | 401, 403, 404, 422                                                 |
 
 - `PurchaseOrder` shape: `{ id, orderNumber, supplierId, status, totalAmount, expectedAt, receivedAt, notes, createdById, createdAt, updatedAt, items?: PurchaseOrderItem[] }`.
 - `PurchaseOrderItem`: `{ id, purchaseOrderId, productId, quantityOrdered, quantityReceived, unitCost }`.
@@ -235,35 +235,35 @@ Errors: `422` when deactivating a category that still has active products (or fo
 
 ### 3.9 Notifications
 
-| Method | Path                                    | Role | Request body / query                            | Response                                | Errors        |
-| ------ | --------------------------------------- | ---- | ----------------------------------------------- | --------------------------------------- | ------------- |
-| GET    | `/notifications`                        | any  | `?page&limit&isRead&type&sortBy&sortOrder`      | paginated `Notification[]` (own only)   | 401           |
-| GET    | `/notifications/unread-count`           | any  | —                                               | `{ count: number }`                     | 401           |
-| PATCH  | `/notifications/:id/read`               | any  | —                                               | `Notification` (sets `isRead`, `readAt`) | 401, 404 (not own) |
-| PATCH  | `/notifications/read-all`               | any  | —                                               | `{ updated: number }`                   | 401           |
-| DELETE | `/notifications/:id`                    | any  | —                                               | `204` (own only)                        | 401, 404      |
-| GET    | `/notification-preferences`             | any  | —                                               | `NotificationPreference[]`              | 401           |
-| PATCH  | `/notification-preferences`             | any  | `[{ type, enabled }]`                           | `NotificationPreference[]`              | 400, 401      |
+| Method | Path                          | Role | Request body / query                       | Response                                 | Errors             |
+| ------ | ----------------------------- | ---- | ------------------------------------------ | ---------------------------------------- | ------------------ |
+| GET    | `/notifications`              | any  | `?page&limit&isRead&type&sortBy&sortOrder` | paginated `Notification[]` (own only)    | 401                |
+| GET    | `/notifications/unread-count` | any  | —                                          | `{ count: number }`                      | 401                |
+| PATCH  | `/notifications/:id/read`     | any  | —                                          | `Notification` (sets `isRead`, `readAt`) | 401, 404 (not own) |
+| PATCH  | `/notifications/read-all`     | any  | —                                          | `{ updated: number }`                    | 401                |
+| DELETE | `/notifications/:id`          | any  | —                                          | `204` (own only)                         | 401, 404           |
+| GET    | `/notification-preferences`   | any  | —                                          | `NotificationPreference[]`               | 401                |
+| PATCH  | `/notification-preferences`   | any  | `[{ type, enabled }]`                      | `NotificationPreference[]`               | 400, 401           |
 
 `Notification` shape: `{ id, userId, type, title, message, entityType, entityId, data, isRead, readAt, createdAt }`.
 Users only ever see their **own** notifications (404 for others'). Delivery: polling `unread-count` (60s) initially; upgrade path noted in §4 of the roadmap.
 
 ### 3.10 Dashboard
 
-| Method | Path                          | Role        | Response                                                                                       | Errors        |
-| ------ | ----------------------------- | ----------- | ---------------------------------------------------------------------------------------------- | ------------- |
-| GET    | `/dashboard/summary`          | any         | `{ totalProducts, lowStockProducts, activeOrders, pendingOrders, todaySales, todayOrders, lowStockItems: Product[], recentOrders: Order[] }` | 401 |
-| GET    | `/dashboard/sales-trend`      | admin       | `?days=7|30` → `[{ date: 'YYYY-MM-DD', totalSales: '0.00', orderCount }]`                      | 401, 403      |
-| GET    | `/dashboard/top-products`     | any         | `?limit=5` → `[{ productId, productName, sku, quantitySold, revenue }]`                        | 401           |
-| GET    | `/dashboard/low-stock`        | any         | `?page&limit` → alias of `/stock/low-stock` (kept for dashboard page)                          | 401           |
+| Method | Path                      | Role  | Response                                                                                                                                     | Errors                                                         |
+| ------ | ------------------------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| GET    | `/dashboard/summary`      | any   | `{ totalProducts, lowStockProducts, activeOrders, pendingOrders, todaySales, todayOrders, lowStockItems: Product[], recentOrders: Order[] }` | 401                                                            |
+| GET    | `/dashboard/sales-trend`  | admin | `?days=7                                                                                                                                     | 30`→`[{ date: 'YYYY-MM-DD', totalSales: '0.00', orderCount }]` | 401, 403 |
+| GET    | `/dashboard/top-products` | any   | `?limit=5` → `[{ productId, productName, sku, quantitySold, revenue }]`                                                                      | 401                                                            |
+| GET    | `/dashboard/low-stock`    | any   | `?page&limit` → alias of `/stock/low-stock` (kept for dashboard page)                                                                        | 401                                                            |
 
 `todaySales` counts CONFIRMED orders by `createdAt` (server timezone = UTC), excludes CANCELLED.
 
 ### 3.11 Audit log
 
-| Method | Path               | Role  | Request query                                                     | Response                          | Errors        |
-| ------ | ------------------ | ----- | ----------------------------------------------------------------- | --------------------------------- | ------------- |
-| GET    | `/audit-logs`      | admin | `?page&limit&userId&entityType&entityId&action&from&to&sortBy&sortOrder` | paginated `AuditLog[]`      | 401, 403      |
+| Method | Path          | Role  | Request query                                                            | Response               | Errors   |
+| ------ | ------------- | ----- | ------------------------------------------------------------------------ | ---------------------- | -------- |
+| GET    | `/audit-logs` | admin | `?page&limit&userId&entityType&entityId&action&from&to&sortBy&sortOrder` | paginated `AuditLog[]` | 401, 403 |
 
 - `AuditLog` shape: `{ id, userId, action, entityType, entityId, oldValues, newValues, createdAt }` (`oldValues`/`newValues` are opaque JSON objects; `userId` may be `null` for deleted users).
 - Audit logs are **read-only** via the API — created server-side, never manually.
@@ -271,9 +271,9 @@ Users only ever see their **own** notifications (404 for others'). Delivery: pol
 
 ### 3.12 Misc
 
-| Method | Path      | Role | Response                            | Errors |
-| ------ | --------- | ---- | ----------------------------------- | ------ |
-| GET 🔓 | `/health` | —    | `{ status: 'ok', db: 'up'|'down' }` | —      |
+| Method | Path      | Role | Response                  | Errors    |
+| ------ | --------- | ---- | ------------------------- | --------- |
+| GET 🔓 | `/health` | —    | `{ status: 'ok', db: 'up' | 'down' }` | —   |
 
 ---
 
@@ -297,9 +297,9 @@ Users only ever see their **own** notifications (404 for others'). Delivery: pol
 
 ## 6. Approval
 
-| Role      | Name | Reviewed (date) | Sign-off |
-| --------- | ---- | --------------- | -------- |
-| Backend   | —    | —               | —        |
-| Frontend  | —    | —               | —        |
+| Role     | Name | Reviewed (date) | Sign-off |
+| -------- | ---- | --------------- | -------- |
+| Backend  | —    | —               | —        |
+| Frontend | —    | —               | —        |
 
 Fill this in via PR review. Contract changes after sign-off require a new PR touching this file.
