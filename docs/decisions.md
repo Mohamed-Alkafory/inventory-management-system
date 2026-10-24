@@ -79,3 +79,14 @@ Two roles in v1: `ADMIN` and `STAFF` (no MANAGER/WATCHER). ADMIN is a superset o
 - Users, categories, suppliers, products (write), PO creation/confirm/cancel, audit logs, sales trend — **ADMIN**.
 
 A finer-grained permission matrix is out of scope for v1; revisit if a third role is ever needed.
+
+## AD-007 — Notifications are a best-effort, ADMIN-directed side effect (issue #31)
+
+**Status:** Accepted · **Date:** 2026-10-24
+
+Stock/order/purchase-order flows call the notifications service **after their transaction commits**, with the main client, never inside the caller's `$transaction` — a notification failure can never abort the main operation (the requirement: "notification creation must never fail the main operation").
+
+- **Recipients:** all active `ADMIN` users (Staff run the till; admins monitor the shop). A user with an explicit `enabled: false` preference for a type stops receiving it — that is what the (previously unused) `NotificationPreference` model is for, so it is **kept and exposed** via `GET/PUT /notifications/preferences` rather than dropped.
+- **Same-entity dedupe:** while an unread `LOW_STOCK` notification for a product exists (per recipient), no duplicate is created; reading it re-arms future alerts.
+- **`entityType`/`entityId`** always point at the product/order/purchase-order so the frontend can deep-link.
+- Events wired today: `LOW_STOCK` (stock adjustments + order sales), `ORDER_CREATED`, `ORDER_CANCELLED`, and `PURCHASE_ORDER_RECEIVED` (issue #32).

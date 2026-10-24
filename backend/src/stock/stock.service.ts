@@ -17,6 +17,7 @@ import {
   type ProductListResponse,
   type ProductResponse,
 } from '../products/products.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 
 /** Contract §3.6 `StockMovement` shape (all scalar fields). */
 export interface MovementResponse {
@@ -76,6 +77,7 @@ export class StockService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly productsService: ProductsService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   /**
@@ -83,13 +85,15 @@ export class StockService {
    * `ADJUSTMENT` movement row are written inside ONE Serializable
    * transaction; P2034 write conflicts (two concurrent adjustments) are
    * retried once so neither run can observe the other's half-state.
+   * After the commit a LOW_STOCK alert fires when the product dropped to
+   * or below `minStock` (best-effort — issue #31).
    */
   async adjust(
     dto: CreateAdjustmentDto,
     userId: string,
     role: string,
   ): Promise<AdjustedStockResponse> {
-    return this.withWriteRetry(() =>
+    const result = await this.withWriteRetry(() =>
       this.prisma.$transaction(
         (tx) =>
           this.applyStockChange(
@@ -104,6 +108,11 @@ export class StockService {
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       ),
     );
+
+    // Committed — best-effort LOW_STOCK fan-out (never throws, issue #31).
+    await this.notifications.notifyLowStockIfDepleted(result.product);
+
+    return result;
   }
 
   /**

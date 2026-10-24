@@ -239,18 +239,18 @@ Soft delete (AD-001): rows are never removed, so linked `products` and `purchase
 
 ### 3.9 Notifications
 
-| Method | Path                          | Role | Request body / query                       | Response                                 | Errors             |
-| ------ | ----------------------------- | ---- | ------------------------------------------ | ---------------------------------------- | ------------------ |
-| GET    | `/notifications`              | any  | `?page&limit&isRead&type&sortBy&sortOrder` | paginated `Notification[]` (own only)    | 401                |
-| GET    | `/notifications/unread-count` | any  | —                                          | `{ count: number }`                      | 401                |
-| PATCH  | `/notifications/:id/read`     | any  | —                                          | `Notification` (sets `isRead`, `readAt`) | 401, 404 (not own) |
-| PATCH  | `/notifications/read-all`     | any  | —                                          | `{ updated: number }`                    | 401                |
-| DELETE | `/notifications/:id`          | any  | —                                          | `204` (own only)                         | 401, 404           |
-| GET    | `/notification-preferences`   | any  | —                                          | `NotificationPreference[]`               | 401                |
-| PATCH  | `/notification-preferences`   | any  | `[{ type, enabled }]`                      | `NotificationPreference[]`               | 400, 401           |
+| Method | Path                          | Role | Request body / query                       | Response                                 | Errors                             |
+| ------ | ----------------------------- | ---- | ------------------------------------------ | ---------------------------------------- | ---------------------------------- |
+| GET    | `/notifications`              | any  | `?page&limit&type&unread&sortBy&sortOrder` | paginated `Notification[]` (own only)    | 400, 401                           |
+| GET    | `/notifications/unread-count` | any  | —                                          | `{ count: number }`                      | 401                                |
+| PATCH  | `/notifications/:id/read`     | any  | —                                          | `Notification` (sets `isRead`, `readAt`) | 400, 401, 404 (missing or not own) |
+| PATCH  | `/notifications/read-all`     | any  | —                                          | `{ updated: number }`                    | 401                                |
+| GET    | `/notifications/preferences`  | any  | —                                          | `[{ type, enabled }]` (defaults filled)  | 401                                |
+| PUT    | `/notifications/preferences`  | any  | `{ preferences: [{ type, enabled }] }`     | `[{ type, enabled }]` (full list)        | 400, 401                           |
 
 `Notification` shape: `{ id, userId, type, title, message, entityType, entityId, data, isRead, readAt, createdAt }`.
 Users only ever see their **own** notifications (404 for others'). Delivery: polling `unread-count` (60s) initially; upgrade path noted in §4 of the roadmap.
+Notes (issue #31 supersessions): the list filter is `unread` (boolean) — `isRead` is no longer exposed; the standalone `/notification-preferences` routes and `DELETE /notifications/:id` are replaced by `/notifications/preferences` under the notifications path (and deletion is not implemented); a missing LOW_STOCK alert is never created while an unread one for the same product exists; notification creation is best-effort and can never fail a stock/order/PO operation (AD-007).
 
 ### 3.10 Dashboard
 
