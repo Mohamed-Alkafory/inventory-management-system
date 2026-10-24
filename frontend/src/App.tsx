@@ -1,18 +1,22 @@
-
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import Header from "./components/Header/Header";
-import About from "./components/About/about";
-import Contact from "./components/Contact/contact";
+import Header from "./components/header/Header";
+import ToastProvider from "./components/ui/toast/ToastProvider";
+import About from "./page/About/About";
+import Contact from "./page/Contact/Contact";
+import Home from "./page/home/Home";
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <Header />
+    <ToastProvider>
+      <BrowserRouter>
+        <Header />
 
-      <Routes>
-        <Route path="/about" element={<About />} />
-        <Route path="/contact" element={<Contact />} />
-      </Routes>
-    </BrowserRouter>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/about" element={<About />} />
+          <Route path="/contact" element={<Contact />} />
+        </Routes>
+      </BrowserRouter>
+    </ToastProvider>
   );
 }
