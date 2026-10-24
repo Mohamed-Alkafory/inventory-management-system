@@ -1,1 +1,88 @@
 @import "tailwindcss";
+
+/*
+  Design tokens (single source of truth for the whole app)
+  --------------------------------------------------------
+  Every token below becomes a Tailwind utility, e.g.
+    --color-primary-600  ->  bg-primary-600 / text-primary-600 / border-primary-600
+    --radius-control     ->  rounded-control
+    --shadow-card        ->  shadow-card
+  Spacing uses Tailwind's default 4px scale (p-4 = 16px), so it is not redefined.
+*/
+@theme {
+  /* Brand — primary orange (500 = logo colour, 600+ pass WCAG AA with white text) */
+  --color-primary-50: #fff3ea;
+  --color-primary-100: #ffe4d0;
+  --color-primary-200: #ffc9a1;
+  --color-primary-300: #ffa466;
+  --color-primary-400: #ff8433;
+  --color-primary-500: #ff6b00;
+  --color-primary-600: #cc4a00;
+  --color-primary-700: #a83c00;
+  --color-primary-800: #862f00;
+  --color-primary-900: #6b2600;
+
+  /* Neutrals */
+  --color-ink: #10223a; /* headings, strong text */
+  --color-muted: #5b6b7f; /* secondary text */
+  --color-line: #e5e7eb; /* borders, dividers */
+  --color-surface: #ffffff;
+  --color-surface-alt: #f8f8f8;
+
+  /* Semantic / status colours */
+  --color-success-50: #ecfdf3;
+  --color-success-600: #15803d;
+  --color-success-700: #166534;
+  --color-warning-50: #fffbeb;
+  --color-warning-600: #b45309;
+  --color-warning-700: #92400e;
+  --color-danger-50: #fef2f2;
+  --color-danger-600: #dc2626;
+  --color-danger-700: #b91c1c;
+  --color-info-50: #eff6ff;
+  --color-info-600: #2563eb;
+  --color-info-700: #1d4ed8;
+
+  /* Radius */
+  --radius-control: 0.5rem; /* buttons, inputs, selects */
+  --radius-card: 1rem; /* cards, tables */
+  --radius-modal: 1.25rem; /* dialogs */
+
+  /* Elevation */
+  --shadow-card: 0 1px 2px rgb(16 34 58 / 0.06), 0 1px 3px rgb(16 34 58 / 0.08);
+  --shadow-overlay: 0 20px 45px -12px rgb(16 34 58 / 0.35);
+
+  /* Motion */
+  --animate-fade-in: fade-in 150ms ease-out;
+  --animate-pop-in: pop-in 180ms ease-out;
+  --animate-toast-in: toast-in 220ms ease-out;
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes pop-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes toast-in {
+    from {
+      opacity: 0;
+      transform: translateX(16px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}
