@@ -9,6 +9,7 @@ import { PrismaClientKnownRequestError } from '@prisma/client/runtime/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { Prisma, StockMovementType } from '../generated/prisma/client.js';
 import { ProductsService } from '../products/products.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import { type CreateAdjustmentDto } from './dto/create-adjustment.dto.js';
 import { type ListMovementsQueryDto } from './dto/list-movements.query.dto.js';
 import { StockService } from './stock.service.js';
@@ -31,6 +32,7 @@ describe('StockService', () => {
   const stockMovementFindMany = vi.fn();
   const productFindUnique = vi.fn();
   const productsFindAll = vi.fn();
+  const notifyLowStockIfDepleted = vi.fn();
 
   const productRow = (overrides: Record<string, unknown> = {}) => {
     const row: Record<string, unknown> = {
@@ -94,6 +96,7 @@ describe('StockService', () => {
       data: [],
       meta: { page: 1, limit: 20, total: 0, totalPages: 0 },
     });
+    notifyLowStockIfDepleted.mockReset().mockResolvedValue(undefined);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -110,6 +113,10 @@ describe('StockService', () => {
           },
         },
         { provide: ProductsService, useValue: { findAll: productsFindAll } },
+        {
+          provide: NotificationsService,
+          useValue: { notifyLowStockIfDepleted },
+        },
       ],
     }).compile();
 
@@ -261,6 +268,34 @@ describe('StockService', () => {
         service.adjust(ADJUSTMENT_DTO, USER_ID, 'ADMIN'),
       ).rejects.toBe(p2002);
       expect($transaction).toHaveBeenCalledTimes(1);
+    });
+
+    it('fires a LOW_STOCK alert after the commit when the product fell to/below minStock (#31)', async () => {
+      txProductFindUnique.mockResolvedValue(
+        productRow({ quantity: 3, minStock: 50 }),
+      );
+
+      await service.adjust(ADJUSTMENT_DTO, USER_ID, 'ADMIN');
+
+      expect(notifyLowStockIfDepleted).toHaveBeenCalledTimes(1);
+      expect(notifyLowStockIfDepleted).toHaveBeenCalledWith(
+        expect.objectContaining({ quantity: 3, minStock: 50 }),
+      );
+    });
+
+    it('hands the committed product to the fan-out — the depletion gate lives in the notifications service', async () => {
+      txProductFindUnique.mockResolvedValue(
+        productRow({ quantity: 495, minStock: 50 }),
+      );
+
+      await service.adjust(ADJUSTMENT_DTO, USER_ID, 'ADMIN');
+
+      // Stock service always passes the product; NotificationsService
+      // itself no-ops when quantity > minStock (covered in its own spec).
+      expect(notifyLowStockIfDepleted).toHaveBeenCalledTimes(1);
+      expect(notifyLowStockIfDepleted).toHaveBeenCalledWith(
+        expect.objectContaining({ quantity: 495, minStock: 50 }),
+      );
     });
   });
 

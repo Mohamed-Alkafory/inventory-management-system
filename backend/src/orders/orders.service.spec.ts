@@ -14,6 +14,7 @@ import {
   StockMovementType,
 } from '../generated/prisma/client.js';
 import { StockService } from '../stock/stock.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import { OrdersService } from './orders.service.js';
 import type { CreateOrderDto } from './dto/create-order.dto.js';
 
@@ -48,6 +49,9 @@ describe('OrdersService', () => {
   const txOrderItemCreate = vi.fn();
   const txOrderItemFindMany = vi.fn();
   const applyStockChange = vi.fn();
+  const notifyOrderCreated = vi.fn();
+  const notifyOrderCancelled = vi.fn();
+  const notifyLowStockIfDepleted = vi.fn();
 
   const tx = {
     product: { findMany: txProductFindMany },
@@ -103,7 +107,12 @@ describe('OrdersService', () => {
       }));
     applyStockChange.mockReset().mockResolvedValue({
       movement: { id: 'movement-id' },
-      product: { id: PRODUCT_A },
+      product: {
+        id: PRODUCT_A,
+        name: 'Ballpoint Pen',
+        quantity: 3, // depleted by default so LOW_STOCK triggers fire
+        minStock: 50,
+      },
     });
     txOrderFindUnique.mockReset().mockResolvedValue({
       id: ORDER_ID,
@@ -113,12 +122,23 @@ describe('OrdersService', () => {
     });
     txOrderUpdateMany.mockReset().mockResolvedValue({ count: 1 });
     txOrderItemFindMany.mockReset().mockResolvedValue([]);
+    notifyOrderCreated.mockReset().mockResolvedValue(undefined);
+    notifyOrderCancelled.mockReset().mockResolvedValue(undefined);
+    notifyLowStockIfDepleted.mockReset().mockResolvedValue(undefined);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         OrdersService,
         { provide: PrismaService, useValue: { $transaction } },
         { provide: StockService, useValue: { applyStockChange } },
+        {
+          provide: NotificationsService,
+          useValue: {
+            notifyOrderCreated,
+            notifyOrderCancelled,
+            notifyLowStockIfDepleted,
+          },
+        },
       ],
     }).compile();
 
@@ -831,6 +851,150 @@ describe('OrdersService', () => {
       expect($transaction).toHaveBeenCalledTimes(2);
       // Fresh transaction started cleanly — only one write happened.
       expect(txOrderUpdateMany).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('post-commit notification events (#31, best-effort)', () => {
+    const statusDto = (newStatus: OrderStatus) => ({ newStatus }) as never;
+    const updatedOrderRow = (
+      status: OrderStatus,
+      cancelledAt: Date | null,
+    ) => ({
+      id: ORDER_ID,
+      orderNumber: 'ORD-0001',
+      status,
+      customerName: null,
+      customerPhone: null,
+      notes: null,
+      totalAmount: new Prisma.Decimal('14.48'),
+      createdById: USER_ID,
+      cancelledAt,
+      createdAt: new Date('2026-10-23T12:00:00Z'),
+      updatedAt: new Date('2026-10-24T13:00:00Z'),
+    });
+
+    it('fires ORDER_CREATED with the created order after a successful create', async () => {
+      await service.create(
+        dto([
+          { productId: PRODUCT_A, quantity: 2 },
+          { productId: PRODUCT_B, quantity: 3 },
+        ]),
+        USER_ID,
+        'ADMIN',
+      );
+
+      expect(notifyOrderCreated).toHaveBeenCalledTimes(1);
+      expect(notifyOrderCreated).toHaveBeenCalledWith({
+        id: ORDER_ID,
+        orderNumber: 'ORD-0001',
+        totalAmount: 14.48,
+      });
+    });
+
+    it('fires LOW_STOCK for sold lines that fell to/below minStock', async () => {
+      await service.create(
+        dto([
+          { productId: PRODUCT_A, quantity: 2 },
+          { productId: PRODUCT_B, quantity: 3 },
+        ]),
+        USER_ID,
+        'ADMIN',
+      );
+
+      // every applyStockChange result product is depleted by the default mock
+      expect(notifyLowStockIfDepleted).toHaveBeenCalledTimes(2);
+      expect(notifyLowStockIfDepleted).toHaveBeenCalledWith(
+        expect.objectContaining({ id: PRODUCT_A, minStock: 50 }),
+      );
+    });
+
+    it('passes sold-line products to the fan-out — the depletion gate lives in the notifications service', async () => {
+      applyStockChange.mockReset().mockResolvedValue({
+        movement: { id: 'movement-id' },
+        product: {
+          id: PRODUCT_A,
+          name: 'Ballpoint Pen',
+          quantity: 60,
+          minStock: 50,
+        },
+      });
+
+      await service.create(
+        dto([{ productId: PRODUCT_A, quantity: 1 }]),
+        USER_ID,
+        'ADMIN',
+      );
+
+      // The healthy product is still passed; NotificationsService itself
+      // no-ops when quantity > minStock (covered in its own spec).
+      expect(notifyLowStockIfDepleted).toHaveBeenCalledTimes(1);
+      expect(notifyLowStockIfDepleted).toHaveBeenCalledWith(
+        expect.objectContaining({ id: PRODUCT_A, quantity: 60 }),
+      );
+    });
+
+    it('does not fire ORDER_CREATED when the order fails (e.g. duplicate lines)', async () => {
+      await expect(
+        service.create(
+          dto([
+            { productId: PRODUCT_A, quantity: 2 },
+            { productId: PRODUCT_A, quantity: 1 },
+          ]),
+          USER_ID,
+          'ADMIN',
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
+
+      expect(notifyOrderCreated).not.toHaveBeenCalled();
+      expect(notifyLowStockIfDepleted).not.toHaveBeenCalled();
+    });
+
+    it('fires ORDER_CANCELLED only for cancels — not for confirmations', async () => {
+      txOrderFindUnique
+        .mockReset()
+        .mockResolvedValueOnce({
+          id: ORDER_ID,
+          orderNumber: 'ORD-0001',
+          status: 'PENDING',
+          cancelledAt: null,
+        })
+        .mockResolvedValueOnce(updatedOrderRow(OrderStatus.CONFIRMED, null));
+
+      await service.updateStatus(
+        ORDER_ID,
+        statusDto(OrderStatus.CONFIRMED),
+        USER_ID,
+        'ADMIN',
+      );
+      expect(notifyOrderCancelled).not.toHaveBeenCalled();
+
+      txOrderFindUnique
+        .mockReset()
+        .mockResolvedValueOnce({
+          id: ORDER_ID,
+          orderNumber: 'ORD-0001',
+          status: 'PENDING',
+          cancelledAt: null,
+        })
+        .mockResolvedValueOnce(
+          updatedOrderRow(
+            OrderStatus.CANCELLED,
+            new Date('2026-10-24T13:00:00Z'),
+          ),
+        );
+
+      await service.updateStatus(
+        ORDER_ID,
+        statusDto(OrderStatus.CANCELLED),
+        USER_ID,
+        'ADMIN',
+      );
+      expect(notifyOrderCancelled).toHaveBeenCalledTimes(1);
+      expect(notifyOrderCancelled).toHaveBeenCalledWith({
+        id: ORDER_ID,
+        orderNumber: 'ORD-0001',
+        totalAmount: 14.48,
+      });
     });
   });
 });

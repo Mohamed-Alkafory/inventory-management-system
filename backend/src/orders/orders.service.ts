@@ -9,7 +9,11 @@ import {
 import { PrismaService } from '../prisma/prisma.service.js';
 import { Prisma, OrderStatus } from '../generated/prisma/client.js';
 import { StockMovementType } from '../generated/prisma/enums.js';
-import { StockService } from '../stock/stock.service.js';
+import {
+  StockService,
+  type AdjustedStockResponse,
+} from '../stock/stock.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import { CreateOrderDto } from './dto/create-order.dto.js';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto.js';
 
@@ -99,6 +103,7 @@ export class OrdersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly stock: StockService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   /**
@@ -126,12 +131,28 @@ export class OrdersService {
       throw new BadRequestException('Duplicate productId in items');
     }
 
-    return this.withWriteRetry(() =>
+    // Filled by the transaction callback with each line's stock result, so
+    // LOW_STOCK alerts can fire after the commit (issue #31).
+    const soldProducts: AdjustedStockResponse[] = [];
+
+    const result = await this.withWriteRetry(() =>
       this.prisma.$transaction(
-        (tx) => this.createOrder(tx, dto, ids, userId, role),
+        (tx) => this.createOrder(tx, dto, ids, userId, role, soldProducts),
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       ),
     );
+
+    // Committed — best-effort events (never throw, issue #31).
+    await this.notifications.notifyOrderCreated({
+      id: result.id,
+      orderNumber: result.orderNumber,
+      totalAmount: result.totalAmount,
+    });
+    for (const change of soldProducts) {
+      await this.notifications.notifyLowStockIfDepleted(change.product);
+    }
+
+    return result;
   }
 
   private async createOrder(
@@ -140,6 +161,7 @@ export class OrdersService {
     ids: string[],
     userId: string,
     role: string,
+    soldProducts: AdjustedStockResponse[],
   ): Promise<CreatedOrderResponse> {
     // Snapshot source + existence/active validation (404/422) in one read.
     const rows = (await tx.product.findMany({
@@ -206,9 +228,10 @@ export class OrdersService {
 
     // Shared stock write (issue #17): one guarded atomic decrement per line
     // + one SALE movement stamping this order id. ANY failure (e.g. 409
-    // insufficient stock) throws here and rolls the whole order back.
+    // insufficient stock) throws here and rolls the whole order back. Each
+    // result is kept for the post-commit LOW_STOCK fan-out (issue #31).
     for (const { item } of lines) {
-      await this.stock.applyStockChange(
+      const change = await this.stock.applyStockChange(
         tx,
         item.productId,
         -item.quantity,
@@ -218,6 +241,7 @@ export class OrdersService {
         role,
         { orderId: order.id },
       );
+      soldProducts.push(change);
     }
 
     return { ...serializeOrder(order), items };
@@ -240,12 +264,23 @@ export class OrdersService {
     userId: string,
     role: string,
   ): Promise<CreatedOrderResponse> {
-    return this.withWriteRetry(() =>
+    const result = await this.withWriteRetry(() =>
       this.prisma.$transaction(
         (tx) => this.updateOrderStatus(tx, id, dto, userId, role),
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       ),
     );
+
+    // Committed — best-effort event (never throws, issue #31).
+    if (dto.newStatus === OrderStatus.CANCELLED) {
+      await this.notifications.notifyOrderCancelled({
+        id: result.id,
+        orderNumber: result.orderNumber,
+        totalAmount: result.totalAmount,
+      });
+    }
+
+    return result;
   }
 
   private async updateOrderStatus(

@@ -8,6 +8,7 @@ import { CategoriesModule } from './categories/categories.module.js';
 import { SuppliersModule } from './suppliers/suppliers.module.js';
 import { StockModule } from './stock/stock.module.js';
 import { OrdersModule } from './orders/orders.module.js';
+import { NotificationsModule } from './notifications/notifications.module.js';
 import { HealthModule } from './health/health.module.js';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
@@ -30,6 +31,7 @@ import { UsersModule } from './users/users.module.js';
     SuppliersModule,
     StockModule,
     OrdersModule,
+    NotificationsModule,
     HealthModule,
     AuthModule,
     UsersModule,
