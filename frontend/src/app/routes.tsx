@@ -11,6 +11,7 @@ const Login = lazy(() => import("../page/Login/Login"));
 const Register = lazy(() => import("../page/Register/Register"));
 const Dashboard = lazy(() => import("../page/Dashboard/Dashboard"));
 const Products = lazy(() => import("../page/Products/Products"));
+const SellerOnboarding = lazy(() => import("../page/seller/SellerOnboarding"));
 const Inventory = lazy(() => import("../page/app/Inventory"));
 const Orders = lazy(() => import("../page/app/Orders"));
 const Suppliers = lazy(() => import("../page/app/Suppliers"));
@@ -42,6 +43,7 @@ export const router = createBrowserRouter([
           { index: true, element: <Navigate to="/dashboard" replace /> },
           { path: "dashboard", element: <Dashboard /> },
           { path: "products", element: <Products /> },
+          { path: "seller/onboarding", element: <SellerOnboarding /> },
           { path: "inventory", element: <Inventory /> },
           { path: "orders", element: <Orders /> },
           { path: "suppliers", element: <Suppliers /> },
