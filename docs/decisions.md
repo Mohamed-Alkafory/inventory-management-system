@@ -90,3 +90,14 @@ Stock/order/purchase-order flows call the notifications service **after their tr
 - **Same-entity dedupe:** while an unread `LOW_STOCK` notification for a product exists (per recipient), no duplicate is created; reading it re-arms future alerts.
 - **`entityType`/`entityId`** always point at the product/order/purchase-order so the frontend can deep-link.
 - Events wired today: `LOW_STOCK` (stock adjustments + order sales), `ORDER_CREATED`, `ORDER_CANCELLED`, and `PURCHASE_ORDER_RECEIVED` (issue #32).
+
+## AD-008 — Purchase-order permissions and the receive-only stock path (issue #32)
+
+**Status:** Accepted · **Date:** 2026-10-25
+
+`POST /purchase-orders` and `PATCH /purchase-orders/:id/status` are **ADMIN**; `GET` and `POST /:id/receive` are open to **STAFF and ADMIN** (the shop floor receives deliveries). This refines AD-006's PO mapping to match the issue.
+
+- Manual status moves are only `DRAFT → ORDERED` and `DRAFT|ORDERED → CANCELLED`; `PARTIALLY_RECEIVED`/`RECEIVED` are **receiving outcomes only** (a manual `PATCH` targeting them is 409).
+- Stock enters the shop **exclusively** through `POST /:id/receive`, one `PURCHASE_RECEIPT` movement per line via the shared stock write (AD-005). A purchase order never moves stock at creation, ordering or cancellation.
+- Receiving is all-or-nothing: `quantityReceived`, product quantity, movements, status and `receivedAt` change in ONE Serializable transaction; over-receiving is 409.
+- `unitCost` is client input (supplier pricing); `totalAmount` is server-computed. `orderNumber` is `PO-####` from the row count, retried once on a P2002 race.

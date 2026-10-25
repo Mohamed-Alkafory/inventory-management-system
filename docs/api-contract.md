@@ -202,14 +202,14 @@ Soft delete (AD-001): rows are never removed, so linked `products` and `purchase
 
 ### 3.7 Orders
 
-| Method | Path                      | Role | Request body / query                                                             | Response                                   | Errors                                            |
-| ------ | ------------------------- | ---- | -------------------------------------------------------------------------------- | ------------------------------------------ | ------------------------------------------------- |
-| GET    | `/orders`                 | any  | `?page&limit&status&search(customerName,orderNumber)&createdById&sortBy(status,createdAt)&sortOrder` | paginated `Order[]`          | 401                                               |
-| GET    | `/orders/:id`             | any  | —                                                                                | `Order` + `items[]` + `createdBy`          | 401, 404                                          |
-| POST   | `/orders`                 | any  | `type CreateOrderRequest = { items: Array<{ productId: string; quantity: number }>; customerName?: string; customerPhone?: string; notes?: string; }` | `Order` + `items` (201) | 400, 401, 404 (product not found / inactive), 422 (insufficient stock) |
-| PATCH  | `/orders/:id`             | any  | `{ customerName?, customerPhone?, notes? }` — only while `PENDING`               | `Order`                                    | 401, 404, 422 (not editable after PENDING)        |
-| POST   | `/orders/:id/confirm`     | any  | —                                                                                | `Order` (status → `CONFIRMED`)             | 401, 404, 409 (already transitioned), 422         |
-| POST   | `/orders/:id/cancel`     | any  | `{ reason }`                                                                     | `Order` (status → `CANCELLED`)             | 401, 404, 409, 422                                |
+| Method | Path                  | Role | Request body / query                                                                                                                                  | Response                          | Errors                                                                 |
+| ------ | --------------------- | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- | ---------------------------------------------------------------------- |
+| GET    | `/orders`             | any  | `?page&limit&status&search(customerName,orderNumber)&createdById&sortBy(status,createdAt)&sortOrder`                                                  | paginated `Order[]`               | 401                                                                    |
+| GET    | `/orders/:id`         | any  | —                                                                                                                                                     | `Order` + `items[]` + `createdBy` | 401, 404                                                               |
+| POST   | `/orders`             | any  | `type CreateOrderRequest = { items: Array<{ productId: string; quantity: number }>; customerName?: string; customerPhone?: string; notes?: string; }` | `Order` + `items` (201)           | 400, 401, 404 (product not found / inactive), 422 (insufficient stock) |
+| PATCH  | `/orders/:id`         | any  | `{ customerName?, customerPhone?, notes? }` — only while `PENDING`                                                                                    | `Order`                           | 401, 404, 422 (not editable after PENDING)                             |
+| POST   | `/orders/:id/confirm` | any  | —                                                                                                                                                     | `Order` (status → `CONFIRMED`)    | 401, 404, 409 (already transitioned), 422                              |
+| POST   | `/orders/:id/cancel`  | any  | `{ reason }`                                                                                                                                          | `Order` (status → `CANCELLED`)    | 401, 404, 409, 422                                                     |
 
 - `Order` shape: `{ id, orderNumber, status, customerName, customerPhone, notes, totalAmount, createdById, cancelledAt, createdAt, updatedAt, items?: OrderItem[] }`.
 - `GET /orders`: `page` defaults to 1, `limit` defaults to 20 (max 100); default sort is
@@ -231,21 +231,21 @@ Soft delete (AD-001): rows are never removed, so linked `products` and `purchase
 
 ### 3.8 Purchase orders
 
-| Method | Path                           | Role  | Request body / query                                                                     | Response                                                   | Errors                                                             |
-| ------ | ------------------------------ | ----- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------ |
-| GET    | `/purchase-orders`             | any   | `?page&limit&status&supplierId&search(orderNumber)&sortBy(status,createdAt)&sortOrder`   | paginated `PurchaseOrder[]`                                | 401                                                                |
-| GET    | `/purchase-orders/:id`         | any   | —                                                                                        | `PurchaseOrder` + `items[]` + supplier                     | 401, 404                                                           |
-| POST   | `/purchase-orders`             | admin | `{ supplierId, expectedAt?, notes?, items: [{ productId, quantityOrdered, unitCost }] }` | `PurchaseOrder` (201, status `DRAFT`)                      | 400, 401, 403, 404, 422                                            |
-| POST   | `/purchase-orders/:id/order`   | admin | —                                                                                        | `PurchaseOrder` (status → `ORDERED`)                       | 401, 403, 404, 409, 422                                            |
-| POST   | `/purchase-orders/:id/receive` | any   | `{ items: [{ itemId, quantityReceived }] }` (per-item partial receive)                   | `PurchaseOrder` (status → `PARTIALLY_RECEIVED`/`RECEIVED`) | 401, 404, 409 (not ORDERED/PARTIALLY_RECEIVED), 422 (over-receipt) |
-| PATCH  | `/purchase-orders/:id`         | admin | `{ supplierId?, expectedAt?, notes?, items? }` — only while `DRAFT`                      | `PurchaseOrder`                                            | 401, 403, 404, 422                                                 |
-| POST   | `/purchase-orders/:id/cancel`  | admin | `{ reason }` — only while `DRAFT`/`ORDERED`                                              | `PurchaseOrder` (status → `CANCELLED`)                     | 401, 403, 404, 409, 422                                            |
-| DELETE | `/purchase-orders/:id`         | admin | —                                                                                        | `204` (soft delete; only if `DRAFT`/`CANCELLED`)           | 401, 403, 404, 422                                                 |
+| Method | Path                           | Role  | Request body / query                                                                     | Response                                                   | Errors                                                           |
+| ------ | ------------------------------ | ----- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------------- |
+| GET    | `/purchase-orders`             | any   | `?page&limit&status&supplierId&sortBy(createdAt,status)&sortOrder`                       | paginated `PurchaseOrder[]`                                | 400, 401                                                         |
+| GET    | `/purchase-orders/:id`         | any   | —                                                                                        | `PurchaseOrder` + `items[]` + supplier                     | 400, 401, 404                                                    |
+| POST   | `/purchase-orders`             | admin | `{ supplierId, expectedAt?, notes?, items: [{ productId, quantityOrdered, unitCost }] }` | `PurchaseOrder` (201, status `DRAFT`)                      | 400, 401, 403, 404, 409, 422                                     |
+| PATCH  | `/purchase-orders/:id/status`  | admin | `{ newStatus: 'ORDERED' \| 'CANCELLED' }`                                                | `PurchaseOrder` (manual transition)                        | 400, 401, 403, 404, 409                                          |
+| POST   | `/purchase-orders/:id/receive` | any   | `{ items: [{ productId, quantity }] }` (full or partial)                                 | `PurchaseOrder` (status → `PARTIALLY_RECEIVED`/`RECEIVED`) | 400, 401, 404, 409 (over-receive or wrong state), 422 (inactive) |
 
-- `PurchaseOrder` shape: `{ id, orderNumber, supplierId, status, totalAmount, expectedAt, receivedAt, notes, createdById, createdAt, updatedAt, items?: PurchaseOrderItem[] }`.
+- `PurchaseOrder` shape: `{ id, orderNumber, supplierId, status, totalAmount, expectedAt, receivedAt, notes, createdById, createdAt, updatedAt }`; detail responses add `items[]` and `supplier: { id, companyName }`.
 - `PurchaseOrderItem`: `{ id, purchaseOrderId, productId, quantityOrdered, quantityReceived, unitCost }`.
-- Receiving creates `PURCHASE_RECEIPT` stock movements per item and **adds** to product quantity in the same transaction.
-- Errors: `422` receive would exceed `quantityOrdered` for an item, or draft edits after `ORDERED`.
+- `unitCost` is client input; `totalAmount` is computed server-side with decimal math. A readable sequential `orderNumber` (`PO-0001`) is generated from the row count (a concurrent race is retried once).
+- `POST /purchase-orders` runs in ONE Serializable transaction and touches NO stock (a DRAFT is paperwork); missing supplier/product is 404, inactive supplier/product is 422, duplicate `productId` lines are 400.
+- Manual transitions (issue #32 supersedes the contract's `/order` + `/cancel` routes): `DRAFT → ORDERED`, `DRAFT → CANCELLED`, `ORDERED → CANCELLED` — everything else (`RECEIVED`/`PARTIALLY_RECEIVED` targets, terminal states, same status) answers 409. Receiving is the only path to `PARTIALLY_RECEIVED`/`RECEIVED`.
+- Receiving runs in ONE Serializable transaction: per line it increments `quantityReceived`, raises product stock and writes one `PURCHASE_RECEIPT` movement (reason `Received purchase order PO-####`, `purchaseOrderId` stamped); the status becomes `PARTIALLY_RECEIVED` or `RECEIVED` (`receivedAt` stamped on full receipt) — any failure leaves no partial data. Receiving more than the remaining quantity is 409; DRAFT/CANCELLED/RECEIVED orders are 409; a product that is not a line of the order is 400. A committed receipt fans a best-effort `PURCHASE_ORDER_RECEIVED` notification to ADMINs (AD-007).
+- Not implemented in this issue (kept out of the table on purpose): `PATCH /purchase-orders/:id` (draft editing), `POST /:id/order` and `POST /:id/cancel` (replaced by `PATCH :id/status`), `DELETE /purchase-orders/:id`, and `search(orderNumber)` on the list (only status/supplier filters are implemented).
 
 ### 3.9 Notifications
 
@@ -296,6 +296,7 @@ Notes (issue #31 supersessions): the list filter is `unread` (boolean) — `isRe
 **Order:** `PENDING → CONFIRMED` (deducts nothing extra; stock leaves at creation)
 `PENDING|CONFIRMED → CANCELLED` (restores stock on cancel; terminal, no further transitions)
 **PurchaseOrder:** `DRAFT → ORDERED → PARTIALLY_RECEIVED → RECEIVED`, and `DRAFT|ORDERED → CANCELLED`.
+Manual endpoints only perform `DRAFT → ORDERED` and the two cancels (`PATCH /purchase-orders/:id/status`); the `PARTIALLY_RECEIVED`/`RECEIVED` steps happen exclusively through `POST /purchase-orders/:id/receive`.
 `RECEIVED`/`CANCELLED` are terminal.
 
 ---

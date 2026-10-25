@@ -13,6 +13,7 @@ const ADMIN_1 = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const ADMIN_2 = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const PRODUCT_ID = 'pppppppp-pppp-4ppp-8ppp-pppppppppppp';
 const ORDER_ID = 'oooooooo-oooo-4ooo-8ooo-oooooooooooo';
+const PURCHASE_ORDER_ID = 'qqqqqqqq-qqqq-4qqq-8qqq-qqqqqqqqqqqq';
 const NOTIFICATION_ID = '11111111-1111-4111-8111-111111111111';
 
 const notificationRow = (overrides: Record<string, unknown> = {}) => ({
@@ -412,6 +413,26 @@ describe('NotificationsService', () => {
             type: NotificationType.ORDER_CANCELLED,
             entityType: 'order',
             entityId: ORDER_ID,
+          }),
+        ],
+      });
+    });
+
+    it('PURCHASE_ORDER_RECEIVED fans out to admins deep-linking the PO (#32)', async () => {
+      userFindMany.mockResolvedValue([{ id: ADMIN_1 }]);
+
+      await service.notifyPurchaseOrderReceived({
+        id: PURCHASE_ORDER_ID,
+        orderNumber: 'PO-0001',
+      });
+
+      expect(notificationCreateMany).toHaveBeenCalledWith({
+        data: [
+          expect.objectContaining({
+            userId: ADMIN_1,
+            type: NotificationType.PURCHASE_ORDER_RECEIVED,
+            entityType: 'purchase-order',
+            entityId: PURCHASE_ORDER_ID,
           }),
         ],
       });
