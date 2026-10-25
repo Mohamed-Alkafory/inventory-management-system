@@ -8,6 +8,21 @@ on:
 jobs:
   backend:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: inventory
+          POSTGRES_PASSWORD: change_me
+          POSTGRES_DB: inventory_test
+        ports:
+          - 5432:5432
+        # Set health checks to wait until postgres has started
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     defaults:
       run:
         working-directory: backend
@@ -22,6 +37,17 @@ jobs:
       - run: npx prisma generate
       - run: npm run lint
       - run: npm test
+      - name: Deploy database migrations for E2E
+        run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://inventory:change_me@localhost:5432/inventory_test?schema=public
+      - name: Run E2E tests
+        run: npm run test:e2e
+        env:
+          DATABASE_URL: postgresql://inventory:change_me@localhost:5432/inventory_test?schema=public
+          JWT_SECRET: ci_secret_value
+          JWT_EXPIRES_IN: 15m
+          CORS_ORIGIN: http://localhost:5173
       - run: npm run build
 
   frontend:

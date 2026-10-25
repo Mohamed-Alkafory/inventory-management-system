@@ -45,13 +45,21 @@ function matchesWhere(row: FakeRow, where: FakeRow = {}): boolean {
     return false;
   }
   const idFilter = where['id'] as { not?: string } | string | undefined;
-  if (idFilter && typeof idFilter === 'object' && idFilter.not && row['id'] === idFilter.not) {
+  if (
+    idFilter &&
+    typeof idFilter === 'object' &&
+    idFilter.not &&
+    row['id'] === idFilter.not
+  ) {
     return false;
   }
   if (typeof where['role'] === 'string' && row['role'] !== where['role']) {
     return false;
   }
-  if (typeof where['isActive'] === 'boolean' && row['isActive'] !== where['isActive']) {
+  if (
+    typeof where['isActive'] === 'boolean' &&
+    row['isActive'] !== where['isActive']
+  ) {
     return false;
   }
   const or = where['OR'] as FakeRow[] | undefined;
@@ -62,14 +70,21 @@ function matchesWhere(row: FakeRow, where: FakeRow = {}): boolean {
 }
 
 function createFakePrisma(db: FakeDb) {
-  return {
+  const fakePrisma = {
     async onModuleInit() {},
     async onModuleDestroy() {},
     async $queryRaw() {
       return [{ 1: 1 }];
     },
-    async $transaction<T>(fn: (tx: unknown) => Promise<T>): Promise<T> {
-      return fn(this);
+    async $transaction<T>(
+      fnOrArray:
+        | ((tx: unknown) => Promise<T>)
+        | Array<Promise<unknown>>,
+    ): Promise<T> {
+      if (typeof fnOrArray === 'function') {
+        return fnOrArray(fakePrisma);
+      }
+      return Promise.all(fnOrArray) as unknown as Promise<T>;
     },
     user: {
       async findUnique(args: {
@@ -90,22 +105,27 @@ function createFakePrisma(db: FakeDb) {
         const orderBy = args.orderBy ?? {};
         const [key, dir] = Object.entries(orderBy)[0] ?? ['createdAt', 'desc'];
         rows = [...rows].sort((a, b) => {
-          const av = a[key] instanceof Date ? (a[key] as Date).getTime() : String(a[key]);
-          const bv = b[key] instanceof Date ? (b[key] as Date).getTime() : String(b[key]);
+          const av =
+            a[key] instanceof Date
+              ? (a[key] as Date).getTime()
+              : String(a[key]);
+          const bv =
+            b[key] instanceof Date
+              ? (b[key] as Date).getTime()
+              : String(b[key]);
           const cmp = av < bv ? -1 : av > bv ? 1 : 0;
           return dir === 'desc' ? -cmp : cmp;
         });
         const skip = args.skip ?? 0;
         const take = args.take ?? rows.length;
-        return rows.slice(skip, skip + take).map((r) => project(r, args.select));
+        return rows
+          .slice(skip, skip + take)
+          .map((r) => project(r, args.select));
       },
       async count(args: { where?: FakeRow }) {
         return db.users.filter((u) => matchesWhere(u, args.where ?? {})).length;
       },
-      async create(args: {
-        data: FakeRow;
-        select?: Record<string, boolean>;
-      }) {
+      async create(args: { data: FakeRow; select?: Record<string, boolean> }) {
         const now = new Date();
         const row: FakeRow = {
           id: randomUUID(),
@@ -159,19 +179,20 @@ function createFakePrisma(db: FakeDb) {
         Object.assign(row, args.data);
         return { ...row };
       },
-      async updateMany(args: {
-        where: { id: string; revokedAt?: null };
-        data: FakeRow;
-      }) {
-        const row = db.refreshTokens.find(
-          (t) =>
-            t['id'] === args.where.id &&
-            (args.where.revokedAt === undefined ||
-              t['revokedAt'] === args.where.revokedAt),
-        );
-        if (!row) return { count: 0 };
-        Object.assign(row, args.data);
-        return { count: 1 };
+      async updateMany(args: { where: FakeRow; data: FakeRow }) {
+        let count = 0;
+        for (const token of db.refreshTokens) {
+          if (
+            (args.where['id'] === undefined ||
+              token['id'] === args.where['id']) &&
+            (args.where['revokedAt'] === undefined ||
+              token['revokedAt'] === args.where['revokedAt'])
+          ) {
+            Object.assign(token, args.data);
+            count++;
+          }
+        }
+        return { count };
       },
     },
     product: {
@@ -183,6 +204,7 @@ function createFakePrisma(db: FakeDb) {
       },
     },
   };
+  return fakePrisma;
 }
 
 describe('Auth & Users (e2e)', () => {
@@ -260,7 +282,10 @@ describe('Auth & Users (e2e)', () => {
         transform: true,
       }),
     );
-    app.useGlobalFilters(new PrismaExceptionFilter(), new AllExceptionsFilter());
+    app.useGlobalFilters(
+      new PrismaExceptionFilter(),
+      new AllExceptionsFilter(),
+    );
     await app.init();
   });
 
@@ -272,8 +297,10 @@ describe('Auth & Users (e2e)', () => {
     // Fresh state per test: users may have been created/renamed/deactivated.
     await seedUsers();
     if (!adminToken) {
-      adminToken = (await loginAs('admin@example.com', 'Admin123!')).accessToken;
-      staffToken = (await loginAs('staff@example.com', 'Staff123!')).accessToken;
+      adminToken = (await loginAs('admin@example.com', 'Admin123!'))
+        .accessToken;
+      staffToken = (await loginAs('staff@example.com', 'Staff123!'))
+        .accessToken;
     }
   });
 

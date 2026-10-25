@@ -26,14 +26,14 @@
 
 An inventory and order management system designed to bring product tracking, supplier management, and order operations into one place.
 
-> **Project status:** Under development. The repository currently contains the initial application setup and development infrastructure. Core inventory and order management features have not been implemented yet.
+> **Project status:** Core inventory and order management backend features are implemented and tested.
 
 ## Overview
 
 The project is organized as two independent applications backed by a shared PostgreSQL database.
 
-- **Frontend:** A React application that provides the user interface.
-- **Backend:** A NestJS REST API that will handle application logic and data access.
+- **Frontend:** A React application that provides the user interface (Under development).
+- **Backend:** A NestJS REST API that handles application logic and data access (Implemented).
 - **Database:** PostgreSQL for persistent data storage.
 - **ORM:** Prisma for database schema management and queries.
 - **Development environment:** Docker Compose for running PostgreSQL locally.
@@ -57,20 +57,18 @@ Prisma
 PostgreSQL
 ```
 
-The architecture represents the intended application design. Frontend-to-backend integration and the core business features are still under development.
-
 ## Current Status
 
 | Component                    | Current state                                                  |
 | ---------------------------- | -------------------------------------------------------------- |
 | Frontend                     | Initial React and Vite application                             |
-| Backend                      | Initial NestJS REST API                                        |
+| Backend                      | NestJS REST API with core business logic                       |
 | Database                     | PostgreSQL container configured                                |
-| Prisma                       | Initial configuration; no application models or migrations yet |
-| Automated checks             | GitHub Actions CI for backend and frontend                     |
-| Inventory and order features | Not implemented yet                                            |
+| Prisma                       | Models, migrations, and seed data implemented                  |
+| Automated checks             | GitHub Actions CI with unit and E2E tests                      |
+| Inventory and order features | Backend implemented; Frontend under development                |
 
-The backend currently exposes `GET /`, which returns `"Hello World!"`. The frontend is still an initial application shell, and API calls have not yet been integrated.
+The backend exposes REST endpoints under `/api/v1` (with health check at `GET /api/v1/health` returning `{"status":"ok","db":"up"}`). The frontend is currently under development.
 
 ## Tech Stack
 
@@ -235,7 +233,7 @@ npm run dev
 | Backend API | http://localhost:3000 |
 | PostgreSQL  | localhost:5432        |
 
-The frontend currently displays the initial application shell. The backend's root endpoint responds to `GET /` with `"Hello World!"`.
+The frontend currently displays the initial application shell. The backend exposes `GET /api/v1/health` for container health monitoring and readiness checks.
 
 ## Environment Variables
 
@@ -247,10 +245,10 @@ The frontend currently displays the initial application shell. The backend's roo
 | `POSTGRES_PORT`     | Host port mapped to PostgreSQL               |
 | `DATABASE_URL`      | Database connection string used by Prisma    |
 | `PORT`              | Backend API port; defaults to `3000`         |
-| `JWT_SECRET`        | Reserved for future authentication           |
-| `VITE_API_URL`      | Reserved for future frontend API integration |
-
-The JWT and frontend API variables are reserved for planned functionality; the current application does not yet consume them.
+| `CORS_ORIGIN`       | Allowed CORS origin for frontend client      |
+| `JWT_SECRET`        | Secret for signing JWT authentication tokens |
+| `JWT_EXPIRES_IN`    | Access token expiration duration (e.g. `15m`)|
+| `VITE_API_URL`      | Backend API URL used by the frontend         |
 
 Environment templates contain placeholders only. Keep actual secrets in ignored local `.env` files and never commit them.
 
@@ -292,21 +290,9 @@ The database schema is managed through Prisma.
 Current database setup includes:
 
 - PostgreSQL connection configuration.
-- Prisma schema and configuration files.
+- Prisma schema with core models (User, Product, Order, etc.).
 - PostgreSQL adapter dependencies.
-
-Application models and migrations have not been created yet.
-
-Once the team agrees on the initial data model, create migrations from `backend/`:
-
-```bash
-npx prisma migrate dev
-npx prisma generate
-```
-
-Run these commands only after application models have been added to `backend/prisma/schema.prisma`.
-
-Database design should be reviewed before migrations are introduced so the team can agree on entities, relationships, constraints, and data integrity requirements.
+- Automated migrations and seed data.
 
 To load development sample data (idempotent), run from `backend/`:
 
