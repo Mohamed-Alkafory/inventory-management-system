@@ -2,13 +2,16 @@ import "@testing-library/jest-dom/vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
+import AuthProvider from "../../context/auth/AuthProvider";
 import Header from "./Header";
 
 describe("Header mobile menu", () => {
   it("exposes a toggle that opens and closes the nav", () => {
     render(
       <MemoryRouter>
-        <Header />
+        <AuthProvider>
+          <Header />
+        </AuthProvider>
       </MemoryRouter>,
     );
 
