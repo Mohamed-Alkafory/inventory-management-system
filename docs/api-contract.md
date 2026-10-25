@@ -264,14 +264,21 @@ Notes (issue #31 supersessions): the list filter is `unread` (boolean) — `isRe
 
 ### 3.10 Dashboard
 
-| Method | Path                      | Role  | Response                                                                                                                                     | Errors                                                         |
-| ------ | ------------------------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| GET    | `/dashboard/summary`      | any   | `{ totalProducts, lowStockProducts, activeOrders, pendingOrders, todaySales, todayOrders, lowStockItems: Product[], recentOrders: Order[] }` | 401                                                            |
-| GET    | `/dashboard/sales-trend`  | admin | `?days=7                                                                                                                                     | 30`→`[{ date: 'YYYY-MM-DD', totalSales: '0.00', orderCount }]` | 401, 403 |
-| GET    | `/dashboard/top-products` | any   | `?limit=5` → `[{ productId, productName, sku, quantitySold, revenue }]`                                                                      | 401                                                            |
-| GET    | `/dashboard/low-stock`    | any   | `?page&limit` → alias of `/stock/low-stock` (kept for dashboard page)                                                                        | 401                                                            |
+ADMIN-only (AD-009). Every route takes an optional inclusive `from`/`to` range (ISO-8601): both or neither, `from <= to`, at most 92 days — otherwise 400. Omitted range = last 30 days. Day buckets are UTC and zero-filled.
 
-`todaySales` counts CONFIRMED orders by `createdAt` (server timezone = UTC), excludes CANCELLED.
+| Method | Path                         | Role  | Query                              | Response                                                                                                                                | Errors        |
+| ------ | ---------------------------- | ----- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
+| GET    | `/dashboard/summary`         | admin | `?from&to`                         | `{ totalProducts, totalStockUnits, stockValue, lowStockCount, outOfStockCount, ordersInPeriod, revenueInPeriod, period: { from, to } }` | 400, 401, 403 |
+| GET    | `/dashboard/low-stock`       | admin | `?page&limit`                      | paginated `Product[]` where `quantity <= minStock` (same query as `/stock/low-stock`)                                                   | 400, 401, 403 |
+| GET    | `/dashboard/sales`           | admin | `?from&to`                         | `[{ date: 'YYYY-MM-DD', totalSales: number, orderCount: number }]` (one entry per day)                                                  | 400, 401, 403 |
+| GET    | `/dashboard/top-products`    | admin | `?from&to&limit` (1–50, default 5) | `[{ productId, productName, sku, quantitySold, revenue }]`                                                                              | 400, 401, 403 |
+| GET    | `/dashboard/stock-movements` | admin | `?from&to`                         | `[{ date: 'YYYY-MM-DD', unitsIn, unitsOut }]` (one entry per day)                                                                       | 400, 401, 403 |
+
+- `stockValue` uses the **cost basis**: `SUM(quantity * costPrice)` over active products (`costPrice` NULL counts as 0) — see AD-009.
+- `totalProducts`, `totalStockUnits`, `lowStockCount`, `outOfStockCount` cover **active** products only.
+- `ordersInPeriod` / `revenueInPeriod` / `sales` / `top-products` exclude **CANCELLED** orders; PENDING and CONFIRMED both count (stock already left at creation — AD-002).
+- Prisma `aggregate`/`groupBy`/`count` do the aggregation wherever possible; `$queryRaw` is used only for the column-math figures (`quantity * costPrice`, `quantity <= minStock`) and UTC `date_trunc` day grouping — always parameterized. Empty periods return zeros/empty arrays, never errors.
+- Supersedes the earlier `/dashboard/sales-trend` (its `days` query is replaced by the `from`/`to` range on `/dashboard/sales`) and the `summary` payload listed in the original contract.
 
 ### 3.11 Audit log
 
