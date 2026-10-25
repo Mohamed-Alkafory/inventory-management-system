@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { AuditService } from '../audit/audit.service.js';
 import { type CreateProductDto } from './dto/create-product.dto.js';
 import { type ListProductsQueryDto } from './dto/list-products.query.dto.js';
 import { type UpdateProductDto } from './dto/update-product.dto.js';
@@ -12,6 +13,7 @@ const SUPPLIER_ID = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 
 describe('ProductsService', () => {
   let service: ProductsService;
+  const log = vi.fn();
   const productFindMany = vi.fn();
   const productCount = vi.fn();
   const productFindUnique = vi.fn();
@@ -50,6 +52,7 @@ describe('ProductsService', () => {
     productFindUnique.mockReset();
     productCreate.mockReset();
     productUpdate.mockReset();
+    log.mockReset();
     $queryRaw.mockReset();
     categoryFindUnique.mockReset();
     supplierFindUnique.mockReset();
@@ -64,6 +67,7 @@ describe('ProductsService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ProductsService,
+        { provide: AuditService, useValue: { log } },
         {
           provide: PrismaService,
           useValue: {
@@ -185,10 +189,7 @@ describe('ProductsService', () => {
 
   describe('findAll — filters and sorting', () => {
     it('searches name and SKU case-insensitively', async () => {
-      await service.findAll(
-        { search: 'pen' } as ListProductsQueryDto,
-        'ADMIN',
-      );
+      await service.findAll({ search: 'pen' } as ListProductsQueryDto, 'ADMIN');
 
       expect(productFindMany).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -205,7 +206,11 @@ describe('ProductsService', () => {
 
     it('combines categoryId, supplierId and isActive filters', async () => {
       await service.findAll(
-        { categoryId: CATEGORY_ID, supplierId: SUPPLIER_ID, isActive: false } as ListProductsQueryDto,
+        {
+          categoryId: CATEGORY_ID,
+          supplierId: SUPPLIER_ID,
+          isActive: false,
+        } as ListProductsQueryDto,
         'ADMIN',
       );
 
@@ -440,7 +445,9 @@ describe('ProductsService', () => {
   describe('update', () => {
     it('applies only the provided fields and never quantity/isActive', async () => {
       productFindUnique.mockResolvedValue(productRow());
-      productUpdate.mockResolvedValue(productRow({ price: new Prisma.Decimal('2.49') }));
+      productUpdate.mockResolvedValue(
+        productRow({ price: new Prisma.Decimal('2.49') }),
+      );
 
       // `quantity`/`isActive` are not part of UpdateProductDto; assert the
       // data payload contains exactly the provided fields.
@@ -464,6 +471,29 @@ describe('ProductsService', () => {
         service.update('missing-id', { name: 'X' } as UpdateProductDto),
       ).rejects.toBeInstanceOf(NotFoundException);
       expect(productUpdate).not.toHaveBeenCalled();
+    });
+
+    it('records the old and new price in the audit trail (#34)', async () => {
+      productFindUnique.mockResolvedValue(productRow());
+      productUpdate.mockResolvedValue(
+        productRow({ price: new Prisma.Decimal('2.49') }),
+      );
+
+      await service.update(
+        'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        { price: 2.49 } as UpdateProductDto,
+        'user-1',
+      );
+
+      const entry = log.mock.calls.at(-1)?.[0];
+      expect(entry).toMatchObject({
+        userId: 'user-1',
+        action: 'product.updated',
+        entityType: 'product',
+        entityId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      });
+      expect(Number(entry.oldValues.price)).toBe(1.99);
+      expect(Number(entry.newValues.price)).toBe(2.49);
     });
 
     it('throws 404 when the new category does not exist', async () => {
@@ -490,7 +520,10 @@ describe('ProductsService', () => {
       productFindUnique.mockResolvedValue(productRow());
       productUpdate.mockResolvedValue(productRow());
 
-      await service.update('aaa', { supplierId: null, barcode: null } as UpdateProductDto);
+      await service.update('aaa', {
+        supplierId: null,
+        barcode: null,
+      } as UpdateProductDto);
 
       expect(supplierFindUnique).not.toHaveBeenCalled();
       expect(productUpdate).toHaveBeenCalledWith({
@@ -541,7 +574,9 @@ describe('ProductsService', () => {
     });
   });
 
-  function validCreateDto(overrides: Partial<CreateProductDto> = {}): CreateProductDto {
+  function validCreateDto(
+    overrides: Partial<CreateProductDto> = {},
+  ): CreateProductDto {
     const dto: CreateProductDto = {
       sku: 'OFF-PEN-002',
       name: 'Ballpoint Pen',

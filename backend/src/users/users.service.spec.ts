@@ -8,6 +8,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { UsersService, type UserResponse } from './users.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { Prisma } from '../generated/prisma/client.js';
+import { AuditService } from '../audit/audit.service.js';
 
 describe('UsersService', () => {
   let service: UsersService;
@@ -61,6 +62,7 @@ describe('UsersService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         UsersService,
+        { provide: AuditService, useValue: { log: vi.fn() } },
         {
           provide: PrismaService,
           useValue: {
@@ -83,15 +85,17 @@ describe('UsersService', () => {
   describe('create', () => {
     it('hashes the password and never returns or persists the plain value', async () => {
       userFindUnique.mockResolvedValue(null);
-      userCreate.mockImplementation(async (args: { data: Record<string, unknown> }) => ({
-        id: STAFF_ID,
-        name: args.data.name,
-        email: args.data.email,
-        role: args.data.role,
-        isActive: true,
-        createdAt: new Date('2026-10-20T00:00:00Z'),
-        updatedAt: new Date('2026-10-20T00:00:00Z'),
-      }));
+      userCreate.mockImplementation(
+        async (args: { data: Record<string, unknown> }) => ({
+          id: STAFF_ID,
+          name: args.data.name,
+          email: args.data.email,
+          role: args.data.role,
+          isActive: true,
+          createdAt: new Date('2026-10-20T00:00:00Z'),
+          updatedAt: new Date('2026-10-20T00:00:00Z'),
+        }),
+      );
 
       const result = await service.create({
         name: 'New User',
@@ -130,14 +134,21 @@ describe('UsersService', () => {
 
       const result = await service.findAll({});
 
-      expect(result.meta).toEqual({ page: 1, limit: 20, total: 1, totalPages: 1 });
+      expect(result.meta).toEqual({
+        page: 1,
+        limit: 20,
+        total: 1,
+        totalPages: 1,
+      });
       expect(result.data).toHaveLength(1);
       expect(userFindMany).toHaveBeenCalledWith(
         expect.objectContaining({
           skip: 0,
           take: 20,
           orderBy: { createdAt: 'desc' },
-          select: expect.not.objectContaining({ passwordHash: expect.anything() }),
+          select: expect.not.objectContaining({
+            passwordHash: expect.anything(),
+          }),
         }),
       );
       expect(JSON.stringify(result)).not.toContain('passwordHash');
@@ -175,7 +186,9 @@ describe('UsersService', () => {
       userFindUnique.mockResolvedValue(adminRow());
 
       await expect(service.findOne(ADMIN_ID)).resolves.toEqual(adminRow());
-      expect(userFindUnique.mock.calls[0][0].select.passwordHash).toBeUndefined();
+      expect(
+        userFindUnique.mock.calls[0][0].select.passwordHash,
+      ).toBeUndefined();
     });
 
     it('throws 404 when it does not exist', async () => {
@@ -264,13 +277,10 @@ describe('UsersService', () => {
       $transactionWithOptions
         .mockRejectedValueOnce(conflict)
         // Second attempt runs through the real (mocked) transaction body.
-        .mockImplementationOnce(
-          async (
-            fn: (tx: unknown) => Promise<unknown>,
-          ) =>
-            fn({
-              user: { count: userCount, update: userUpdate },
-            }),
+        .mockImplementationOnce(async (fn: (tx: unknown) => Promise<unknown>) =>
+          fn({
+            user: { count: userCount, update: userUpdate },
+          }),
         );
 
       const result = await service.update(
@@ -318,20 +328,23 @@ describe('UsersService', () => {
       });
       userUpdate.mockResolvedValue({});
 
-      await expect(service.deactivate(STAFF_ID, ADMIN_ID)).resolves.toBeUndefined();
+      await expect(
+        service.deactivate(STAFF_ID, ADMIN_ID),
+      ).resolves.toBeUndefined();
 
       expect(userUpdate).toHaveBeenCalledWith({
         where: { id: STAFF_ID },
         data: { isActive: false },
+        select: expect.objectContaining({ id: true, isActive: true }),
       });
     });
 
     it('rejects self-deactivation (422)', async () => {
       userFindUnique.mockResolvedValue(adminRow());
 
-      await expect(service.deactivate(ADMIN_ID, ADMIN_ID)).rejects.toBeInstanceOf(
-        UnprocessableEntityException,
-      );
+      await expect(
+        service.deactivate(ADMIN_ID, ADMIN_ID),
+      ).rejects.toBeInstanceOf(UnprocessableEntityException);
       expect(userUpdate).not.toHaveBeenCalled();
     });
 
@@ -339,9 +352,9 @@ describe('UsersService', () => {
       userFindUnique.mockResolvedValue(adminRow());
       userCount.mockResolvedValue(0);
 
-      await expect(service.deactivate(ADMIN_ID, STAFF_ID)).rejects.toBeInstanceOf(
-        UnprocessableEntityException,
-      );
+      await expect(
+        service.deactivate(ADMIN_ID, STAFF_ID),
+      ).rejects.toBeInstanceOf(UnprocessableEntityException);
       expect(userUpdate).not.toHaveBeenCalled();
     });
 
@@ -350,16 +363,18 @@ describe('UsersService', () => {
       userCount.mockResolvedValue(1);
       userUpdate.mockResolvedValue({});
 
-      await expect(service.deactivate(ADMIN_ID, STAFF_ID)).resolves.toBeUndefined();
+      await expect(
+        service.deactivate(ADMIN_ID, STAFF_ID),
+      ).resolves.toBeUndefined();
       expect(userUpdate).toHaveBeenCalled();
     });
 
     it('throws 404 for a missing user', async () => {
       userFindUnique.mockResolvedValue(null);
 
-      await expect(service.deactivate('missing-id', ADMIN_ID)).rejects.toBeInstanceOf(
-        NotFoundException,
-      );
+      await expect(
+        service.deactivate('missing-id', ADMIN_ID),
+      ).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 });

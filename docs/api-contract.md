@@ -282,13 +282,16 @@ ADMIN-only (AD-009). Every route takes an optional inclusive `from`/`to` range (
 
 ### 3.11 Audit log
 
-| Method | Path          | Role  | Request query                                                            | Response               | Errors   |
-| ------ | ------------- | ----- | ------------------------------------------------------------------------ | ---------------------- | -------- |
-| GET    | `/audit-logs` | admin | `?page&limit&userId&entityType&entityId&action&from&to&sortBy&sortOrder` | paginated `AuditLog[]` | 401, 403 |
+| Method | Path          | Role  | Request query                                                            | Response               | Errors        |
+| ------ | ------------- | ----- | ------------------------------------------------------------------------ | ---------------------- | ------------- |
+| GET    | `/audit-logs` | admin | `?page&limit&userId&entityType&entityId&action&from&to&sortBy&sortOrder` | paginated `AuditLog[]` | 400, 401, 403 |
 
-- `AuditLog` shape: `{ id, userId, action, entityType, entityId, oldValues, newValues, createdAt }` (`oldValues`/`newValues` are opaque JSON objects; `userId` may be `null` for deleted users).
-- Audit logs are **read-only** via the API — created server-side, never manually.
-- Write coverage: every create/update/delete on products, categories, suppliers, users, orders, purchase orders (mutations by service layer, not DB triggers).
+- `AuditLog` shape: `{ id, userId, action, entityType, entityId, oldValues, newValues, createdAt }` (`oldValues`/`newValues` are opaque JSON objects; `userId` may be `null`).
+- Filters are exact matches (`userId`, `entityType`, `entityId`, `action`); `from`/`to` are inclusive ISO-8601 bounds on `createdAt`; `sortBy` is `createdAt` (default, `desc`) or `action`.
+- Audit logs are **read-only** via the API — created server-side, never manually; there is no POST/PATCH/DELETE route.
+- Actions currently written (issue #34): `product.created|updated|deleted`, `stock.adjusted`, `order.created|cancelled`, `purchase_order.received`, `user.updated|deactivated` — see AD-010. Category/supplier mutations are not instrumented yet.
+- Sensitive keys (`password`, `*Hash*`, `*token*`, `*secret*` — case-insensitive, at any depth) are **stripped** before persisting; no password hashes or tokens can appear in `oldValues`/`newValues`.
+- Logging is **best effort**: an audit write failure never aborts the operation it describes. Entries for transactional mutations are written inside the same transaction, so they commit/roll back with the change.
 
 ### 3.12 Misc
 

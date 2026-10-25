@@ -12,6 +12,7 @@ import { StockMovementType } from '../generated/prisma/enums.js';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/client';
 import { StockService } from '../stock/stock.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
+import { AuditService } from '../audit/audit.service.js';
 import { PurchaseOrdersService } from './purchase-orders.service.js';
 import type { CreatePurchaseOrderDto } from './dto/create-purchase-order.dto.js';
 import type { ReceivePurchaseOrderDto } from './dto/receive-purchase-order.dto.js';
@@ -116,13 +117,11 @@ describe('PurchaseOrdersService', () => {
     $transaction
       .mockReset()
       .mockImplementation((fn: (t: typeof tx) => unknown) => fn(tx));
-    txSupplierFindUnique
-      .mockReset()
-      .mockResolvedValue({
-        id: SUPPLIER_ID,
-        companyName: 'Office Depot',
-        isActive: true,
-      });
+    txSupplierFindUnique.mockReset().mockResolvedValue({
+      id: SUPPLIER_ID,
+      companyName: 'Office Depot',
+      isActive: true,
+    });
     txProductFindMany.mockReset().mockResolvedValue([
       { id: PRODUCT_A, isActive: true },
       { id: PRODUCT_B, isActive: true },
@@ -183,6 +182,7 @@ describe('PurchaseOrdersService', () => {
           },
         },
         { provide: StockService, useValue: { applyStockChange } },
+        { provide: AuditService, useValue: { log: vi.fn() } },
         {
           provide: NotificationsService,
           useValue: { notifyPurchaseOrderReceived },
@@ -458,13 +458,11 @@ describe('PurchaseOrdersService', () => {
     });
 
     it('rejects ORDERED → PARTIALLY_RECEIVED with 409 (receiving only)', async () => {
-      txPurchaseOrderFindUnique
-        .mockReset()
-        .mockResolvedValue({
-          id: PO_ID,
-          orderNumber: 'PO-0001',
-          status: 'ORDERED',
-        });
+      txPurchaseOrderFindUnique.mockReset().mockResolvedValue({
+        id: PO_ID,
+        orderNumber: 'PO-0001',
+        status: 'ORDERED',
+      });
 
       await expect(
         service.updateStatus(PO_ID, {
@@ -475,13 +473,11 @@ describe('PurchaseOrdersService', () => {
     });
 
     it('rejects ORDERED → RECEIVED with 409 (receiving only)', async () => {
-      txPurchaseOrderFindUnique
-        .mockReset()
-        .mockResolvedValue({
-          id: PO_ID,
-          orderNumber: 'PO-0001',
-          status: 'ORDERED',
-        });
+      txPurchaseOrderFindUnique.mockReset().mockResolvedValue({
+        id: PO_ID,
+        orderNumber: 'PO-0001',
+        status: 'ORDERED',
+      });
 
       await expect(
         service.updateStatus(PO_ID, {
@@ -499,13 +495,11 @@ describe('PurchaseOrdersService', () => {
     });
 
     it('rejects PARTIALLY_RECEIVED → CANCELLED with 409 (receiving state)', async () => {
-      txPurchaseOrderFindUnique
-        .mockReset()
-        .mockResolvedValue({
-          id: PO_ID,
-          orderNumber: 'PO-0001',
-          status: 'PARTIALLY_RECEIVED',
-        });
+      txPurchaseOrderFindUnique.mockReset().mockResolvedValue({
+        id: PO_ID,
+        orderNumber: 'PO-0001',
+        status: 'PARTIALLY_RECEIVED',
+      });
 
       await expect(
         service.updateStatus(PO_ID, {
@@ -515,13 +509,11 @@ describe('PurchaseOrdersService', () => {
     });
 
     it('a cancelled purchase order is terminal (409)', async () => {
-      txPurchaseOrderFindUnique
-        .mockReset()
-        .mockResolvedValue({
-          id: PO_ID,
-          orderNumber: 'PO-0001',
-          status: 'CANCELLED',
-        });
+      txPurchaseOrderFindUnique.mockReset().mockResolvedValue({
+        id: PO_ID,
+        orderNumber: 'PO-0001',
+        status: 'CANCELLED',
+      });
 
       await expect(
         service.updateStatus(PO_ID, {
@@ -778,16 +770,14 @@ describe('PurchaseOrdersService', () => {
     });
 
     it('rejects receiving into an already partially over-received line (409)', async () => {
-      txPurchaseOrderItemFindMany
-        .mockReset()
-        .mockResolvedValue([
-          {
-            id: 'line-a',
-            productId: PRODUCT_A,
-            quantityOrdered: 10,
-            quantityReceived: 9,
-          },
-        ]);
+      txPurchaseOrderItemFindMany.mockReset().mockResolvedValue([
+        {
+          id: 'line-a',
+          productId: PRODUCT_A,
+          quantityOrdered: 10,
+          quantityReceived: 9,
+        },
+      ]);
 
       await expect(
         service.receive(
@@ -800,13 +790,11 @@ describe('PurchaseOrdersService', () => {
     });
 
     it('400s a product that is not a line of the purchase order', async () => {
-      txPurchaseOrderFindUnique
-        .mockReset()
-        .mockResolvedValue({
-          id: PO_ID,
-          orderNumber: 'PO-0001',
-          status: 'ORDERED',
-        });
+      txPurchaseOrderFindUnique.mockReset().mockResolvedValue({
+        id: PO_ID,
+        orderNumber: 'PO-0001',
+        status: 'ORDERED',
+      });
 
       await expect(
         service.receive(
@@ -822,13 +810,11 @@ describe('PurchaseOrdersService', () => {
     });
 
     it('400s duplicate productId lines in the receive body', async () => {
-      txPurchaseOrderFindUnique
-        .mockReset()
-        .mockResolvedValue({
-          id: PO_ID,
-          orderNumber: 'PO-0001',
-          status: 'ORDERED',
-        });
+      txPurchaseOrderFindUnique.mockReset().mockResolvedValue({
+        id: PO_ID,
+        orderNumber: 'PO-0001',
+        status: 'ORDERED',
+      });
 
       await expect(
         service.receive(
@@ -856,13 +842,11 @@ describe('PurchaseOrdersService', () => {
     });
 
     it('409s a CANCELLED purchase order', async () => {
-      txPurchaseOrderFindUnique
-        .mockReset()
-        .mockResolvedValue({
-          id: PO_ID,
-          orderNumber: 'PO-0001',
-          status: 'CANCELLED',
-        });
+      txPurchaseOrderFindUnique.mockReset().mockResolvedValue({
+        id: PO_ID,
+        orderNumber: 'PO-0001',
+        status: 'CANCELLED',
+      });
 
       await expect(
         service.receive(
@@ -876,13 +860,11 @@ describe('PurchaseOrdersService', () => {
     });
 
     it('409s an already RECEIVED purchase order', async () => {
-      txPurchaseOrderFindUnique
-        .mockReset()
-        .mockResolvedValue({
-          id: PO_ID,
-          orderNumber: 'PO-0001',
-          status: 'RECEIVED',
-        });
+      txPurchaseOrderFindUnique.mockReset().mockResolvedValue({
+        id: PO_ID,
+        orderNumber: 'PO-0001',
+        status: 'RECEIVED',
+      });
 
       await expect(
         service.receive(

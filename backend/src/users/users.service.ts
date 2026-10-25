@@ -9,6 +9,7 @@ import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { Prisma } from '../generated/prisma/client.js';
 import { UserRole } from '../generated/prisma/enums.js';
+import { AuditService } from '../audit/audit.service.js';
 import { CreateUserDto } from './dto/create-user.dto.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
 import { ListUsersQueryDto } from './dto/list-users.query.dto.js';
@@ -47,7 +48,10 @@ const MAX_SERIALIZATION_RETRIES = 1;
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   async create(createUserDto: CreateUserDto): Promise<UserResponse> {
     await this.assertEmailAvailable(createUserDto.email);
@@ -159,7 +163,7 @@ export class UsersService {
     const needsAdminGuard =
       user.role === 'ADMIN' &&
       user.isActive &&
-      ((updateUserDto.isActive === false) ||
+      (updateUserDto.isActive === false ||
         (updateUserDto.role !== undefined && updateUserDto.role !== 'ADMIN'));
 
     const data: Prisma.UserUncheckedUpdateInput = {};
@@ -176,9 +180,28 @@ export class UsersService {
       data.isActive = updateUserDto.isActive;
     }
 
-    return this.withLastAdminGuard(needsAdminGuard, id, (tx) =>
-      tx.user.update({ where: { id }, data, select: USER_SELECT }),
-    );
+    return this.withLastAdminGuard(needsAdminGuard, id, async (tx) => {
+      const updated = await tx.user.update({
+        where: { id },
+        data,
+        select: USER_SELECT,
+      });
+
+      // Issue #34: actor + before/after inside the guard transaction.
+      await this.audit.log(
+        {
+          userId: currentUserId,
+          action: 'user.updated',
+          entityType: 'user',
+          entityId: id,
+          oldValues: user,
+          newValues: updated,
+        },
+        tx,
+      );
+
+      return updated;
+    });
   }
 
   /**
@@ -204,7 +227,27 @@ export class UsersService {
     await this.withLastAdminGuard(
       user.role === 'ADMIN' && user.isActive,
       id,
-      (tx) => tx.user.update({ where: { id }, data: { isActive: false } }),
+      async (tx) => {
+        const updated = await tx.user.update({
+          where: { id },
+          data: { isActive: false },
+          select: USER_SELECT,
+        });
+
+        await this.audit.log(
+          {
+            userId: currentUserId,
+            action: 'user.deactivated',
+            entityType: 'user',
+            entityId: id,
+            oldValues: user,
+            newValues: updated,
+          },
+          tx,
+        );
+
+        return updated;
+      },
     );
   }
 
@@ -256,7 +299,12 @@ export class UsersService {
     return run().catch(async (error: unknown) => {
       if (attempt < MAX_SERIALIZATION_RETRIES && isWriteConflict(error)) {
         await sleep(P2034_RETRY_DELAY_MS);
-        return this.withLastAdminGuard(needsAdminGuard, userId, write, attempt + 1);
+        return this.withLastAdminGuard(
+          needsAdminGuard,
+          userId,
+          write,
+          attempt + 1,
+        );
       }
       throw error;
     });

@@ -14,6 +14,7 @@ import {
   type AdjustedStockResponse,
 } from '../stock/stock.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
+import { AuditService } from '../audit/audit.service.js';
 import { CreateOrderDto } from './dto/create-order.dto.js';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto.js';
 
@@ -104,6 +105,7 @@ export class OrdersService {
     private readonly prisma: PrismaService,
     private readonly stock: StockService,
     private readonly notifications: NotificationsService,
+    private readonly audit: AuditService,
   ) {}
 
   /**
@@ -244,6 +246,26 @@ export class OrdersService {
       soldProducts.push(change);
     }
 
+    // Issue #34: one entry per created order, committed with the order.
+    await this.audit.log(
+      {
+        userId,
+        action: 'order.created',
+        entityType: 'order',
+        entityId: order.id,
+        newValues: {
+          orderNumber: order.orderNumber,
+          status: order.status,
+          totalAmount: total,
+          customerName: order.customerName,
+          customerPhone: order.customerPhone,
+          notes: order.notes,
+          items,
+        },
+      },
+      tx,
+    );
+
     return { ...serializeOrder(order), items };
   }
 
@@ -358,6 +380,26 @@ export class OrdersService {
       where: { orderId: id },
       select: ORDER_ITEM_SELECT,
     });
+
+    // Issue #34: cancellations record the status change (and stock restore
+    // is covered by the resulting RETURN movements) in the same transaction.
+    if (dto.newStatus === OrderStatus.CANCELLED) {
+      await this.audit.log(
+        {
+          userId,
+          action: 'order.cancelled',
+          entityType: 'order',
+          entityId: id,
+          oldValues: { status: order.status, cancelledAt: order.cancelledAt },
+          newValues: {
+            status: updated.status,
+            cancelledAt: updated.cancelledAt,
+            totalAmount: updated.totalAmount,
+          },
+        },
+        tx,
+      );
+    }
 
     return { ...serializeOrder(updated), items: items.map(serializeItem) };
   }
