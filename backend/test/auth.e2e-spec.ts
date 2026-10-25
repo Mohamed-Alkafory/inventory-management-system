@@ -68,6 +68,9 @@ function createFakePrisma(db: FakeDb) {
     async $queryRaw() {
       return [{ 1: 1 }];
     },
+    async $transaction<T>(fn: (tx: unknown) => Promise<T>): Promise<T> {
+      return fn(this);
+    },
     user: {
       async findUnique(args: {
         where: FakeRow;
@@ -156,10 +159,27 @@ function createFakePrisma(db: FakeDb) {
         Object.assign(row, args.data);
         return { ...row };
       },
+      async updateMany(args: {
+        where: { id: string; revokedAt?: null };
+        data: FakeRow;
+      }) {
+        const row = db.refreshTokens.find(
+          (t) =>
+            t['id'] === args.where.id &&
+            (args.where.revokedAt === undefined ||
+              t['revokedAt'] === args.where.revokedAt),
+        );
+        if (!row) return { count: 0 };
+        Object.assign(row, args.data);
+        return { count: 1 };
+      },
     },
     product: {
       async findMany() {
         return [];
+      },
+      async count() {
+        return 0;
       },
     },
   };

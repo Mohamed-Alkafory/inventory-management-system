@@ -14,7 +14,7 @@ npm run dev
 
 Open <http://localhost:5173> (Vite default; `vite.config.ts` sets no custom
 port). Path alias `@` maps to `src/` (see `vite.config.ts` and
-`tsconfig.json`).
+`tsconfig.app.json`).
 
 ## Scripts (all run from `frontend/`)
 
