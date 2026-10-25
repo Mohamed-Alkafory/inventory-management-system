@@ -1,11 +1,13 @@
 import {
   Body,
   Controller,
+  Get,
   HttpStatus,
   Param,
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -14,9 +16,17 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 
-import { OrdersService, type CreatedOrderResponse } from './orders.service.js';
+import {
+  OrdersService,
+  type CreatedOrderResponse,
+  type OrderDetailResponse,
+  type OrderListResponse,
+  type OrderResponse,
+} from './orders.service.js';
 import { CreateOrderDto } from './dto/create-order.dto.js';
+import { UpdateOrderDto } from './dto/update-order.dto.js';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto.js';
+import { ListOrdersQueryDto } from './dto/list-orders.query.dto.js';
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
 
 /** JWT role claim resolved from the database by the global JwtAuthGuard. */
@@ -115,5 +125,99 @@ export class OrdersController {
     @CurrentUser() user: AuthenticatedUser,
   ): Promise<CreatedOrderResponse> {
     return this.ordersService.updateStatus(id, dto, user.sub, user.role);
+  }
+
+  /**
+   * GET /orders — list orders with pagination and filters (contract §3.7).
+   */
+  @Get()
+  @ApiOperation({
+    summary: 'List orders (STAFF and ADMIN)',
+    description:
+      'Paginated list of orders filterable by status, createdById, search (orderNumber or customerName), and creation date range (from/to).',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Paginated order list with pagination metadata',
+  })
+  @ApiResponse({
+    status: HttpStatus.BAD_REQUEST,
+    description:
+      'Validation failed (e.g. invalid query params, date range inverted)',
+  })
+  @ApiResponse({
+    status: HttpStatus.UNAUTHORIZED,
+    description: 'Missing or invalid token',
+  })
+  findAll(@Query() query: ListOrdersQueryDto): Promise<OrderListResponse> {
+    return this.ordersService.findAll(query);
+  }
+
+  /**
+   * GET /orders/:id — order details with items snapshots, createdBy, and stock movements.
+   */
+  @Get(':id')
+  @ApiOperation({
+    summary: 'Get order by id (STAFF and ADMIN)',
+    description:
+      'Returns the order fields plus items snapshots, createdBy user info, and related stock movements.',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Detailed order representation',
+  })
+  @ApiResponse({
+    status: HttpStatus.BAD_REQUEST,
+    description: 'Invalid UUID format',
+  })
+  @ApiResponse({
+    status: HttpStatus.UNAUTHORIZED,
+    description: 'Missing or invalid token',
+  })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    description: 'Order does not exist',
+  })
+  findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<OrderDetailResponse> {
+    return this.ordersService.findOne(id);
+  }
+
+  /**
+   * PATCH /orders/:id — edit order metadata while in PENDING status (contract §3.7).
+   */
+  @Patch(':id')
+  @ApiOperation({
+    summary: 'Update order metadata (STAFF and ADMIN)',
+    description:
+      'Update customerName, customerPhone, or notes while order is PENDING. An order in CONFIRMED or CANCELLED status answers 422.',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Updated order record',
+  })
+  @ApiResponse({
+    status: HttpStatus.BAD_REQUEST,
+    description: 'Validation failed (malformed id or payload)',
+  })
+  @ApiResponse({
+    status: HttpStatus.UNAUTHORIZED,
+    description: 'Missing or invalid token',
+  })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    description: 'Order does not exist',
+  })
+  @ApiResponse({
+    status: HttpStatus.UNPROCESSABLE_ENTITY,
+    description: 'Order is not in PENDING status',
+  })
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateOrderDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<OrderResponse> {
+    return this.ordersService.update(id, dto, user.sub);
   }
 }

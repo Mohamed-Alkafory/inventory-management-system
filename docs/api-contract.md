@@ -119,7 +119,6 @@ Legend: 🔓 public · Role: `any` / `admin` · Paginated unless marked "no pagi
 | Method  | Path                    | Role | Request body                            | Response                                    | Errors        |
 | ------- | ----------------------- | ---- | --------------------------------------- | ------------------------------------------- | ------------- |
 | POST 🔓 | `/auth/login`           | —    | `{ email, password }`                   | `{ user: User, accessToken, refreshToken }` | 400, 401      |
-| POST 🔓 | `/auth/register`        | —    | `{ name, email, password }`             | `{ user: User, accessToken, refreshToken }` | 400, 409      |
 | POST 🔓 | `/auth/refresh`         | —    | `{ refreshToken }`                      | `{ accessToken, refreshToken }`             | 400, 401      |
 | POST    | `/auth/logout`          | any  | `{ refreshToken }`                      | `204` (empty)                               | 401           |
 | GET     | `/auth/me`              | any  | —                                       | `User` (no `passwordHash`)                  | 401           |
@@ -133,7 +132,7 @@ Legend: 🔓 public · Role: `any` / `admin` · Paginated unless marked "no pagi
 - Changing a password (either route) verifies `current`/`currentPassword` first: a mismatch is **422** (the request is authenticated, so this is not a 401). `next`/`newPassword` must be 8–72 bytes; it is bcrypt-hashed (rounds 10) and **every active refresh token of the user is revoked**, so other devices must log in again.
 - Password changes are audited as `user.password_changed` without any credential material (§3.11).
 
-When `register` is disabled in config (ADMIN-created accounts only) it returns `403 FORBIDDEN` — decide at implementation; frontend should not rely on it.
+- Public self-registration (`POST /auth/register`) is intentionally not exposed; the system enforces a strict admin-managed user provisioning model via `POST /users` (ADMIN role only, contract §3.2).
 
 ### 3.2 Users
 

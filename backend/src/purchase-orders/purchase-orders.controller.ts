@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
   HttpStatus,
   Param,
   ParseUUIDPipe,
@@ -196,6 +197,7 @@ export class PurchaseOrdersController {
    * transaction; a failure leaves no partial data.
    */
   @Post(':id/receive')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Receive purchase order lines into stock (STAFF and ADMIN)',
     description:

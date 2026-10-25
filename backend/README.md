@@ -38,15 +38,14 @@ auth — no code reads it yet). Details in the
 | `npm run lint` | oxlint over `src/` and `test/` |
 | `npm run format` | Prettier over `src/` and `test/` |
 
-Health check: `GET http://localhost:3000/` → `"Hello World!"`.
+Health check: `GET http://localhost:3000/api/v1/health` → `{"status":"ok","db":"up"}`.
 
 ## Prisma
 
-- Schema: `prisma/schema.prisma` (shell — **no models yet**).
+- Schema: `prisma/schema.prisma` (Core models implemented).
 - Connection: `prisma.config.ts` reads `DATABASE_URL` from `backend/.env`.
 - Validate: `npx prisma validate` (from `backend/`).
-- After the team adds models: `npx prisma migrate dev`, then
-  `npx prisma generate` (client output: `src/generated/prisma/`, git-ignored).
+- Migrations: `npx prisma migrate dev`, then `npx prisma generate` (client output: `src/generated/prisma/`, git-ignored).
 
 ## Reference
 

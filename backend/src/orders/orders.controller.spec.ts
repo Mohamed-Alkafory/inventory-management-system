@@ -54,17 +54,33 @@ describe('OrdersController', () => {
   let reflector: Reflector;
   const create = vi.fn();
   const updateStatus = vi.fn();
+  const findAll = vi.fn();
+  const findOne = vi.fn();
+  const update = vi.fn();
 
   beforeEach(async () => {
     create.mockReset().mockResolvedValue(sampleCreated);
     updateStatus
       .mockReset()
       .mockResolvedValue({ ...sampleCreated, status: 'CONFIRMED' });
+    findAll.mockReset().mockResolvedValue({
+      data: [sampleCreated],
+      meta: { page: 1, limit: 20, total: 1, totalPages: 1 },
+    });
+    findOne.mockReset().mockResolvedValue({
+      ...sampleCreated,
+      createdBy: { id: 'admin-id', name: 'Admin', email: 'admin@example.com' },
+      stockMovements: [],
+    });
+    update.mockReset().mockResolvedValue(sampleCreated);
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [OrdersController],
       providers: [
-        { provide: OrdersService, useValue: { create, updateStatus } },
+        {
+          provide: OrdersService,
+          useValue: { create, updateStatus, findAll, findOne, update },
+        },
       ],
     }).compile();
 
@@ -388,6 +404,48 @@ describe('OrdersController', () => {
       expect(transformed).toEqual({
         items: [{ productId: PRODUCT_A, quantity: 1 }],
       });
+    });
+  });
+
+  describe('GET /orders', () => {
+    it('calls ordersService.findAll and returns list with metadata', async () => {
+      const res = await controller.findAll({ page: 1, limit: 20 });
+      expect(findAll).toHaveBeenCalledWith({ page: 1, limit: 20 });
+      expect(res.data).toHaveLength(1);
+      expect(res.meta.total).toBe(1);
+    });
+
+    it('has no role guard (any authenticated user can list)', () => {
+      const handler = OrdersController.prototype.findAll;
+      expect(reflector.get<string[]>(ROLES_KEY, handler)).toBeUndefined();
+    });
+  });
+
+  describe('GET /orders/:id', () => {
+    it('calls ordersService.findOne and returns order details', async () => {
+      const res = await controller.findOne(ORDER_ID);
+      expect(findOne).toHaveBeenCalledWith(ORDER_ID);
+      expect(res.id).toBe(ORDER_ID);
+      expect(res.createdBy.email).toBe('admin@example.com');
+    });
+
+    it('has no role guard (any authenticated user can view)', () => {
+      const handler = OrdersController.prototype.findOne;
+      expect(reflector.get<string[]>(ROLES_KEY, handler)).toBeUndefined();
+    });
+  });
+
+  describe('PATCH /orders/:id', () => {
+    it('calls ordersService.update passing id, dto, and user.sub', async () => {
+      const dto = { customerName: 'New Name' };
+      const res = await controller.update(ORDER_ID, dto, ADMIN);
+      expect(update).toHaveBeenCalledWith(ORDER_ID, dto, 'admin-id');
+      expect(res).toBe(sampleCreated);
+    });
+
+    it('has no role guard (any authenticated user can update metadata while PENDING)', () => {
+      const handler = OrdersController.prototype.update;
+      expect(reflector.get<string[]>(ROLES_KEY, handler)).toBeUndefined();
     });
   });
 });

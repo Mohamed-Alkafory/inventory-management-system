@@ -130,7 +130,18 @@ describe('OrdersService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         OrdersService,
-        { provide: PrismaService, useValue: { $transaction } },
+        {
+          provide: PrismaService,
+          useValue: {
+            $transaction,
+            order: {
+              count: vi.fn(),
+              findMany: vi.fn(),
+              findUnique: vi.fn(),
+              update: vi.fn(),
+            },
+          },
+        },
         { provide: StockService, useValue: { applyStockChange } },
         { provide: AuditService, useValue: { log: vi.fn() } },
         {
@@ -997,6 +1008,190 @@ describe('OrdersService', () => {
         orderNumber: 'ORD-0001',
         totalAmount: 14.48,
       });
+    });
+  });
+
+  describe('findAll', () => {
+    it('returns paginated orders and applies defaults', async () => {
+      const prisma = (
+        service as unknown as {
+          prisma: {
+            order: {
+              count: ReturnType<typeof vi.fn>;
+              findMany: ReturnType<typeof vi.fn>;
+            };
+          };
+        }
+      ).prisma;
+      prisma.order.count.mockResolvedValue(1);
+      prisma.order.findMany.mockResolvedValue([
+        {
+          id: ORDER_ID,
+          orderNumber: 'ORD-0001',
+          status: 'PENDING',
+          customerName: 'Walk-in',
+          customerPhone: null,
+          notes: null,
+          totalAmount: new Prisma.Decimal('14.48'),
+          createdById: USER_ID,
+          cancelledAt: null,
+          createdAt: new Date('2026-10-23T12:00:00Z'),
+          updatedAt: new Date('2026-10-23T12:00:00Z'),
+        },
+      ]);
+
+      const res = await service.findAll({});
+      expect(res.data).toHaveLength(1);
+      expect(res.data[0].totalAmount).toBe(14.48);
+      expect(res.meta).toEqual({ page: 1, limit: 20, total: 1, totalPages: 1 });
+    });
+
+    it('rejects invalid date ranges with BadRequestException (400)', async () => {
+      await expect(
+        service.findAll({
+          from: '2026-10-25T00:00:00Z',
+          to: '2026-10-20T00:00:00Z',
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+  });
+
+  describe('findOne', () => {
+    it('returns order details with items, createdBy, and stock movements', async () => {
+      const prisma = (
+        service as unknown as {
+          prisma: { order: { findUnique: ReturnType<typeof vi.fn> } };
+        }
+      ).prisma;
+      prisma.order.findUnique.mockResolvedValue({
+        id: ORDER_ID,
+        orderNumber: 'ORD-0001',
+        status: 'PENDING',
+        customerName: 'Walk-in',
+        customerPhone: null,
+        notes: null,
+        totalAmount: new Prisma.Decimal('14.48'),
+        createdById: USER_ID,
+        cancelledAt: null,
+        createdAt: new Date('2026-10-23T12:00:00Z'),
+        updatedAt: new Date('2026-10-23T12:00:00Z'),
+        orderItems: [
+          {
+            id: 'item-1',
+            orderId: ORDER_ID,
+            productId: PRODUCT_A,
+            productName: 'Ballpoint Pen',
+            sku: 'OFF-PEN-002',
+            quantity: 2,
+            unitPrice: new Prisma.Decimal('1.99'),
+            lineTotal: new Prisma.Decimal('3.98'),
+          },
+        ],
+        createdBy: { id: USER_ID, name: 'Admin', email: 'admin@example.com' },
+        stockMovements: [],
+      });
+
+      const res = await service.findOne(ORDER_ID);
+      expect(res.id).toBe(ORDER_ID);
+      expect(res.items[0].unitPrice).toBe(1.99);
+      expect(res.createdBy.email).toBe('admin@example.com');
+      expect(res.stockMovements).toEqual([]);
+    });
+
+    it('throws NotFoundException (404) if order does not exist', async () => {
+      const prisma = (
+        service as unknown as {
+          prisma: { order: { findUnique: ReturnType<typeof vi.fn> } };
+        }
+      ).prisma;
+      prisma.order.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.findOne('00000000-0000-4000-8000-000000000000'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  describe('update', () => {
+    it('updates metadata when order is PENDING', async () => {
+      const prisma = (
+        service as unknown as {
+          prisma: {
+            order: {
+              findUnique: ReturnType<typeof vi.fn>;
+              update: ReturnType<typeof vi.fn>;
+            };
+          };
+        }
+      ).prisma;
+      prisma.order.findUnique.mockResolvedValue({
+        id: ORDER_ID,
+        orderNumber: 'ORD-0001',
+        status: 'PENDING',
+        customerName: 'Old Name',
+        customerPhone: null,
+        notes: null,
+        totalAmount: new Prisma.Decimal('14.48'),
+        createdById: USER_ID,
+        cancelledAt: null,
+        createdAt: new Date('2026-10-23T12:00:00Z'),
+        updatedAt: new Date('2026-10-23T12:00:00Z'),
+      });
+      prisma.order.update.mockResolvedValue({
+        id: ORDER_ID,
+        orderNumber: 'ORD-0001',
+        status: 'PENDING',
+        customerName: 'New Name',
+        customerPhone: '+1234567890',
+        notes: 'Updated note',
+        totalAmount: new Prisma.Decimal('14.48'),
+        createdById: USER_ID,
+        cancelledAt: null,
+        createdAt: new Date('2026-10-23T12:00:00Z'),
+        updatedAt: new Date('2026-10-23T12:00:00Z'),
+      });
+
+      const res = await service.update(
+        ORDER_ID,
+        {
+          customerName: 'New Name',
+          customerPhone: '+1234567890',
+          notes: 'Updated note',
+        },
+        USER_ID,
+      );
+      expect(res.customerName).toBe('New Name');
+      expect(res.customerPhone).toBe('+1234567890');
+      expect(res.notes).toBe('Updated note');
+    });
+
+    it('rejects editing when order is not PENDING with UnprocessableEntityException (422)', async () => {
+      const prisma = (
+        service as unknown as {
+          prisma: { order: { findUnique: ReturnType<typeof vi.fn> } };
+        }
+      ).prisma;
+      prisma.order.findUnique.mockResolvedValue({
+        id: ORDER_ID,
+        status: 'CONFIRMED',
+      });
+
+      await expect(
+        service.update(ORDER_ID, { customerName: 'New Name' }, USER_ID),
+      ).rejects.toBeInstanceOf(UnprocessableEntityException);
+    });
+
+    it('throws NotFoundException (404) if order does not exist', async () => {
+      const prisma = (
+        service as unknown as {
+          prisma: { order: { findUnique: ReturnType<typeof vi.fn> } };
+        }
+      ).prisma;
+      prisma.order.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.update('00000000-0000-4000-8000-000000000000', {}, USER_ID),
+      ).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 });
