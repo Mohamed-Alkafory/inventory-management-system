@@ -11,6 +11,7 @@ import Home from "./page/home/Home";
 import Login from "./page/Login/Login";
 import Products from "./page/Products/Products";
 import Register from "./page/Register/Register";
+import SellerOnboarding from "./page/seller/SellerOnboarding";
 import QueryProvider from "./providers/QueryProvider";
 import GuestRoute from "./routes/GuestRoute";
 import ProtectedRoute from "./routes/ProtectedRoute";
@@ -41,6 +42,7 @@ export default function App() {
               <Route element={<ProtectedRoute />}>
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/products" element={<Products />} />
+                <Route path="/seller/onboarding" element={<SellerOnboarding />} />
 
                 {/* ADMIN only — STAFF is sent to /forbidden */}
                 <Route element={<RoleRoute allow={["ADMIN"]} />}>
