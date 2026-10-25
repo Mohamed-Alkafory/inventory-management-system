@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Pencil, Plus, Search, UserX } from "lucide-react";
-import { useAuth } from "../../../auth/useAuth";
+import { useAuth } from "../../../context/auth/useAuth";
 import Pagination from "../../../components/ui/Pagination";
 import RowActionsMenu from "../../../components/ui/RowActionsMenu";
 import { USE_MOCK } from "../../../features/products/suppliers/api";
@@ -16,7 +16,7 @@ type DialogState = { mode: "create" } | { mode: "edit"; supplier: Supplier } | n
 
 export default function Suppliers() {
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
+  const isAdmin = user?.role === "ADMIN";
 
   const [searchInput, setSearchInput] = useState("");
   const search = useDebouncedValue(searchInput, 300);

@@ -227,3 +227,20 @@
     transition: none;
   }
 }
+
+/* ---------- Signed-in user chip ---------- */
+.header__user {
+  max-width: 180px;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .header__user {
+    display: none;
+  }
+}

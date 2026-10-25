@@ -1,7 +1,7 @@
 import { NavLink } from "react-router-dom";
 import { X } from "lucide-react";
 import { APP_NAME } from "../../config";
-import { useAuth } from "../../auth/useAuth";
+import { useAuth } from "../../context/auth/useAuth";
 import { navItems } from "./navItems";
 import type { NavItem } from "./navItems";
 

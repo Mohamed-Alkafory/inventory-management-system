@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
-import { useAuth } from "../../auth/useAuth";
+import { useAuth } from "../../context/auth/useAuth";
 import DeleteProductDialog from "../../features/products/DeleteProductDialog";
 import ProductFormDialog from "../../features/products/ProductFormDialog";
 import { useProducts } from "../../features/products/hooks";
@@ -13,7 +13,7 @@ type DialogState = { mode: "create" } | { mode: "edit"; product: Product } | nul
 
 export default function Products() {
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
+  const isAdmin = user?.role === "ADMIN";
   const { data, isPending, isError, refetch } = useProducts();
   const [dialog, setDialog] = useState<DialogState>(null);
   const [toDelete, setToDelete] = useState<Product | null>(null);

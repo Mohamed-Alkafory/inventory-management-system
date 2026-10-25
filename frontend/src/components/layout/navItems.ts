@@ -10,7 +10,7 @@ import {
   Users,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import type { Role } from "../../auth/auth-context";
+import type { Role } from "../../types/auth";
 
 export interface NavItem {
   label: string;
@@ -29,6 +29,6 @@ export const navItems: NavItem[] = [
   { label: "Reports", to: "/reports", icon: BarChart3 },
   { label: "Settings", to: "/settings", icon: Settings },
   // admin-only
-  { label: "Users", to: "/users", icon: Users, roles: ["admin"] },
-  { label: "Audit Log", to: "/audit-log", icon: ShieldCheck, roles: ["admin"] },
+  { label: "Users", to: "/users", icon: Users, roles: ["ADMIN"] },
+  { label: "Audit Log", to: "/audit-log", icon: ShieldCheck, roles: ["ADMIN"] },
 ];

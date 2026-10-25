@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronDown, LogOut } from "lucide-react";
 import { LOGIN_PATH } from "../../config";
-import { useAuth } from "../../auth/useAuth";
+import { useAuth } from "../../context/auth/useAuth";
 
 export default function UserMenu() {
   const { user, logout } = useAuth();
@@ -26,9 +26,9 @@ export default function UserMenu() {
 
   if (!user) return null;
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setOpen(false);
-    logout();
+    await logout();
     navigate(LOGIN_PATH, { replace: true });
   };
 
