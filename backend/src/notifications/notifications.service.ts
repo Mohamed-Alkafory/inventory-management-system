@@ -259,6 +259,24 @@ export class NotificationsService {
     }
   }
 
+  /** PURCHASE_ORDER_RECEIVED — fired after a receive commits (issue #32). */
+  async notifyPurchaseOrderReceived(purchaseOrder: {
+    id: string;
+    orderNumber: string;
+  }): Promise<void> {
+    try {
+      await this.fanOutToAdmins({
+        type: NotificationType.PURCHASE_ORDER_RECEIVED,
+        title: 'Purchase order received',
+        message: `Purchase order ${purchaseOrder.orderNumber} was received into stock.`,
+        entityType: 'purchase-order',
+        entityId: purchaseOrder.id,
+      });
+    } catch {
+      // best-effort
+    }
+  }
+
   /**
    * Fan-out to every active ADMIN user. Explicit `enabled: false`
    * preferences remove a user from the target list; `dedupePerUser` skips
