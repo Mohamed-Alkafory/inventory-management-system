@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { UnauthorizedException } from '@nestjs/common';
+import { ConflictException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { createHash } from 'node:crypto';
 import * as bcrypt from 'bcrypt';
@@ -14,6 +14,7 @@ describe('AuthService', () => {
   let service: AuthService;
 
   const userFindUnique = vi.fn();
+  const userCreate = vi.fn();
   const refreshTokenCreate = vi.fn();
   const refreshTokenFindUnique = vi.fn();
   const refreshTokenUpdate = vi.fn();
@@ -46,6 +47,7 @@ describe('AuthService', () => {
 
   beforeEach(async () => {
     userFindUnique.mockReset();
+    userCreate.mockReset();
     refreshTokenCreate.mockReset();
     refreshTokenFindUnique.mockReset();
     refreshTokenUpdate.mockReset();
@@ -64,7 +66,7 @@ describe('AuthService', () => {
         {
           provide: PrismaService,
           useValue: {
-            user: { findUnique: userFindUnique },
+            user: { findUnique: userFindUnique, create: userCreate },
             refreshToken: {
               create: refreshTokenCreate,
               findUnique: refreshTokenFindUnique,
@@ -269,6 +271,77 @@ describe('AuthService', () => {
       await expect(service.logout(dto)).resolves.toBeUndefined();
       expect(refreshTokenUpdate).not.toHaveBeenCalled();
       expect(refreshTokenUpdateMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('register', () => {
+    const dto = {
+      name: 'New Staff',
+      email: 'staff@example.com',
+      password: 'Staff123!',
+    };
+
+    it('creates a STAFF account (hashed password) and signs it in', async () => {
+      userFindUnique.mockResolvedValue(null);
+      userCreate.mockImplementation(({ data }: { data: Record<string, string> }) =>
+        Promise.resolve({
+          id: '22222222-2222-4222-8222-222222222222',
+          name: data.name,
+          email: data.email,
+          role: data.role,
+        }),
+      );
+
+      const result = await service.register(dto);
+
+      const data = userCreate.mock.calls[0][0].data;
+      expect(data.role).toBe('STAFF');
+      expect(data.passwordHash).not.toBe(dto.password);
+      await expect(bcrypt.compare(dto.password, data.passwordHash)).resolves.toBe(true);
+      expect(result.user).toEqual({
+        id: '22222222-2222-4222-8222-222222222222',
+        name: 'New Staff',
+        email: 'staff@example.com',
+        role: 'STAFF',
+      });
+      expect(result.accessToken).toBe('signed-access-token');
+      expect(typeof result.refreshToken).toBe('string');
+      expect(JSON.stringify(result)).not.toContain('passwordHash');
+    });
+
+    it('rejects an email that is already registered with 409', async () => {
+      userFindUnique.mockResolvedValue({ id: 'x' });
+
+      await expect(service.register(dto)).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+      expect(userCreate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('me', () => {
+    it('returns the safe profile of the signed-in user', async () => {
+      userFindUnique.mockResolvedValue({
+        id: adminRow().id,
+        name: 'Admin User',
+        email: 'admin@example.com',
+        role: 'ADMIN',
+      });
+
+      await expect(service.me(adminRow().id)).resolves.toEqual({
+        id: adminRow().id,
+        name: 'Admin User',
+        email: 'admin@example.com',
+        role: 'ADMIN',
+      });
+    });
+
+    it('rejects when the user no longer exists', async () => {
+      userFindUnique.mockResolvedValue(null);
+
+      await expect(service.me('missing')).rejects.toBeInstanceOf(
+        UnauthorizedException,
+      );
     });
   });
 });

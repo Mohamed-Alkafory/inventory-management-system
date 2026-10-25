@@ -1,5 +1,6 @@
 
 import {
+  ConflictException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -10,6 +11,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { LoginDto } from './dto/login.dto.js';
 import { RefreshTokenDto } from './dto/refresh-token.dto.js';
+import { RegisterDto } from './dto/register.dto.js';
 
 /** Number of random bytes behind a refresh token (base64url → 64 chars). */
 const REFRESH_TOKEN_BYTES = 48;
@@ -19,6 +21,16 @@ const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** Mirrors the 15m access-token expiry configured on the JwtModule. */
 const ACCESS_TOKEN_TTL_SECONDS = 900;
+
+const BCRYPT_ROUNDS = 10;
+
+/** What the client may know about the signed-in user (never `passwordHash`). */
+export interface SessionUser {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+}
 
 @Injectable()
 export class AuthService {
@@ -45,21 +57,53 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    const accessToken = await this.signAccessToken(user.id, user.role);
-    const refreshToken = await this.issueRefreshToken(user.id);
+    return this.buildSession(user);
+  }
 
-    return {
-      accessToken,
-      refreshToken,
-      tokenType: 'Bearer',
-      expiresIn: ACCESS_TOKEN_TTL_SECONDS,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
+  /**
+   * Public self-registration. Always creates a STAFF account (ADMIN accounts are
+   * created by an admin through POST /users) and signs it in, so the response
+   * has the same shape as `login`.
+   */
+  async register(registerDto: RegisterDto) {
+    const existing = await this.prisma.user.findUnique({
+      where: { email: registerDto.email },
+      select: { id: true },
+    });
+
+    if (existing) {
+      throw new ConflictException(
+        `User with email ${registerDto.email} already exists`,
+      );
+    }
+
+    const passwordHash = await bcrypt.hash(registerDto.password, BCRYPT_ROUNDS);
+
+    const user = await this.prisma.user.create({
+      data: {
+        name: registerDto.name,
+        email: registerDto.email,
+        passwordHash,
+        role: 'STAFF',
       },
-    };
+      select: { id: true, name: true, email: true, role: true },
+    });
+
+    return this.buildSession(user);
+  }
+
+  /** The signed-in user's profile (GET /auth/me). */
+  async me(userId: string): Promise<SessionUser> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, name: true, email: true, role: true },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('Invalid or expired token');
+    }
+
+    return user;
   }
 
   /**
@@ -123,6 +167,24 @@ export class AuthService {
         data: { revokedAt: new Date() },
       });
     }
+  }
+
+  private async buildSession(user: SessionUser) {
+    const accessToken = await this.signAccessToken(user.id, user.role);
+    const refreshToken = await this.issueRefreshToken(user.id);
+
+    return {
+      accessToken,
+      refreshToken,
+      tokenType: 'Bearer',
+      expiresIn: ACCESS_TOKEN_TTL_SECONDS,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+    };
   }
 
   private signAccessToken(userId: string, role: string): Promise<string> {
