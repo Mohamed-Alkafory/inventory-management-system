@@ -4,6 +4,8 @@
 */
 export const AUTH_ENDPOINTS = {
   login: "/auth/login",
+  register: "/auth/register",
+  google: "/auth/google",
   refresh: "/auth/refresh",
   logout: "/auth/logout",
   me: "/auth/me",

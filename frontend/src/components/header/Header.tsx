@@ -59,10 +59,10 @@ export default function Header() {
             ) : (
               <>
                 <Link to="/login" className="btn btn--ghost" onClick={closeMenu}>
-                  Sign in
+                  Log in
                 </Link>
-                <Link to="/contact" className="btn btn--primary" onClick={closeMenu}>
-                  Get started free
+                <Link to="/register" className="btn btn--primary" onClick={closeMenu}>
+                  Sign up
                 </Link>
               </>
             )}
@@ -86,10 +86,10 @@ export default function Header() {
           ) : (
             <>
               <Link to="/login" className="btn btn--ghost">
-                Sign in
+                Log in
               </Link>
-              <Link to="/contact" className="btn btn--primary">
-                Get started free
+              <Link to="/register" className="btn btn--primary">
+                Sign up
               </Link>
             </>
           )}

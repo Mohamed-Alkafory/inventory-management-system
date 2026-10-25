@@ -1,4 +1,4 @@
-import type { AuthSession, LoginPayload, User } from "../types/auth";
+import type { AuthSession, LoginPayload, RegisterPayload, User } from "../types/auth";
 import { toAuthSession, toUser } from "./authMappers";
 import { AUTH_ENDPOINTS } from "./endpoints";
 import { http } from "./http";
@@ -7,6 +7,10 @@ import { withMock } from "./mockSwitch";
 
 export type AuthApi = {
   login(payload: LoginPayload): Promise<AuthSession>;
+  /** Creates an account and signs it in. */
+  register(payload: RegisterPayload): Promise<AuthSession>;
+  /** Exchanges a Google ID token (credential) for an app session. */
+  loginWithGoogle(idToken: string): Promise<AuthSession>;
   me(): Promise<User>;
   logout(): Promise<void>;
 };
@@ -16,6 +20,17 @@ const realAuthApi: AuthApi = {
     const { data } = await http.post(AUTH_ENDPOINTS.login, payload);
     return toAuthSession(data);
   },
+
+  async register(payload) {
+    const { data } = await http.post(AUTH_ENDPOINTS.register, payload);
+    return toAuthSession(data);
+  },
+
+  async loginWithGoogle(idToken) {
+    const { data } = await http.post(AUTH_ENDPOINTS.google, { idToken });
+    return toAuthSession(data);
+  },
+
 
   async me() {
     const { data } = await http.get(AUTH_ENDPOINTS.me);

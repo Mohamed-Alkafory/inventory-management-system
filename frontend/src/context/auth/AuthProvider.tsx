@@ -5,7 +5,7 @@ import { onSessionExpired } from "../../api/authEvents";
 import { queryClient } from "../../api/queryClient";
 import { tokenStorage } from "../../api/tokenStorage";
 import { ToastContext } from "../../components/ui/toast/toast-context";
-import type { LoginPayload, Role, User } from "../../types/auth";
+import type { AuthSession, LoginPayload, RegisterPayload, Role, User } from "../../types/auth";
 import { AuthContext } from "./auth-context";
 import type { AuthContextValue } from "./auth-context";
 
@@ -59,12 +59,24 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
-  const login = useCallback(async (payload: LoginPayload) => {
-    const { user: signedIn, tokens } = await authApi.login(payload);
+  const startSession = useCallback(({ user: signedIn, tokens }: AuthSession) => {
     tokenStorage.setSession({ ...tokens, user: signedIn });
     setUser(signedIn);
     return signedIn;
   }, []);
+
+  const login = useCallback(async (payload: LoginPayload) => startSession(await authApi.login(payload)), [startSession]);
+
+  const register = useCallback(
+    async (payload: RegisterPayload) => startSession(await authApi.register(payload)),
+    [startSession],
+  );
+
+  const loginWithGoogle = useCallback(
+    async (idToken: string) => startSession(await authApi.loginWithGoogle(idToken)),
+    [startSession],
+  );
+
 
   const logout = useCallback(async () => {
     try {
@@ -83,10 +95,12 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
       role: user?.role ?? null,
       isAuthenticated: user !== null,
       login,
+      register,
+      loginWithGoogle,
       logout,
       hasRole: (...roles: Role[]) => (user ? roles.includes(user.role) : false),
     }),
-    [user, login, logout],
+    [user, login, register, loginWithGoogle, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

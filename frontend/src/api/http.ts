@@ -19,8 +19,14 @@ export const http = axios.create(baseConfig);
 /** Bare client for the refresh call: no interceptors, so it can never loop. */
 const refreshClient = axios.create(baseConfig);
 
-/** Login / refresh / logout failures must never trigger a refresh attempt. */
-const AUTH_PATHS: string[] = [AUTH_ENDPOINTS.login, AUTH_ENDPOINTS.refresh, AUTH_ENDPOINTS.logout];
+/** Login / register / Google / refresh / logout failures must never trigger a refresh attempt. */
+const AUTH_PATHS: string[] = [
+  AUTH_ENDPOINTS.login,
+  AUTH_ENDPOINTS.register,
+  AUTH_ENDPOINTS.google,
+  AUTH_ENDPOINTS.refresh,
+  AUTH_ENDPOINTS.logout,
+];
 const isAuthUrl = (url?: string) => AUTH_PATHS.some((p) => url?.includes(p));
 
 type RetriableConfig = InternalAxiosRequestConfig & { _retried?: boolean };

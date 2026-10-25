@@ -12,6 +12,14 @@ export type LoginPayload = {
   password: string;
 };
 
+
+export type RegisterPayload = {
+  name: string;
+  email: string;
+  password: string;
+};
+
+
 export type AuthTokens = {
   accessToken: string;
   /** Optional: absent when the backend refreshes through an httpOnly cookie. */
