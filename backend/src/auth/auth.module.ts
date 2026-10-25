@@ -8,6 +8,7 @@ import { RolesGuard } from './guards/roles.guard.js';
 import { AuthController } from './auth.controller.js';
 import { AuthService } from './auth.service.js';
 import { PrismaModule } from '../prisma/prisma.module.js';
+import { AuditModule } from '../audit/audit.module.js';
 
 // Guards are registered once, globally, in AppModule (APP_GUARD). This module
 // only provides/exports them so the root registration can resolve them via
@@ -15,6 +16,7 @@ import { PrismaModule } from '../prisma/prisma.module.js';
 @Module({
   imports: [
     PrismaModule,
+    AuditModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({

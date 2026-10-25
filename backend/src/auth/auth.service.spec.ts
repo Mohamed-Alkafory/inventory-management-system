@@ -1,11 +1,15 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { UnauthorizedException } from '@nestjs/common';
+import {
+  UnauthorizedException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { createHash } from 'node:crypto';
 import * as bcrypt from 'bcrypt';
 
 import { AuthService } from './auth.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { AuditService } from '../audit/audit.service.js';
 
 const sha256 = (token: string) =>
   createHash('sha256').update(token).digest('hex');
@@ -14,10 +18,13 @@ describe('AuthService', () => {
   let service: AuthService;
 
   const userFindUnique = vi.fn();
+  const userUpdate = vi.fn();
   const refreshTokenCreate = vi.fn();
   const refreshTokenFindUnique = vi.fn();
   const refreshTokenUpdate = vi.fn();
   const refreshTokenUpdateMany = vi.fn();
+  const $transaction = vi.fn();
+  const auditLog = vi.fn();
   const signAsync = vi.fn();
 
   let adminHash: string;
@@ -33,6 +40,11 @@ describe('AuthService', () => {
     updatedAt: new Date('2026-10-15T00:00:00Z'),
   });
 
+  const publicAdmin = (overrides: Record<string, unknown> = {}) => {
+    const { passwordHash: _hash, ...safe } = adminRow();
+    return { ...safe, ...overrides };
+  };
+
   const storedTokenRow = (overrides: Record<string, unknown> = {}) => ({
     id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
     userId: adminRow().id,
@@ -46,15 +58,33 @@ describe('AuthService', () => {
 
   beforeEach(async () => {
     userFindUnique.mockReset();
+    userUpdate.mockReset();
     refreshTokenCreate.mockReset();
     refreshTokenFindUnique.mockReset();
     refreshTokenUpdate.mockReset();
     refreshTokenUpdateMany.mockReset();
+    $transaction.mockReset();
+    auditLog.mockReset();
     signAsync.mockReset();
     signAsync.mockResolvedValue('signed-access-token');
     refreshTokenCreate.mockResolvedValue({});
     refreshTokenUpdate.mockResolvedValue({});
     refreshTokenUpdateMany.mockResolvedValue({ count: 1 });
+    userUpdate.mockImplementation(
+      ({ data }: { data: Record<string, unknown> }) =>
+        Promise.resolve(publicAdmin(data)),
+    );
+
+    const tx = {
+      user: { findUnique: userFindUnique, update: userUpdate },
+      refreshToken: {
+        create: refreshTokenCreate,
+        updateMany: refreshTokenUpdateMany,
+      },
+    };
+    $transaction.mockImplementation((fn: (client: typeof tx) => unknown) =>
+      fn(tx),
+    );
 
     adminHash = await bcrypt.hash('Admin123!', 4);
 
@@ -64,15 +94,17 @@ describe('AuthService', () => {
         {
           provide: PrismaService,
           useValue: {
-            user: { findUnique: userFindUnique },
+            user: { findUnique: userFindUnique, update: userUpdate },
             refreshToken: {
               create: refreshTokenCreate,
               findUnique: refreshTokenFindUnique,
               update: refreshTokenUpdate,
               updateMany: refreshTokenUpdateMany,
             },
+            $transaction,
           },
         },
+        { provide: AuditService, useValue: { log: auditLog } },
         {
           provide: JwtService,
           useValue: { signAsync },
@@ -268,6 +300,200 @@ describe('AuthService', () => {
 
       await expect(service.logout(dto)).resolves.toBeUndefined();
       expect(refreshTokenUpdate).not.toHaveBeenCalled();
+      expect(refreshTokenUpdateMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('me', () => {
+    it('returns the public profile without the password hash', async () => {
+      userFindUnique.mockResolvedValue(publicAdmin());
+
+      const result = await service.me(adminRow().id);
+
+      expect(userFindUnique).toHaveBeenCalledWith({
+        where: { id: adminRow().id },
+        select: expect.objectContaining({ email: true, isActive: true }),
+      });
+      expect(result).toEqual(publicAdmin());
+      expect(JSON.stringify(result)).not.toContain('passwordHash');
+      expect(JSON.stringify(result)).not.toContain(adminHash);
+    });
+
+    it('answers 401 for an unknown user', async () => {
+      userFindUnique.mockResolvedValue(null);
+
+      await expect(service.me('missing')).rejects.toBeInstanceOf(
+        UnauthorizedException,
+      );
+    });
+
+    it('answers 401 for a deactivated user', async () => {
+      userFindUnique.mockResolvedValue(publicAdmin({ isActive: false }));
+
+      await expect(service.me(adminRow().id)).rejects.toBeInstanceOf(
+        UnauthorizedException,
+      );
+    });
+  });
+
+  describe('updateMe', () => {
+    it('updates the name inside a transaction and audits it', async () => {
+      userFindUnique.mockResolvedValue(adminRow());
+      userUpdate.mockResolvedValue(publicAdmin({ name: 'Renamed Admin' }));
+
+      const result = await service.updateMe(adminRow().id, {
+        name: 'Renamed Admin',
+      });
+
+      expect($transaction).toHaveBeenCalledTimes(1);
+      expect(userUpdate).toHaveBeenCalledWith({
+        where: { id: adminRow().id },
+        data: { name: 'Renamed Admin' },
+        select: expect.objectContaining({ email: true, isActive: true }),
+      });
+      expect(refreshTokenUpdateMany).not.toHaveBeenCalled();
+      expect(result).toEqual(publicAdmin({ name: 'Renamed Admin' }));
+      expect(auditLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: adminRow().id,
+          action: 'user.updated',
+          entityType: 'user',
+          entityId: adminRow().id,
+          oldValues: expect.objectContaining({ name: 'Admin User' }),
+        }),
+        expect.anything(),
+      );
+    });
+
+    it('rejects a wrong current password with 422 and writes nothing', async () => {
+      userFindUnique.mockResolvedValue(adminRow());
+
+      await expect(
+        service.updateMe(adminRow().id, {
+          password: { current: 'Wrong123!', next: 'NewPass123!' },
+        }),
+      ).rejects.toBeInstanceOf(UnprocessableEntityException);
+
+      expect(userUpdate).not.toHaveBeenCalled();
+      expect(refreshTokenUpdateMany).not.toHaveBeenCalled();
+      expect(auditLog).not.toHaveBeenCalled();
+    });
+
+    it('hashes the new password and revokes every active refresh token', async () => {
+      userFindUnique.mockResolvedValue(adminRow());
+      userUpdate.mockResolvedValue(publicAdmin());
+
+      await service.updateMe(adminRow().id, {
+        password: { current: 'Admin123!', next: 'NewPass123!' },
+      });
+
+      const data = userUpdate.mock.calls[0][0].data;
+      expect(data.passwordHash).toBeDefined();
+      expect(data.passwordHash).not.toBe('NewPass123!');
+      expect(data.passwordHash).not.toBe(adminHash);
+      expect(await bcrypt.compare('NewPass123!', data.passwordHash)).toBe(true);
+      expect(refreshTokenUpdateMany).toHaveBeenCalledWith({
+        where: { userId: adminRow().id, revokedAt: null },
+        data: { revokedAt: expect.any(Date) },
+      });
+    });
+
+    it('audits a password change without any credential material', async () => {
+      userFindUnique.mockResolvedValue(adminRow());
+      userUpdate.mockResolvedValue(publicAdmin());
+
+      await service.updateMe(adminRow().id, {
+        password: { current: 'Admin123!', next: 'NewPass123!' },
+      });
+
+      expect(auditLog).toHaveBeenCalledTimes(1);
+      const entry = auditLog.mock.calls[0][0];
+      expect(entry).toMatchObject({
+        userId: adminRow().id,
+        action: 'user.password_changed',
+        entityType: 'user',
+        entityId: adminRow().id,
+        newValues: { refreshTokensRevoked: 1 },
+      });
+      const stored = JSON.stringify(entry);
+      expect(stored).not.toContain('NewPass123!');
+      expect(stored).not.toContain('Admin123!');
+      expect(stored).not.toContain(adminHash);
+      expect(stored).not.toContain('passwordHash');
+    });
+
+    it('applies name and password together', async () => {
+      userFindUnique.mockResolvedValue(adminRow());
+      userUpdate.mockResolvedValue(publicAdmin({ name: 'Renamed' }));
+
+      const result = await service.updateMe(adminRow().id, {
+        name: 'Renamed',
+        password: { current: 'Admin123!', next: 'NewPass123!' },
+      });
+
+      expect(result.name).toBe('Renamed');
+      expect(userUpdate.mock.calls[0][0].data).toEqual({
+        name: 'Renamed',
+        passwordHash: expect.any(String),
+      });
+      expect(refreshTokenUpdateMany).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns the current profile without writing when nothing changed', async () => {
+      userFindUnique.mockResolvedValue(adminRow());
+
+      const result = await service.updateMe(adminRow().id, {});
+
+      expect(result).toEqual(publicAdmin());
+      expect(userUpdate).not.toHaveBeenCalled();
+      expect(auditLog).not.toHaveBeenCalled();
+    });
+
+    it('answers 401 when the session user no longer exists', async () => {
+      userFindUnique.mockResolvedValue(null);
+
+      await expect(
+        service.updateMe(adminRow().id, { name: 'X Y' }),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+    });
+  });
+
+  describe('changePassword', () => {
+    it('changes the password and resolves with no content', async () => {
+      userFindUnique.mockResolvedValue(adminRow());
+      userUpdate.mockResolvedValue(publicAdmin());
+
+      await expect(
+        service.changePassword(adminRow().id, {
+          currentPassword: 'Admin123!',
+          newPassword: 'NewPass123!',
+        }),
+      ).resolves.toBeUndefined();
+
+      expect(
+        await bcrypt.compare(
+          'NewPass123!',
+          userUpdate.mock.calls[0][0].data.passwordHash,
+        ),
+      ).toBe(true);
+      expect(refreshTokenUpdateMany).toHaveBeenCalledTimes(1);
+      expect(auditLog).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'user.password_changed' }),
+        expect.anything(),
+      );
+    });
+
+    it('rejects a wrong current password with 422', async () => {
+      userFindUnique.mockResolvedValue(adminRow());
+
+      await expect(
+        service.changePassword(adminRow().id, {
+          currentPassword: 'Wrong123!',
+          newPassword: 'NewPass123!',
+        }),
+      ).rejects.toBeInstanceOf(UnprocessableEntityException);
+
+      expect(userUpdate).not.toHaveBeenCalled();
       expect(refreshTokenUpdateMany).not.toHaveBeenCalled();
     });
   });

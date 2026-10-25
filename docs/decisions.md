@@ -124,3 +124,15 @@ All `/dashboard/*` routes are **ADMIN-only** (`@Roles('ADMIN')`). The payloads e
 - **No secrets:** before persisting, both payloads are recursively sanitized — any key matching `password`/`hash`/`token`/`secret` (case-insensitive) is dropped at every depth. `passwordHash` and refresh tokens therefore can never be stored. Dates are ISO strings, Decimals strings, bigints strings; absent payloads are SQL `NULL`.
 - **Action vocabulary:** `product.created|updated|deleted`, `stock.adjusted` (entity `stock_movement`), `order.created|cancelled`, `purchase_order.received` (`entityType: 'purchase_order'`), `user.updated|deactivated`. Product updates store the full before/after snapshot, so price changes are visible. Category/supplier mutations are out of scope for this issue.
 - **Filters:** exact `userId`/`entityType`/`entityId`/`action`, inclusive `from`/`to` on `createdAt`, `sortBy=createdAt|action`, `sortOrder=asc|desc` (default `createdAt desc`, stable `id` tiebreak).
+
+## AD-011 — Self-service profile and password changes (issue #54)
+
+**Status:** Accepted · **Date:** 2026-10-25
+
+`GET /auth/me`, `PATCH /auth/me` and `POST /auth/change-password` are authenticated (no `@Public`) and operate **only on the caller's own account** — the id always comes from the JWT, never from the body or path.
+
+- **Editable fields:** `name` and `password` only. `role`, `email` and `isActive` remain ADMIN-managed through `/users`; the global whitelist pipe rejects them with 400 rather than silently ignoring them.
+- **Password verification:** the current password is checked before any write; a mismatch answers **422** (authenticated request, invalid input) and touches nothing.
+- **Storage:** `next`/`newPassword` (8–72 bytes) is bcrypt-hashed with the same 10 rounds as account creation; plaintext is never stored or logged — conflict with AD-010's redaction is impossible because the audit entry contains no password fields.
+- **Session invalidation:** a successful password change revokes **all** active refresh tokens for that user in the same transaction (the user row update, revocation and audit entry commit together). The current 15-minute access token stays valid until it expires.
+- **Audit:** `user.password_changed` for password updates (with `refreshTokensRevoked` count, no credentials); `user.updated` for name-only changes.
