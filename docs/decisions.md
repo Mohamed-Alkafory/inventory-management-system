@@ -136,3 +136,16 @@ All `/dashboard/*` routes are **ADMIN-only** (`@Roles('ADMIN')`). The payloads e
 - **Storage:** `next`/`newPassword` (8–72 bytes) is bcrypt-hashed with the same 10 rounds as account creation; plaintext is never stored or logged — conflict with AD-010's redaction is impossible because the audit entry contains no password fields.
 - **Session invalidation:** a successful password change revokes **all** active refresh tokens for that user in the same transaction (the user row update, revocation and audit entry commit together). The current 15-minute access token stays valid until it expires.
 - **Audit:** `user.password_changed` for password updates (with `refreshTokensRevoked` count, no credentials); `user.updated` for name-only changes.
+
+## AD-012 — CSV exports are the v1 report surface (issue #55)
+
+**Status:** Accepted · **Date:** 2026-10-25
+
+The dependency "Reports API" did not exist, so this issue defines the report surface itself: four **ADMIN-only CSV downloads** under `/reports` — inventory, low stock, sales for a period, and stock movements.
+
+- **Why CSV-only:** the consumers are spreadsheet/accounting workflows; a JSON twin would duplicate the same queries with no current client. If a JSON report API is ever needed it can reuse `ReportsService` and return the same rows.
+- **ADMIN-only:** the inventory export includes `costPrice`, which AD-004 hides from STAFF. Keeping all reports under one role is consistent and avoids a half-restricted surface.
+- **Reuse, not reimplementation:** filters mirror `/products`, `/stock/movements` and the dashboard's validated date-range helper (`from`/`to`, default 30 days, 92-day cap → 400). Sales exclude CANCELLED orders, exactly like AD-009.
+- **Whole result, no pagination:** a report must be complete; `page`/`limit` are rejected as unknown query params (400) rather than silently ignored.
+- **CSV contract:** UTF-8, RFC-4180 (CRLF, doubled quotes, quoted commas/newlines), a header row always present (also for zero rows), and text starting with `= + - @` prefixed with `'` against formula injection. Filenames are `attachment` with a report-specific, date-stamped name.
+- `low_stock` is expressed with a Prisma field reference (`quantity: { lte: prisma.product.fields.minStock }`), not raw SQL.
