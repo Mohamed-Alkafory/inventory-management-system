@@ -305,6 +305,23 @@ ADMIN-only (AD-009). Every route takes an optional inclusive `from`/`to` range (
 | ------ | --------- | ---- | ------------------------- | --------- |
 | GET 🔓 | `/health` | —    | `{ status: 'ok', db: 'up' | 'down' }` | —   |
 
+### 3.13 Reports (CSV exports)
+
+All routes are **ADMIN-only** and authenticated; they answer `200` with `Content-Type: text/csv; charset=utf-8` and `Content-Disposition: attachment; filename="<report>.csv"`. Exports are read-only and contain **every** matching row (no pagination). Fields are RFC-4180 escaped (quotes doubled, commas/newlines quoted) and text starting with `= + - @` is prefixed with `'` to prevent formula injection.
+
+| Method | Path                           | Role  | Query                                                           | Filename                          | Errors        |
+| ------ | ------------------------------ | ----- | --------------------------------------------------------------- | --------------------------------- | ------------- |
+| GET    | `/reports/inventory.csv`       | admin | `?search&categoryId&supplierId&isActive&stockStatus`            | `inventory-YYYY-MM-DD.csv`        | 400, 401, 403 |
+| GET    | `/reports/low-stock.csv`       | admin | —                                                               | `low-stock-YYYY-MM-DD.csv`        | 401, 403      |
+| GET    | `/reports/sales.csv`           | admin | `?from&to` (both or neither; default last 30 days; max 92 days) | `sales-YYYY-MM-DD_YYYY-MM-DD.csv` | 400, 401, 403 |
+| GET    | `/reports/stock-movements.csv` | admin | `?productId&type&orderId&purchaseOrderId&from&to`               | `stock-movements-<range>.csv`     | 400, 401, 403 |
+
+- **Inventory** columns: `SKU, Name, Category, Supplier, Quantity, Min Stock, Price, Cost Price, Active` (`yes`/`no`). `isActive` defaults to `true`; `stockStatus` uses the `/products` semantics (`in_stock`, `low_stock` = `quantity <= minStock`, `out_of_stock`). The cost column is why this is ADMIN-only (AD-004).
+- **Low stock** columns: the same products filtered to `isActive = true` and `quantity <= minStock`, plus `Shortfall` (`max(0, minStock - quantity)`).
+- **Sales** columns: `Order Number, Created At, Status, Customer, Phone, Items, Total, Created By`; one row per order in the period and **CANCELLED orders are excluded** (same rules as the dashboard, AD-009).
+- **Stock movements** columns: `Created At, SKU, Product, Type, Change, Quantity After, Reason, Order Number, Purchase Order Number, Created By`; filters match `GET /stock/movements`.
+- Empty results still return the header row (valid CSV). Underlying data is queried directly by the reports service — there is no separate JSON "reports API" yet (AD-012).
+
 ---
 
 ## 4. Statuses & transitions (reference)

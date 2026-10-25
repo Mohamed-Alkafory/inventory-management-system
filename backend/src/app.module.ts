@@ -12,6 +12,7 @@ import { NotificationsModule } from './notifications/notifications.module.js';
 import { PurchaseOrdersModule } from './purchase-orders/purchase-orders.module.js';
 import { DashboardModule } from './dashboard/dashboard.module.js';
 import { AuditModule } from './audit/audit.module.js';
+import { ReportsModule } from './reports/reports.module.js';
 import { HealthModule } from './health/health.module.js';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
@@ -38,6 +39,7 @@ import { UsersModule } from './users/users.module.js';
     PurchaseOrdersModule,
     DashboardModule,
     AuditModule,
+    ReportsModule,
     HealthModule,
     AuthModule,
     UsersModule,
