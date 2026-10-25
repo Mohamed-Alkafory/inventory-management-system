@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 
 import { NotificationsModule } from '../notifications/notifications.module.js';
+import { AuditModule } from '../audit/audit.module.js';
 import { StockModule } from '../stock/stock.module.js';
 import { PurchaseOrdersController } from './purchase-orders.controller.js';
 import { PurchaseOrdersService } from './purchase-orders.service.js';
@@ -12,7 +13,7 @@ import { PurchaseOrdersService } from './purchase-orders.service.js';
  * PURCHASE_ORDER_RECEIVED notification post-commit (issue #31).
  */
 @Module({
-  imports: [StockModule, NotificationsModule],
+  imports: [StockModule, NotificationsModule, AuditModule],
   controllers: [PurchaseOrdersController],
   providers: [PurchaseOrdersService],
 })

@@ -113,3 +113,14 @@ All `/dashboard/*` routes are **ADMIN-only** (`@Roles('ADMIN')`). The payloads e
 - **Revenue/sales/top-products** exclude `CANCELLED` orders and include `PENDING` + `CONFIRMED` (stock leaves at creation — AD-002), so figures agree with the movement history.
 - **Ranges:** optional `from`/`to` (both or neither; default last 30 days; `from <= to`; at most **92 days**) — violations are 400. Day buckets are UTC and every day in the range is present (zero-filled), so charts never need gap handling.
 - **Query choice:** Prisma `aggregate`/`groupBy`/`count` first; `$queryRaw` only for what Prisma cannot express — the two column-math expressions and UTC `date_trunc` grouping — always parameterized with no string interpolation of user input.
+
+## AD-010 — Audit logging is best effort, redacted and transactional where possible (issue #34)
+
+**Status:** Accepted · **Date:** 2026-10-25
+
+`AuditService.log(entry, tx?)` is the single write path. `GET /audit-logs` is **ADMIN-only**, paginated and filtered; the trail is **read-only** — there is no API route to edit or delete entries.
+
+- **Never breaks the main operation:** `log()` catches every failure and emits a warning; the mutation still succeeds. Callers that already own a transaction pass it in, so the entry commits/rolls back with the change (stock adjustments, order create/cancel, PO receipt, user updates run inside their existing transactions; product writes log after the row write).
+- **No secrets:** before persisting, both payloads are recursively sanitized — any key matching `password`/`hash`/`token`/`secret` (case-insensitive) is dropped at every depth. `passwordHash` and refresh tokens therefore can never be stored. Dates are ISO strings, Decimals strings, bigints strings; absent payloads are SQL `NULL`.
+- **Action vocabulary:** `product.created|updated|deleted`, `stock.adjusted` (entity `stock_movement`), `order.created|cancelled`, `purchase_order.received` (`entityType: 'purchase_order'`), `user.updated|deactivated`. Product updates store the full before/after snapshot, so price changes are visible. Category/supplier mutations are out of scope for this issue.
+- **Filters:** exact `userId`/`entityType`/`entityId`/`action`, inclusive `from`/`to` on `createdAt`, `sortBy=createdAt|action`, `sortOrder=asc|desc` (default `createdAt desc`, stable `id` tiebreak).

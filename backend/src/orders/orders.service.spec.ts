@@ -15,6 +15,7 @@ import {
 } from '../generated/prisma/client.js';
 import { StockService } from '../stock/stock.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
+import { AuditService } from '../audit/audit.service.js';
 import { OrdersService } from './orders.service.js';
 import type { CreateOrderDto } from './dto/create-order.dto.js';
 
@@ -131,6 +132,7 @@ describe('OrdersService', () => {
         OrdersService,
         { provide: PrismaService, useValue: { $transaction } },
         { provide: StockService, useValue: { applyStockChange } },
+        { provide: AuditService, useValue: { log: vi.fn() } },
         {
           provide: NotificationsService,
           useValue: {

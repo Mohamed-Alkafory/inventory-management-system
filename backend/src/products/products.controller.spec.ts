@@ -8,7 +8,11 @@ import {
 import { Reflector } from '@nestjs/core';
 
 import { ProductsController } from './products.controller.js';
-import { ProductsService, type ProductListResponse, type ProductResponse } from './products.service.js';
+import {
+  ProductsService,
+  type ProductListResponse,
+  type ProductResponse,
+} from './products.service.js';
 import { CreateProductDto } from './dto/create-product.dto.js';
 import { ListProductsQueryDto } from './dto/list-products.query.dto.js';
 import { UpdateProductDto } from './dto/update-product.dto.js';
@@ -123,26 +127,30 @@ describe('ProductsController', () => {
     create.mockResolvedValue(sampleProduct);
     const dto = { sku: 'OFF-PEN-002', name: 'Ballpoint Pen', price: 1.99 };
 
-    const result = await controller.create(dto as never);
+    const result = await controller.create(dto as never, ADMIN);
 
     expect(result).toEqual(sampleProduct);
-    expect(create).toHaveBeenCalledWith(dto);
+    expect(create).toHaveBeenCalledWith(dto, 'admin-id');
   });
 
   it('patches a product via the service', async () => {
     update.mockResolvedValue(sampleProduct);
 
-    const result = await controller.update('some-id', { name: 'X' } as never);
+    const result = await controller.update(
+      'some-id',
+      { name: 'X' } as never,
+      ADMIN,
+    );
 
     expect(result).toEqual(sampleProduct);
-    expect(update).toHaveBeenCalledWith('some-id', { name: 'X' });
+    expect(update).toHaveBeenCalledWith('some-id', { name: 'X' }, 'admin-id');
   });
 
   it('soft-deletes with a 204 status', async () => {
     remove.mockResolvedValue(undefined);
 
-    await expect(controller.remove('some-id')).resolves.toBeUndefined();
-    expect(remove).toHaveBeenCalledWith('some-id');
+    await expect(controller.remove('some-id', ADMIN)).resolves.toBeUndefined();
+    expect(remove).toHaveBeenCalledWith('some-id', 'admin-id');
 
     // The DELETE handler is declared with @HttpCode(204).
     const noContent = Reflect.getMetadata(
@@ -153,7 +161,9 @@ describe('ProductsController', () => {
   });
 
   it('propagates the service 404 for unknown ids', async () => {
-    findOne.mockRejectedValue(new NotFoundException(`Product some-id not found`));
+    findOne.mockRejectedValue(
+      new NotFoundException(`Product some-id not found`),
+    );
 
     await expect(controller.findOne('some-id', ADMIN)).rejects.toBeInstanceOf(
       NotFoundException,
@@ -167,9 +177,9 @@ describe('ProductsController', () => {
     // Nest's defaults: GET/PATCH → 200, POST → 201; DELETE explicitly 204.
     expect(codeOf(ProductsController.prototype.findOne)).toBe(HttpStatus.OK);
     expect(codeOf(ProductsController.prototype.update)).toBe(HttpStatus.OK);
-    expect(Reflect.getMetadata('__httpCode__', ProductsController.prototype.remove)).toBe(
-      HttpStatus.NO_CONTENT,
-    );
+    expect(
+      Reflect.getMetadata('__httpCode__', ProductsController.prototype.remove),
+    ).toBe(HttpStatus.NO_CONTENT);
   });
 
   it('requires ADMIN on POST, PATCH and DELETE (and allows any role on GET)', () => {
@@ -185,20 +195,31 @@ describe('ProductsController', () => {
 
   describe('input validation (400) — body DTOs', () => {
     // The global ValidationPipe whitelist/forbidNonWhitelisted config in main.ts.
-    const pipe = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true });
+    const pipe = new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    });
     const validate = (value: unknown, metatype: new () => unknown) =>
       pipe.transform(value, { type: 'body', metatype });
 
     it('rejects a body without sku, name or price', async () => {
       await expect(
-        validate({ categoryId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc' }, CreateProductDto),
+        validate(
+          { categoryId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc' },
+          CreateProductDto,
+        ),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
     it('rejects negative price and quantity', async () => {
       await expect(
         validate(
-          { sku: 'X-1', name: 'Test', price: -1, categoryId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc' },
+          {
+            sku: 'X-1',
+            name: 'Test',
+            price: -1,
+            categoryId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+          },
           CreateProductDto,
         ),
       ).rejects.toBeInstanceOf(BadRequestException);
@@ -206,7 +227,10 @@ describe('ProductsController', () => {
 
     it('rejects a non-UUID categoryId', async () => {
       await expect(
-        validate({ sku: 'X-1', name: 'Test', price: 1, categoryId: 'not-a-uuid' }, CreateProductDto),
+        validate(
+          { sku: 'X-1', name: 'Test', price: 1, categoryId: 'not-a-uuid' },
+          CreateProductDto,
+        ),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
@@ -251,7 +275,11 @@ describe('ProductsController', () => {
 
   describe('input validation (400) — list query params', () => {
     // Mirrors the global ValidationPipe settings, including ?page=1&isActive=false.
-    const pipe = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true });
+    const pipe = new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    });
     const validate = (value: unknown) =>
       pipe.transform(value, { type: 'query', metatype: ListProductsQueryDto });
 

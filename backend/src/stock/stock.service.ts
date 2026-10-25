@@ -18,6 +18,7 @@ import {
   type ProductResponse,
 } from '../products/products.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
+import { AuditService } from '../audit/audit.service.js';
 
 /** Contract §3.6 `StockMovement` shape (all scalar fields). */
 export interface MovementResponse {
@@ -78,6 +79,7 @@ export class StockService {
     private readonly prisma: PrismaService,
     private readonly productsService: ProductsService,
     private readonly notifications: NotificationsService,
+    private readonly audit: AuditService,
   ) {}
 
   /**
@@ -95,8 +97,8 @@ export class StockService {
   ): Promise<AdjustedStockResponse> {
     const result = await this.withWriteRetry(() =>
       this.prisma.$transaction(
-        (tx) =>
-          this.applyStockChange(
+        async (tx) => {
+          const change = await this.applyStockChange(
             tx,
             dto.productId,
             dto.quantityChange,
@@ -104,7 +106,32 @@ export class StockService {
             dto.reason,
             userId,
             role,
-          ),
+          );
+
+          // Issue #34: audit inside the same transaction, so the entry
+          // commits only together with the movement it describes.
+          await this.audit.log(
+            {
+              userId,
+              action: 'stock.adjusted',
+              entityType: 'stock_movement',
+              entityId: change.movement.id,
+              oldValues: {
+                productId: dto.productId,
+                quantity: change.product.quantity - dto.quantityChange,
+              },
+              newValues: {
+                productId: dto.productId,
+                quantity: change.product.quantity,
+                change: dto.quantityChange,
+                reason: dto.reason,
+              },
+            },
+            tx,
+          );
+
+          return change;
+        },
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       ),
     );

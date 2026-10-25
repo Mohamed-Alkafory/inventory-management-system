@@ -10,6 +10,7 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { Prisma, StockMovementType } from '../generated/prisma/client.js';
 import { ProductsService } from '../products/products.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
+import { AuditService } from '../audit/audit.service.js';
 import { type CreateAdjustmentDto } from './dto/create-adjustment.dto.js';
 import { type ListMovementsQueryDto } from './dto/list-movements.query.dto.js';
 import { StockService } from './stock.service.js';
@@ -113,6 +114,7 @@ describe('StockService', () => {
           },
         },
         { provide: ProductsService, useValue: { findAll: productsFindAll } },
+        { provide: AuditService, useValue: { log: vi.fn() } },
         {
           provide: NotificationsService,
           useValue: { notifyLowStockIfDepleted },

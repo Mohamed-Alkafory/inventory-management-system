@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 
 import { ProductsModule } from '../products/products.module.js';
 import { NotificationsModule } from '../notifications/notifications.module.js';
+import { AuditModule } from '../audit/audit.module.js';
 import { StockController } from './stock.controller.js';
 import { ProductMovementsController } from './product-movements.controller.js';
 import { StockService } from './stock.service.js';
@@ -12,7 +13,7 @@ import { StockService } from './stock.service.js';
  * consumer) with the products service's tested query + serialization.
  */
 @Module({
-  imports: [ProductsModule, NotificationsModule],
+  imports: [ProductsModule, NotificationsModule, AuditModule],
   controllers: [StockController, ProductMovementsController],
   providers: [StockService],
   // Shared with orders (#28) and purchase orders (#32): applyStockChange

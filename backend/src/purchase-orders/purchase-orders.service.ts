@@ -11,6 +11,7 @@ import { Prisma, PurchaseOrderStatus } from '../generated/prisma/client.js';
 import { StockMovementType } from '../generated/prisma/enums.js';
 import { StockService } from '../stock/stock.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
+import { AuditService } from '../audit/audit.service.js';
 import { CreatePurchaseOrderDto } from './dto/create-purchase-order.dto.js';
 import { UpdatePurchaseOrderStatusDto } from './dto/update-status.dto.js';
 import { ReceivePurchaseOrderDto } from './dto/receive-purchase-order.dto.js';
@@ -118,6 +119,7 @@ export class PurchaseOrdersService {
     private readonly prisma: PrismaService,
     private readonly stock: StockService,
     private readonly notifications: NotificationsService,
+    private readonly audit: AuditService,
   ) {}
 
   /**
@@ -495,6 +497,24 @@ export class PurchaseOrdersService {
     if (!updated) {
       throw new NotFoundException(`Purchase order ${id} not found`);
     }
+
+    // Issue #34: record the receipt (lines + resulting status) in the same
+    // transaction as the stock and quantity changes.
+    await this.audit.log(
+      {
+        userId,
+        action: 'purchase_order.received',
+        entityType: 'purchase_order',
+        entityId: id,
+        oldValues: { status: order.status },
+        newValues: {
+          status: updated.status,
+          receivedAt: updated.receivedAt,
+          items: dto.items,
+        },
+      },
+      tx,
+    );
 
     return serializeDetail(updated);
   }
