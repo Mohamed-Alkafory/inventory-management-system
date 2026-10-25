@@ -1,15 +1,19 @@
-
 import {
   Injectable,
   UnauthorizedException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { createHash, randomBytes } from 'node:crypto';
 
 import { PrismaService } from '../prisma/prisma.service.js';
+import { Prisma } from '../generated/prisma/client.js';
+import { AuditService } from '../audit/audit.service.js';
 import { LoginDto } from './dto/login.dto.js';
 import { RefreshTokenDto } from './dto/refresh-token.dto.js';
+import { type ChangePasswordDto } from './dto/change-password.dto.js';
+import { type UpdateProfileDto } from './dto/update-profile.dto.js';
 
 /** Number of random bytes behind a refresh token (base64url → 64 chars). */
 const REFRESH_TOKEN_BYTES = 48;
@@ -20,11 +24,33 @@ const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 /** Mirrors the 15m access-token expiry configured on the JwtModule. */
 const ACCESS_TOKEN_TTL_SECONDS = 900;
 
+/** Same work factor as user creation (`UsersService`). */
+const BCRYPT_ROUNDS = 10;
+
+/**
+ * Public `User` shape (contract §3.1): never selects or returns
+ * `passwordHash`.
+ */
+const PUBLIC_USER_SELECT = {
+  id: true,
+  name: true,
+  email: true,
+  role: true,
+  isActive: true,
+  createdAt: true,
+  updatedAt: true,
+} satisfies Prisma.UserSelect;
+
+export type AuthUserResponse = Prisma.UserGetPayload<{
+  select: typeof PUBLIC_USER_SELECT;
+}>;
+
 @Injectable()
 export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
+    private readonly audit: AuditService,
   ) {}
 
   async login(loginDto: LoginDto) {
@@ -123,6 +149,126 @@ export class AuthService {
         data: { revokedAt: new Date() },
       });
     }
+  }
+
+  /**
+   * `GET /auth/me` — the authenticated user's own public profile. A missing
+   * or deactivated account answers 401 (the session is no longer valid).
+   */
+  async me(userId: string): Promise<AuthUserResponse> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: PUBLIC_USER_SELECT,
+    });
+
+    if (!user || !user.isActive) {
+      throw new UnauthorizedException('Invalid session');
+    }
+
+    return user;
+  }
+
+  /**
+   * `PATCH /auth/me` — editable own-profile fields only (`name`, `password`).
+   * Changing the password verifies the current one (422 otherwise), hashes
+   * the new one with bcrypt and revokes every active refresh token, so other
+   * devices must sign in again.
+   */
+  async updateMe(
+    userId: string,
+    dto: UpdateProfileDto,
+  ): Promise<AuthUserResponse> {
+    return this.updateProfile(userId, dto.name, dto.password);
+  }
+
+  /**
+   * `POST /auth/change-password` — same verification/rotation logic as the
+   * nested `PATCH /auth/me` payload; answers 204.
+   */
+  async changePassword(userId: string, dto: ChangePasswordDto): Promise<void> {
+    await this.updateProfile(userId, undefined, {
+      current: dto.currentPassword,
+      next: dto.newPassword,
+    });
+  }
+
+  /**
+   * Applies profile changes in ONE transaction: user row, refresh-token
+   * revocation and the audit entry commit (or roll back) together.
+   */
+  private updateProfile(
+    userId: string,
+    name: string | undefined,
+    password: { current: string; next: string } | undefined,
+  ): Promise<AuthUserResponse> {
+    return this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.findUnique({
+        where: { id: userId },
+        select: { ...PUBLIC_USER_SELECT, passwordHash: true },
+      });
+
+      if (!user || !user.isActive) {
+        throw new UnauthorizedException('Invalid session');
+      }
+
+      const data: Prisma.UserUpdateInput = {};
+      if (name !== undefined) {
+        data.name = name;
+      }
+
+      if (password) {
+        const matches = await bcrypt.compare(
+          password.current,
+          user.passwordHash,
+        );
+        if (!matches) {
+          throw new UnprocessableEntityException(
+            'Current password is incorrect',
+          );
+        }
+        data.passwordHash = await bcrypt.hash(password.next, BCRYPT_ROUNDS);
+      }
+
+      const { passwordHash: _currentHash, ...before } = user;
+
+      // Nothing to change: return the current profile without a write.
+      if (Object.keys(data).length === 0) {
+        return before;
+      }
+
+      const updated = await tx.user.update({
+        where: { id: userId },
+        data,
+        select: PUBLIC_USER_SELECT,
+      });
+
+      let refreshTokensRevoked = 0;
+      if (password) {
+        const revoked = await tx.refreshToken.updateMany({
+          where: { userId, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+        refreshTokensRevoked = revoked.count;
+      }
+
+      // Issue #34/#54: record the change without any credential material.
+      await this.audit.log(
+        {
+          userId,
+          action: password ? 'user.password_changed' : 'user.updated',
+          entityType: 'user',
+          entityId: userId,
+          oldValues: before,
+          newValues: {
+            ...updated,
+            ...(password ? { refreshTokensRevoked } : {}),
+          },
+        },
+        tx,
+      );
+
+      return updated;
+    });
   }
 
   private signAccessToken(userId: string, role: string): Promise<string> {

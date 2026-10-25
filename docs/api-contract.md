@@ -116,16 +116,22 @@ Legend: 🔓 public · Role: `any` / `admin` · Paginated unless marked "no pagi
 
 ### 3.1 Auth
 
-| Method  | Path             | Role | Request body                            | Response                                    | Errors        |
-| ------- | ---------------- | ---- | --------------------------------------- | ------------------------------------------- | ------------- |
-| POST 🔓 | `/auth/login`    | —    | `{ email, password }`                   | `{ user: User, accessToken, refreshToken }` | 400, 401      |
-| POST 🔓 | `/auth/register` | —    | `{ name, email, password }`             | `{ user: User, accessToken, refreshToken }` | 400, 409      |
-| POST 🔓 | `/auth/refresh`  | —    | `{ refreshToken }`                      | `{ accessToken, refreshToken }`             | 400, 401      |
-| POST    | `/auth/logout`   | any  | `{ refreshToken }`                      | `204` (empty)                               | 401           |
-| GET     | `/auth/me`       | any  | —                                       | `User` (no `passwordHash`)                  | 401           |
-| PATCH   | `/auth/me`       | any  | `{ name?, password?{ current, next } }` | `User`                                      | 400, 401, 422 |
+| Method  | Path                    | Role | Request body                            | Response                                    | Errors        |
+| ------- | ----------------------- | ---- | --------------------------------------- | ------------------------------------------- | ------------- |
+| POST 🔓 | `/auth/login`           | —    | `{ email, password }`                   | `{ user: User, accessToken, refreshToken }` | 400, 401      |
+| POST 🔓 | `/auth/register`        | —    | `{ name, email, password }`             | `{ user: User, accessToken, refreshToken }` | 400, 409      |
+| POST 🔓 | `/auth/refresh`         | —    | `{ refreshToken }`                      | `{ accessToken, refreshToken }`             | 400, 401      |
+| POST    | `/auth/logout`          | any  | `{ refreshToken }`                      | `204` (empty)                               | 401           |
+| GET     | `/auth/me`              | any  | —                                       | `User` (no `passwordHash`)                  | 401           |
+| PATCH   | `/auth/me`              | any  | `{ name?, password?{ current, next } }` | `User`                                      | 400, 401, 422 |
+| POST    | `/auth/change-password` | any  | `{ currentPassword, newPassword }`      | `204` (empty)                               | 400, 401, 422 |
 
 `User` shape: `{ id, name, email, role, isActive, createdAt, updatedAt }` — `passwordHash` is **never** returned by any endpoint.
+
+- `GET /auth/me` returns the **full** public profile of the authenticated user; a missing/deactivated account answers 401.
+- `PATCH /auth/me` only accepts `name` and the nested `password: { current, next }` — `role`, `email` and `isActive` stay ADMIN-managed (`/users`), so sending them is 400.
+- Changing a password (either route) verifies `current`/`currentPassword` first: a mismatch is **422** (the request is authenticated, so this is not a 401). `next`/`newPassword` must be 8–72 bytes; it is bcrypt-hashed (rounds 10) and **every active refresh token of the user is revoked**, so other devices must log in again.
+- Password changes are audited as `user.password_changed` without any credential material (§3.11).
 
 When `register` is disabled in config (ADMIN-created accounts only) it returns `403 FORBIDDEN` — decide at implementation; frontend should not rely on it.
 
@@ -289,7 +295,7 @@ ADMIN-only (AD-009). Every route takes an optional inclusive `from`/`to` range (
 - `AuditLog` shape: `{ id, userId, action, entityType, entityId, oldValues, newValues, createdAt }` (`oldValues`/`newValues` are opaque JSON objects; `userId` may be `null`).
 - Filters are exact matches (`userId`, `entityType`, `entityId`, `action`); `from`/`to` are inclusive ISO-8601 bounds on `createdAt`; `sortBy` is `createdAt` (default, `desc`) or `action`.
 - Audit logs are **read-only** via the API — created server-side, never manually; there is no POST/PATCH/DELETE route.
-- Actions currently written (issue #34): `product.created|updated|deleted`, `stock.adjusted`, `order.created|cancelled`, `purchase_order.received`, `user.updated|deactivated` — see AD-010. Category/supplier mutations are not instrumented yet.
+- Actions currently written (issue #34): `product.created|updated|deleted`, `stock.adjusted`, `order.created|cancelled`, `purchase_order.received`, `user.updated|deactivated` (plus `user.password_changed` from issue #54) — see AD-010/AD-011. Category/supplier mutations are not instrumented yet.
 - Sensitive keys (`password`, `*Hash*`, `*token*`, `*secret*` — case-insensitive, at any depth) are **stripped** before persisting; no password hashes or tokens can appear in `oldValues`/`newValues`.
 - Logging is **best effort**: an audit write failure never aborts the operation it describes. Entries for transactional mutations are written inside the same transaction, so they commit/roll back with the change.
 
