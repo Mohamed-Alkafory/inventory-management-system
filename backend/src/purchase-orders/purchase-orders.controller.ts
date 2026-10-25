@@ -38,9 +38,7 @@ interface AuthenticatedUser {
 @ApiBearerAuth()
 @Controller('purchase-orders')
 export class PurchaseOrdersController {
-  constructor(
-    private readonly purchaseOrdersService: PurchaseOrdersService,
-  ) {}
+  constructor(private readonly purchaseOrdersService: PurchaseOrdersService) {}
 
   /**
    * GET /purchase-orders — any authenticated role, paginated with `status`
@@ -209,7 +207,8 @@ export class PurchaseOrdersController {
   })
   @ApiResponse({
     status: HttpStatus.BAD_REQUEST,
-    description: 'Validation failed (malformed id, duplicate productId, product not on the order)',
+    description:
+      'Validation failed (malformed id, duplicate productId, product not on the order)',
   })
   @ApiResponse({
     status: HttpStatus.UNAUTHORIZED,
@@ -221,7 +220,8 @@ export class PurchaseOrdersController {
   })
   @ApiResponse({
     status: HttpStatus.CONFLICT,
-    description: 'Over-receive, or the order is DRAFT/CANCELLED/RECEIVED, or a concurrent change',
+    description:
+      'Over-receive, or the order is DRAFT/CANCELLED/RECEIVED, or a concurrent change',
   })
   @ApiResponse({
     status: HttpStatus.UNPROCESSABLE_ENTITY,

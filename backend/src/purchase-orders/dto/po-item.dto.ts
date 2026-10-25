@@ -24,7 +24,10 @@ export class PurchaseOrderItemDto {
   quantityOrdered!: number;
 
   @ApiProperty({ example: 0.6, minimum: 0, type: Number })
-  @IsNumber({ maxDecimalPlaces: 2 }, { message: 'unitCost must have at most 2 decimal places' })
+  @IsNumber(
+    { maxDecimalPlaces: 2 },
+    { message: 'unitCost must have at most 2 decimal places' },
+  )
   @Min(0)
   @Max(9999999999)
   unitCost!: number;

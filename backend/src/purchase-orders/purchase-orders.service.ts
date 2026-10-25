@@ -7,10 +7,7 @@ import {
 } from '@nestjs/common';
 
 import { PrismaService } from '../prisma/prisma.service.js';
-import {
-  Prisma,
-  PurchaseOrderStatus,
-} from '../generated/prisma/client.js';
+import { Prisma, PurchaseOrderStatus } from '../generated/prisma/client.js';
 import { StockMovementType } from '../generated/prisma/enums.js';
 import { StockService } from '../stock/stock.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
@@ -127,7 +124,9 @@ export class PurchaseOrdersService {
    * `GET /purchase-orders` — paginated, filterable by status and supplier,
    * whitelisted sort.
    */
-  async findAll(query: ListPurchaseOrdersQueryDto): Promise<PurchaseOrderListResponse> {
+  async findAll(
+    query: ListPurchaseOrdersQueryDto,
+  ): Promise<PurchaseOrderListResponse> {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const sortBy = query.sortBy ?? 'createdAt';
@@ -253,7 +252,10 @@ export class PurchaseOrdersService {
       const line = unit.mul(item.quantityOrdered);
       return { item, unit, line };
     });
-    const total = lines.reduce((acc, { line }) => acc.add(line), new Prisma.Decimal(0));
+    const total = lines.reduce(
+      (acc, { line }) => acc.add(line),
+      new Prisma.Decimal(0),
+    );
 
     const order = await tx.purchaseOrder.create({
       data: {

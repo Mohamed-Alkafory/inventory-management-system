@@ -22,7 +22,10 @@ import { PurchaseOrderItemDto } from './po-item.dto.js';
  * server-side (e.g. PO-0001). Created orders always start in `DRAFT`.
  */
 export class CreatePurchaseOrderDto {
-  @ApiProperty({ example: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', format: 'uuid' })
+  @ApiProperty({
+    example: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+    format: 'uuid',
+  })
   @Type(() => String)
   @IsUUID()
   supplierId!: string;

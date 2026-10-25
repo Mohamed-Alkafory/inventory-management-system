@@ -7,10 +7,7 @@ import {
 } from '@nestjs/common';
 
 import { PrismaService } from '../prisma/prisma.service.js';
-import {
-  Prisma,
-  PurchaseOrderStatus,
-} from '../generated/prisma/client.js';
+import { Prisma, PurchaseOrderStatus } from '../generated/prisma/client.js';
 import { StockMovementType } from '../generated/prisma/enums.js';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/client';
 import { StockService } from '../stock/stock.service.js';
@@ -116,26 +113,48 @@ describe('PurchaseOrdersService', () => {
   });
 
   beforeEach(async () => {
-    $transaction.mockReset().mockImplementation((fn: (t: typeof tx) => unknown) => fn(tx));
+    $transaction
+      .mockReset()
+      .mockImplementation((fn: (t: typeof tx) => unknown) => fn(tx));
     txSupplierFindUnique
       .mockReset()
-      .mockResolvedValue({ id: SUPPLIER_ID, companyName: 'Office Depot', isActive: true });
+      .mockResolvedValue({
+        id: SUPPLIER_ID,
+        companyName: 'Office Depot',
+        isActive: true,
+      });
     txProductFindMany.mockReset().mockResolvedValue([
       { id: PRODUCT_A, isActive: true },
       { id: PRODUCT_B, isActive: true },
     ]);
     txPurchaseOrderCount.mockReset().mockResolvedValue(0);
-    txPurchaseOrderCreate.mockReset().mockResolvedValue(detailRow(PurchaseOrderStatus.DRAFT));
+    txPurchaseOrderCreate
+      .mockReset()
+      .mockResolvedValue(detailRow(PurchaseOrderStatus.DRAFT));
     // First call: the narrow transition/receive validation read; later
     // calls: the detail re-read after the write.
     txPurchaseOrderFindUnique
       .mockReset()
-      .mockResolvedValueOnce({ id: PO_ID, orderNumber: 'PO-0001', status: 'DRAFT' })
+      .mockResolvedValueOnce({
+        id: PO_ID,
+        orderNumber: 'PO-0001',
+        status: 'DRAFT',
+      })
       .mockResolvedValue(detailRow(PurchaseOrderStatus.DRAFT));
     txPurchaseOrderUpdateMany.mockReset().mockResolvedValue({ count: 1 });
     txPurchaseOrderItemFindMany.mockReset().mockResolvedValue([
-      { id: 'line-a', productId: PRODUCT_A, quantityOrdered: 10, quantityReceived: 0 },
-      { id: 'line-b', productId: PRODUCT_B, quantityOrdered: 4, quantityReceived: 0 },
+      {
+        id: 'line-a',
+        productId: PRODUCT_A,
+        quantityOrdered: 10,
+        quantityReceived: 0,
+      },
+      {
+        id: 'line-b',
+        productId: PRODUCT_B,
+        quantityOrdered: 4,
+        quantityReceived: 0,
+      },
     ]);
     txPurchaseOrderItemUpdateMany.mockReset().mockResolvedValue({ count: 1 });
     purchaseOrderCount.mockReset().mockResolvedValue(0);
@@ -152,9 +171,22 @@ describe('PurchaseOrdersService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PurchaseOrdersService,
-        { provide: PrismaService, useValue: { $transaction, purchaseOrder: { count: purchaseOrderCount, findMany: purchaseOrderFindMany, findUnique: purchaseOrderFindUnique } } },
+        {
+          provide: PrismaService,
+          useValue: {
+            $transaction,
+            purchaseOrder: {
+              count: purchaseOrderCount,
+              findMany: purchaseOrderFindMany,
+              findUnique: purchaseOrderFindUnique,
+            },
+          },
+        },
         { provide: StockService, useValue: { applyStockChange } },
-        { provide: NotificationsService, useValue: { notifyPurchaseOrderReceived } },
+        {
+          provide: NotificationsService,
+          useValue: { notifyPurchaseOrderReceived },
+        },
       ],
     }).compile();
 
@@ -174,7 +206,12 @@ describe('PurchaseOrdersService', () => {
           orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
         }),
       );
-      expect(result.meta).toEqual({ page: 1, limit: 20, total: 0, totalPages: 0 });
+      expect(result.meta).toEqual({
+        page: 1,
+        limit: 20,
+        total: 0,
+        totalPages: 0,
+      });
     });
 
     it('filters by status and supplier and sorts by whitelisted fields', async () => {
@@ -187,7 +224,10 @@ describe('PurchaseOrdersService', () => {
 
       expect(purchaseOrderFindMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { status: PurchaseOrderStatus.ORDERED, supplierId: SUPPLIER_ID },
+          where: {
+            status: PurchaseOrderStatus.ORDERED,
+            supplierId: SUPPLIER_ID,
+          },
           orderBy: [{ status: 'asc' }, { id: 'asc' }],
         }),
       );
@@ -200,9 +240,15 @@ describe('PurchaseOrdersService', () => {
 
       expect(purchaseOrderFindUnique).toHaveBeenCalledWith({
         where: { id: PO_ID },
-        select: expect.objectContaining({ supplier: expect.anything(), items: expect.anything() }),
+        select: expect.objectContaining({
+          supplier: expect.anything(),
+          items: expect.anything(),
+        }),
       });
-      expect(result.supplier).toEqual({ id: SUPPLIER_ID, companyName: 'Office Depot' });
+      expect(result.supplier).toEqual({
+        id: SUPPLIER_ID,
+        companyName: 'Office Depot',
+      });
       expect(result.items).toHaveLength(2);
       expect(result.items[0].unitCost).toBe(1.99);
     });
@@ -210,7 +256,9 @@ describe('PurchaseOrdersService', () => {
     it('404s a missing purchase order', async () => {
       purchaseOrderFindUnique.mockReset().mockResolvedValue(null);
 
-      await expect(service.findOne(PO_ID)).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.findOne(PO_ID)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
     });
   });
 
@@ -267,7 +315,10 @@ describe('PurchaseOrdersService', () => {
 
     it('passes expectedAt and notes through', async () => {
       await service.create(
-        createDto({ expectedAt: '2026-11-15T00:00:00.000Z', notes: 'Restock for November' }),
+        createDto({
+          expectedAt: '2026-11-15T00:00:00.000Z',
+          notes: 'Restock for November',
+        }),
         USER_ID,
       );
 
@@ -371,11 +422,17 @@ describe('PurchaseOrdersService', () => {
     it('DRAFT → CANCELLED is allowed', async () => {
       txPurchaseOrderFindUnique
         .mockReset()
-        .mockResolvedValueOnce({ id: PO_ID, orderNumber: 'PO-0001', status: 'DRAFT' })
+        .mockResolvedValueOnce({
+          id: PO_ID,
+          orderNumber: 'PO-0001',
+          status: 'DRAFT',
+        })
         .mockResolvedValue(detailRow(PurchaseOrderStatus.CANCELLED));
 
       await expect(
-        service.updateStatus(PO_ID, { newStatus: PurchaseOrderStatus.CANCELLED } as never),
+        service.updateStatus(PO_ID, {
+          newStatus: PurchaseOrderStatus.CANCELLED,
+        } as never),
       ).resolves.toBeDefined();
       expect(txPurchaseOrderUpdateMany).toHaveBeenCalledWith({
         where: { id: PO_ID, status: PurchaseOrderStatus.DRAFT },
@@ -386,15 +443,29 @@ describe('PurchaseOrdersService', () => {
     it('ORDERED → CANCELLED is allowed', async () => {
       txPurchaseOrderFindUnique
         .mockReset()
-        .mockResolvedValueOnce({ id: PO_ID, orderNumber: 'PO-0001', status: 'ORDERED' })
+        .mockResolvedValueOnce({
+          id: PO_ID,
+          orderNumber: 'PO-0001',
+          status: 'ORDERED',
+        })
         .mockResolvedValue(detailRow(PurchaseOrderStatus.CANCELLED));
 
       await expect(
-        service.updateStatus(PO_ID, { newStatus: PurchaseOrderStatus.CANCELLED } as never),
+        service.updateStatus(PO_ID, {
+          newStatus: PurchaseOrderStatus.CANCELLED,
+        } as never),
       ).resolves.toBeDefined();
     });
 
-    it('rejects DRAFT → PARTIALLY_RECEIVED with 409 (receiving only)', async () => {
+    it('rejects ORDERED → PARTIALLY_RECEIVED with 409 (receiving only)', async () => {
+      txPurchaseOrderFindUnique
+        .mockReset()
+        .mockResolvedValue({
+          id: PO_ID,
+          orderNumber: 'PO-0001',
+          status: 'ORDERED',
+        });
+
       await expect(
         service.updateStatus(PO_ID, {
           newStatus: PurchaseOrderStatus.PARTIALLY_RECEIVED,
@@ -406,36 +477,56 @@ describe('PurchaseOrdersService', () => {
     it('rejects ORDERED → RECEIVED with 409 (receiving only)', async () => {
       txPurchaseOrderFindUnique
         .mockReset()
-        .mockResolvedValue({ id: PO_ID, orderNumber: 'PO-0001', status: 'ORDERED' });
+        .mockResolvedValue({
+          id: PO_ID,
+          orderNumber: 'PO-0001',
+          status: 'ORDERED',
+        });
 
       await expect(
-        service.updateStatus(PO_ID, { newStatus: PurchaseOrderStatus.RECEIVED } as never),
+        service.updateStatus(PO_ID, {
+          newStatus: PurchaseOrderStatus.RECEIVED,
+        } as never),
       ).rejects.toBeInstanceOf(ConflictException);
     });
 
     it('rejects re-touching the current status with 409', async () => {
       await expect(
-        service.updateStatus(PO_ID, { newStatus: PurchaseOrderStatus.DRAFT } as never),
+        service.updateStatus(PO_ID, {
+          newStatus: PurchaseOrderStatus.DRAFT,
+        } as never),
       ).rejects.toBeInstanceOf(ConflictException);
     });
 
     it('rejects PARTIALLY_RECEIVED → CANCELLED with 409 (receiving state)', async () => {
       txPurchaseOrderFindUnique
         .mockReset()
-        .mockResolvedValue({ id: PO_ID, orderNumber: 'PO-0001', status: 'PARTIALLY_RECEIVED' });
+        .mockResolvedValue({
+          id: PO_ID,
+          orderNumber: 'PO-0001',
+          status: 'PARTIALLY_RECEIVED',
+        });
 
       await expect(
-        service.updateStatus(PO_ID, { newStatus: PurchaseOrderStatus.CANCELLED } as never),
+        service.updateStatus(PO_ID, {
+          newStatus: PurchaseOrderStatus.CANCELLED,
+        } as never),
       ).rejects.toBeInstanceOf(ConflictException);
     });
 
     it('a cancelled purchase order is terminal (409)', async () => {
       txPurchaseOrderFindUnique
         .mockReset()
-        .mockResolvedValue({ id: PO_ID, orderNumber: 'PO-0001', status: 'CANCELLED' });
+        .mockResolvedValue({
+          id: PO_ID,
+          orderNumber: 'PO-0001',
+          status: 'CANCELLED',
+        });
 
       await expect(
-        service.updateStatus(PO_ID, { newStatus: PurchaseOrderStatus.ORDERED } as never),
+        service.updateStatus(PO_ID, {
+          newStatus: PurchaseOrderStatus.ORDERED,
+        } as never),
       ).rejects.toBeInstanceOf(ConflictException);
       expect(txPurchaseOrderUpdateMany).not.toHaveBeenCalled();
     });
@@ -444,7 +535,9 @@ describe('PurchaseOrdersService', () => {
       txPurchaseOrderFindUnique.mockReset().mockResolvedValue(null);
 
       await expect(
-        service.updateStatus(PO_ID, { newStatus: PurchaseOrderStatus.ORDERED } as never),
+        service.updateStatus(PO_ID, {
+          newStatus: PurchaseOrderStatus.ORDERED,
+        } as never),
       ).rejects.toBeInstanceOf(NotFoundException);
     });
 
@@ -452,7 +545,9 @@ describe('PurchaseOrdersService', () => {
       txPurchaseOrderUpdateMany.mockReset().mockResolvedValue({ count: 0 });
 
       await expect(
-        service.updateStatus(PO_ID, { newStatus: PurchaseOrderStatus.ORDERED } as never),
+        service.updateStatus(PO_ID, {
+          newStatus: PurchaseOrderStatus.ORDERED,
+        } as never),
       ).rejects.toBeInstanceOf(ConflictException);
     });
 
@@ -467,7 +562,9 @@ describe('PurchaseOrdersService', () => {
         .mockImplementation((fn: (t: typeof tx) => unknown) => fn(tx));
 
       await expect(
-        service.updateStatus(PO_ID, { newStatus: PurchaseOrderStatus.ORDERED } as never),
+        service.updateStatus(PO_ID, {
+          newStatus: PurchaseOrderStatus.ORDERED,
+        } as never),
       ).resolves.toBeDefined();
       expect($transaction).toHaveBeenCalledTimes(2);
     });
@@ -477,17 +574,41 @@ describe('PurchaseOrdersService', () => {
     it('fully receives the order: RECEIVED + receivedAt + stock + movements + notification', async () => {
       txPurchaseOrderFindUnique
         .mockReset()
-        .mockResolvedValueOnce({ id: PO_ID, orderNumber: 'PO-0001', status: 'ORDERED' })
+        .mockResolvedValueOnce({
+          id: PO_ID,
+          orderNumber: 'PO-0001',
+          status: 'ORDERED',
+        })
         .mockResolvedValue(detailRow(PurchaseOrderStatus.RECEIVED, 10, 4));
       txPurchaseOrderItemFindMany
         .mockReset()
         .mockResolvedValueOnce([
-          { id: 'line-a', productId: PRODUCT_A, quantityOrdered: 10, quantityReceived: 0 },
-          { id: 'line-b', productId: PRODUCT_B, quantityOrdered: 4, quantityReceived: 0 },
+          {
+            id: 'line-a',
+            productId: PRODUCT_A,
+            quantityOrdered: 10,
+            quantityReceived: 0,
+          },
+          {
+            id: 'line-b',
+            productId: PRODUCT_B,
+            quantityOrdered: 4,
+            quantityReceived: 0,
+          },
         ])
         .mockResolvedValueOnce([
-          { id: 'line-a', productId: PRODUCT_A, quantityOrdered: 10, quantityReceived: 10 },
-          { id: 'line-b', productId: PRODUCT_B, quantityOrdered: 4, quantityReceived: 4 },
+          {
+            id: 'line-a',
+            productId: PRODUCT_A,
+            quantityOrdered: 10,
+            quantityReceived: 10,
+          },
+          {
+            id: 'line-b',
+            productId: PRODUCT_B,
+            quantityOrdered: 4,
+            quantityReceived: 4,
+          },
         ]);
 
       const result = await service.receive(
@@ -546,12 +667,28 @@ describe('PurchaseOrdersService', () => {
     it('a partially received PO stays PARTIALLY_RECEIVED without receivedAt', async () => {
       txPurchaseOrderFindUnique
         .mockReset()
-        .mockResolvedValueOnce({ id: PO_ID, orderNumber: 'PO-0001', status: 'ORDERED' })
-        .mockResolvedValue(detailRow(PurchaseOrderStatus.PARTIALLY_RECEIVED, 4, 0));
+        .mockResolvedValueOnce({
+          id: PO_ID,
+          orderNumber: 'PO-0001',
+          status: 'ORDERED',
+        })
+        .mockResolvedValue(
+          detailRow(PurchaseOrderStatus.PARTIALLY_RECEIVED, 4, 0),
+        );
       txPurchaseOrderItemFindMany.mockReset().mockResolvedValue([
         // re-read after the line writes: line A took 4 of 10, line B still 0
-        { id: 'line-a', productId: PRODUCT_A, quantityOrdered: 10, quantityReceived: 4 },
-        { id: 'line-b', productId: PRODUCT_B, quantityOrdered: 4, quantityReceived: 0 },
+        {
+          id: 'line-a',
+          productId: PRODUCT_A,
+          quantityOrdered: 10,
+          quantityReceived: 4,
+        },
+        {
+          id: 'line-b',
+          productId: PRODUCT_B,
+          quantityOrdered: 4,
+          quantityReceived: 0,
+        },
       ]);
 
       const result = await service.receive(
@@ -582,12 +719,32 @@ describe('PurchaseOrdersService', () => {
       txPurchaseOrderItemFindMany
         .mockReset()
         .mockResolvedValueOnce([
-          { id: 'line-a', productId: PRODUCT_A, quantityOrdered: 10, quantityReceived: 10 },
-          { id: 'line-b', productId: PRODUCT_B, quantityOrdered: 4, quantityReceived: 0 },
+          {
+            id: 'line-a',
+            productId: PRODUCT_A,
+            quantityOrdered: 10,
+            quantityReceived: 10,
+          },
+          {
+            id: 'line-b',
+            productId: PRODUCT_B,
+            quantityOrdered: 4,
+            quantityReceived: 0,
+          },
         ])
         .mockResolvedValueOnce([
-          { id: 'line-a', productId: PRODUCT_A, quantityOrdered: 10, quantityReceived: 10 },
-          { id: 'line-b', productId: PRODUCT_B, quantityOrdered: 4, quantityReceived: 4 },
+          {
+            id: 'line-a',
+            productId: PRODUCT_A,
+            quantityOrdered: 10,
+            quantityReceived: 10,
+          },
+          {
+            id: 'line-b',
+            productId: PRODUCT_B,
+            quantityOrdered: 4,
+            quantityReceived: 4,
+          },
         ]);
 
       const result = await service.receive(
@@ -621,9 +778,16 @@ describe('PurchaseOrdersService', () => {
     });
 
     it('rejects receiving into an already partially over-received line (409)', async () => {
-      txPurchaseOrderItemFindMany.mockReset().mockResolvedValue([
-        { id: 'line-a', productId: PRODUCT_A, quantityOrdered: 10, quantityReceived: 9 },
-      ]);
+      txPurchaseOrderItemFindMany
+        .mockReset()
+        .mockResolvedValue([
+          {
+            id: 'line-a',
+            productId: PRODUCT_A,
+            quantityOrdered: 10,
+            quantityReceived: 9,
+          },
+        ]);
 
       await expect(
         service.receive(
@@ -638,12 +802,18 @@ describe('PurchaseOrdersService', () => {
     it('400s a product that is not a line of the purchase order', async () => {
       txPurchaseOrderFindUnique
         .mockReset()
-        .mockResolvedValue({ id: PO_ID, orderNumber: 'PO-0001', status: 'ORDERED' });
+        .mockResolvedValue({
+          id: PO_ID,
+          orderNumber: 'PO-0001',
+          status: 'ORDERED',
+        });
 
       await expect(
         service.receive(
           PO_ID,
-          receiveDto([{ productId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', quantity: 1 }]),
+          receiveDto([
+            { productId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', quantity: 1 },
+          ]),
           USER_ID,
           'ADMIN',
         ),
@@ -654,7 +824,11 @@ describe('PurchaseOrdersService', () => {
     it('400s duplicate productId lines in the receive body', async () => {
       txPurchaseOrderFindUnique
         .mockReset()
-        .mockResolvedValue({ id: PO_ID, orderNumber: 'PO-0001', status: 'ORDERED' });
+        .mockResolvedValue({
+          id: PO_ID,
+          orderNumber: 'PO-0001',
+          status: 'ORDERED',
+        });
 
       await expect(
         service.receive(
@@ -671,7 +845,12 @@ describe('PurchaseOrdersService', () => {
 
     it('409s a DRAFT purchase order (order it first)', async () => {
       await expect(
-        service.receive(PO_ID, receiveDto([{ productId: PRODUCT_A, quantity: 1 }]), USER_ID, 'ADMIN'),
+        service.receive(
+          PO_ID,
+          receiveDto([{ productId: PRODUCT_A, quantity: 1 }]),
+          USER_ID,
+          'ADMIN',
+        ),
       ).rejects.toBeInstanceOf(ConflictException);
       expect(txPurchaseOrderItemUpdateMany).not.toHaveBeenCalled();
     });
@@ -679,10 +858,19 @@ describe('PurchaseOrdersService', () => {
     it('409s a CANCELLED purchase order', async () => {
       txPurchaseOrderFindUnique
         .mockReset()
-        .mockResolvedValue({ id: PO_ID, orderNumber: 'PO-0001', status: 'CANCELLED' });
+        .mockResolvedValue({
+          id: PO_ID,
+          orderNumber: 'PO-0001',
+          status: 'CANCELLED',
+        });
 
       await expect(
-        service.receive(PO_ID, receiveDto([{ productId: PRODUCT_A, quantity: 1 }]), USER_ID, 'ADMIN'),
+        service.receive(
+          PO_ID,
+          receiveDto([{ productId: PRODUCT_A, quantity: 1 }]),
+          USER_ID,
+          'ADMIN',
+        ),
       ).rejects.toBeInstanceOf(ConflictException);
       expect(applyStockChange).not.toHaveBeenCalled();
     });
@@ -690,10 +878,19 @@ describe('PurchaseOrdersService', () => {
     it('409s an already RECEIVED purchase order', async () => {
       txPurchaseOrderFindUnique
         .mockReset()
-        .mockResolvedValue({ id: PO_ID, orderNumber: 'PO-0001', status: 'RECEIVED' });
+        .mockResolvedValue({
+          id: PO_ID,
+          orderNumber: 'PO-0001',
+          status: 'RECEIVED',
+        });
 
       await expect(
-        service.receive(PO_ID, receiveDto([{ productId: PRODUCT_A, quantity: 1 }]), USER_ID, 'ADMIN'),
+        service.receive(
+          PO_ID,
+          receiveDto([{ productId: PRODUCT_A, quantity: 1 }]),
+          USER_ID,
+          'ADMIN',
+        ),
       ).rejects.toBeInstanceOf(ConflictException);
       expect(applyStockChange).not.toHaveBeenCalled();
     });
@@ -702,7 +899,12 @@ describe('PurchaseOrdersService', () => {
       txPurchaseOrderFindUnique.mockReset().mockResolvedValue(null);
 
       await expect(
-        service.receive(PO_ID, receiveDto([{ productId: PRODUCT_A, quantity: 1 }]), USER_ID, 'ADMIN'),
+        service.receive(
+          PO_ID,
+          receiveDto([{ productId: PRODUCT_A, quantity: 1 }]),
+          USER_ID,
+          'ADMIN',
+        ),
       ).rejects.toBeInstanceOf(NotFoundException);
       expect(txPurchaseOrderItemUpdateMany).not.toHaveBeenCalled();
       expect(applyStockChange).not.toHaveBeenCalled();
@@ -712,12 +914,23 @@ describe('PurchaseOrdersService', () => {
     it('a failing stock write aborts the receive (no partial data leaves the tx)', async () => {
       txPurchaseOrderFindUnique
         .mockReset()
-        .mockResolvedValueOnce({ id: PO_ID, orderNumber: 'PO-0001', status: 'ORDERED' })
-        .mockResolvedValue(detailRow(PurchaseOrderStatus.PARTIALLY_RECEIVED, 5, 0));
+        .mockResolvedValueOnce({
+          id: PO_ID,
+          orderNumber: 'PO-0001',
+          status: 'ORDERED',
+        })
+        .mockResolvedValue(
+          detailRow(PurchaseOrderStatus.PARTIALLY_RECEIVED, 5, 0),
+        );
       applyStockChange
         .mockReset()
-        .mockResolvedValueOnce({ movement: { id: 'm1' }, product: { id: PRODUCT_A } })
-        .mockRejectedValueOnce(new UnprocessableEntityException('Product B is inactive'));
+        .mockResolvedValueOnce({
+          movement: { id: 'm1' },
+          product: { id: PRODUCT_A },
+        })
+        .mockRejectedValueOnce(
+          new UnprocessableEntityException('Product B is inactive'),
+        );
 
       await expect(
         service.receive(
@@ -745,15 +958,26 @@ describe('PurchaseOrdersService', () => {
       });
       txPurchaseOrderFindUnique
         .mockReset()
-        .mockResolvedValueOnce({ id: PO_ID, orderNumber: 'PO-0001', status: 'ORDERED' })
-        .mockResolvedValue(detailRow(PurchaseOrderStatus.PARTIALLY_RECEIVED, 10, 0));
+        .mockResolvedValueOnce({
+          id: PO_ID,
+          orderNumber: 'PO-0001',
+          status: 'ORDERED',
+        })
+        .mockResolvedValue(
+          detailRow(PurchaseOrderStatus.PARTIALLY_RECEIVED, 10, 0),
+        );
       $transaction
         .mockReset()
         .mockRejectedValueOnce(conflict)
         .mockImplementation((fn: (t: typeof tx) => unknown) => fn(tx));
 
       await expect(
-        service.receive(PO_ID, receiveDto([{ productId: PRODUCT_A, quantity: 10 }]), USER_ID, 'ADMIN'),
+        service.receive(
+          PO_ID,
+          receiveDto([{ productId: PRODUCT_A, quantity: 10 }]),
+          USER_ID,
+          'ADMIN',
+        ),
       ).resolves.toBeDefined();
       expect($transaction).toHaveBeenCalledTimes(2);
     });

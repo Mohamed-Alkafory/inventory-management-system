@@ -17,7 +17,11 @@ import { ReceivePurchaseOrderItemDto } from './receive-item.dto.js';
  * per line — all inside ONE transaction.
  */
 export class ReceivePurchaseOrderDto {
-  @ApiProperty({ type: [ReceivePurchaseOrderItemDto], minItems: 1, maxItems: 100 })
+  @ApiProperty({
+    type: [ReceivePurchaseOrderItemDto],
+    minItems: 1,
+    maxItems: 100,
+  })
   @IsArray()
   @ArrayMinSize(1)
   @ArrayMaxSize(100)
