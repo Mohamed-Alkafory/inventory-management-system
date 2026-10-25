@@ -101,3 +101,15 @@ Stock/order/purchase-order flows call the notifications service **after their tr
 - Stock enters the shop **exclusively** through `POST /:id/receive`, one `PURCHASE_RECEIPT` movement per line via the shared stock write (AD-005). A purchase order never moves stock at creation, ordering or cancellation.
 - Receiving is all-or-nothing: `quantityReceived`, product quantity, movements, status and `receivedAt` change in ONE Serializable transaction; over-receiving is 409.
 - `unitCost` is client input (supplier pricing); `totalAmount` is server-computed. `orderNumber` is `PO-####` from the row count, retried once on a P2002 race.
+
+## AD-009 — Dashboard is ADMIN-only and values stock at cost (issue #33)
+
+**Status:** Accepted · **Date:** 2026-10-25
+
+All `/dashboard/*` routes are **ADMIN-only** (`@Roles('ADMIN')`). The payloads expose revenue and cost-basis stock value, which AD-004 keeps off STAFF screens; a separate STAFF view is deliberately not provided in v1.
+
+- **Stock value basis:** `SUM(quantity * costPrice)` over **active** products, with a NULL `costPrice` counting as 0. The price-based alternative (`quantity * price`) would overstate inventory worth; cost matches what the shop actually invested. The docs and Swagger say so explicitly.
+- **Counts** (`totalProducts`, `totalStockUnits`, `lowStockCount`, `outOfStockCount`) cover active products only.
+- **Revenue/sales/top-products** exclude `CANCELLED` orders and include `PENDING` + `CONFIRMED` (stock leaves at creation — AD-002), so figures agree with the movement history.
+- **Ranges:** optional `from`/`to` (both or neither; default last 30 days; `from <= to`; at most **92 days**) — violations are 400. Day buckets are UTC and every day in the range is present (zero-filled), so charts never need gap handling.
+- **Query choice:** Prisma `aggregate`/`groupBy`/`count` first; `$queryRaw` only for what Prisma cannot express — the two column-math expressions and UTC `date_trunc` grouping — always parameterized with no string interpolation of user input.
