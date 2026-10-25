@@ -1,3 +1,5 @@
+import 'dotenv/config';
+
 /**
  * The e2e suites replace Prisma with an in-memory fake, so they must not depend
  * on a developer's local `.env` (or a running database) to boot the app module.

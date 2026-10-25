@@ -16,7 +16,9 @@ import {
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { CreateOrderDto } from './dto/create-order.dto.js';
+import { UpdateOrderDto } from './dto/update-order.dto.js';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto.js';
+import { ListOrdersQueryDto } from './dto/list-orders.query.dto.js';
 
 /**
  * Contract §3.7 `Order` scalar shape. `totalAmount` is Decimal(12,2) in the
@@ -51,6 +53,25 @@ export interface OrderItemResponse {
 /** `POST /orders` response — the order plus its items (201). */
 export interface CreatedOrderResponse extends OrderResponse {
   items: OrderItemResponse[];
+}
+
+export interface OrderDetailResponse extends OrderResponse {
+  items: OrderItemResponse[];
+  createdBy: { id: string; name: string; email: string };
+  stockMovements: Array<{
+    id: string;
+    productId: string;
+    type: StockMovementType;
+    quantityChange: number;
+    quantityAfter: number;
+    reason: string | null;
+    createdAt: Date;
+  }>;
+}
+
+export interface OrderListResponse {
+  data: OrderResponse[];
+  meta: { page: number; limit: number; total: number; totalPages: number };
 }
 
 const ORDER_SELECT = {
@@ -402,6 +423,158 @@ export class OrdersService {
     }
 
     return { ...serializeOrder(updated), items: items.map(serializeItem) };
+  }
+
+  /**
+   * `GET /orders` — paginated, filterable by status, createdById, search, date range,
+   * sorted by status or createdAt.
+   */
+  async findAll(query: ListOrdersQueryDto): Promise<OrderListResponse> {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const sortBy = query.sortBy ?? 'createdAt';
+    const sortOrder = query.sortOrder ?? 'desc';
+
+    if (query.from && query.to && new Date(query.from) > new Date(query.to)) {
+      throw new BadRequestException(
+        'from date must be before or equal to to date',
+      );
+    }
+
+    const where: Prisma.OrderWhereInput = {
+      ...(query.status ? { status: query.status } : {}),
+      ...(query.createdById ? { createdById: query.createdById } : {}),
+      ...(query.search
+        ? {
+            OR: [
+              { orderNumber: { contains: query.search, mode: 'insensitive' } },
+              { customerName: { contains: query.search, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+      ...(query.from || query.to
+        ? {
+            createdAt: {
+              ...(query.from ? { gte: new Date(query.from) } : {}),
+              ...(query.to ? { lte: new Date(query.to) } : {}),
+            },
+          }
+        : {}),
+    };
+
+    const [total, orders] = await Promise.all([
+      this.prisma.order.count({ where }),
+      this.prisma.order.findMany({
+        where,
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: [
+          { [sortBy]: sortOrder } as Prisma.OrderOrderByWithRelationInput,
+          { id: 'asc' },
+        ],
+        select: ORDER_SELECT,
+      }),
+    ]);
+
+    return {
+      data: orders.map(serializeOrder),
+      meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    };
+  }
+
+  /**
+   * `GET /orders/:id` — returns order fields plus items[], createdBy, and stockMovements[].
+   */
+  async findOne(id: string): Promise<OrderDetailResponse> {
+    const order = await this.prisma.order.findUnique({
+      where: { id },
+      include: {
+        orderItems: {
+          select: ORDER_ITEM_SELECT,
+        },
+        createdBy: {
+          select: { id: true, name: true, email: true },
+        },
+        stockMovements: {
+          select: {
+            id: true,
+            productId: true,
+            type: true,
+            quantityChange: true,
+            quantityAfter: true,
+            reason: true,
+            createdAt: true,
+          },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    });
+
+    if (!order) {
+      throw new NotFoundException(`Order ${id} not found`);
+    }
+
+    return {
+      ...serializeOrder(order),
+      items: order.orderItems.map(serializeItem),
+      createdBy: order.createdBy,
+      stockMovements: order.stockMovements,
+    };
+  }
+
+  /**
+   * `PATCH /orders/:id` — metadata update only (customerName, customerPhone, notes).
+   * Contract §3.7: Allowed only while order is PENDING; 422 if not PENDING.
+   */
+  async update(
+    id: string,
+    dto: UpdateOrderDto,
+    userId: string,
+  ): Promise<OrderResponse> {
+    const order = await this.prisma.order.findUnique({
+      where: { id },
+      select: ORDER_SELECT,
+    });
+
+    if (!order) {
+      throw new NotFoundException(`Order ${id} not found`);
+    }
+
+    if (order.status !== OrderStatus.PENDING) {
+      throw new UnprocessableEntityException(
+        `Order ${id} is ${order.status}; only PENDING orders can be edited`,
+      );
+    }
+
+    const data: Prisma.OrderUpdateInput = {};
+    if (dto.customerName !== undefined) data.customerName = dto.customerName;
+    if (dto.customerPhone !== undefined) data.customerPhone = dto.customerPhone;
+    if (dto.notes !== undefined) data.notes = dto.notes;
+
+    const updated = await this.prisma.order.update({
+      where: { id },
+      data,
+      select: ORDER_SELECT,
+    });
+
+    await this.audit.log({
+      userId,
+      action: 'order.updated',
+      entityType: 'order',
+      entityId: id,
+      oldValues: {
+        customerName: order.customerName,
+        customerPhone: order.customerPhone,
+        notes: order.notes,
+      },
+      newValues: {
+        customerName: updated.customerName,
+        customerPhone: updated.customerPhone,
+        notes: updated.notes,
+      },
+    });
+
+    return serializeOrder(updated);
   }
 
   /** Users-module pattern: retry a Serializable write conflict once. */
