@@ -185,6 +185,8 @@ function createFakePrisma(db: FakeDb) {
           if (
             (args.where['id'] === undefined ||
               token['id'] === args.where['id']) &&
+            (args.where['userId'] === undefined ||
+              token['userId'] === args.where['userId']) &&
             (args.where['revokedAt'] === undefined ||
               token['revokedAt'] === args.where['revokedAt'])
           ) {
