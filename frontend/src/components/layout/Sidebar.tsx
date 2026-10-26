@@ -1,5 +1,6 @@
-import { NavLink } from "react-router-dom";
+import { Link, NavLink } from "react-router-dom";
 import { X } from "lucide-react";
+import ProdexaLogo from "../Logo";
 import { APP_NAME } from "../../config";
 import { useAuth } from "../../context/auth/useAuth";
 import { navItems } from "./navItems";
@@ -10,6 +11,7 @@ function Item({ item }: { item: NavItem }) {
   return (
     <NavLink
       to={item.to}
+      end={item.to === "/"}
       className={({ isActive }) =>
         `group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF5A26] ${
           isActive
@@ -50,12 +52,15 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
         }`}
       >
         <div className="flex h-16 shrink-0 items-center justify-between px-5">
-          <div className="flex items-center gap-2.5">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#FF5A26] text-sm font-extrabold text-white">
-              {APP_NAME.charAt(0)}
-            </span>
-            <span className="text-lg font-extrabold tracking-wide text-[#0E2A66]">{APP_NAME.toUpperCase()}</span>
-          </div>
+          <Link
+            to="/"
+            onClick={onClose}
+            aria-label={`${APP_NAME} home`}
+            title="Back to home"
+            className="inline-flex rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF5A26]"
+          >
+            <ProdexaLogo />
+          </Link>
           <button
             type="button"
             onClick={onClose}

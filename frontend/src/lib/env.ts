@@ -1,9 +1,13 @@
 /**
  * Backend base URL. The Nest backend serves everything under the global prefix `/api/v1`.
- * Set VITE_API_URL in .env (e.g. http://localhost:3000/api/v1); the fallback covers local dev.
+ *
+ * Development uses Vite's `/api` proxy (see `vite.config.ts`), so the default is
+ * a relative URL and requests stay same-origin. Set `VITE_API_URL` when the API
+ * is deployed on another origin, or for a production deployment without a proxy.
  */
-export const API_URL: string =
-  import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? "http://localhost:3000/api/v1" : "/api/v1");
+const configuredApiUrl = import.meta.env.VITE_API_URL?.trim();
+
+export const API_URL: string = configuredApiUrl || "/api/v1";
 
 /** Mock switch: set VITE_USE_MOCK=true to work without the backend. */
 export const USE_MOCK: boolean = import.meta.env.VITE_USE_MOCK === "true";
