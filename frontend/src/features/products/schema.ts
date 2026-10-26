@@ -13,6 +13,12 @@ const amount = (label: string) =>
     .min(1, `${label} is required`)
     .refine((v) => v === "" || /^\d+(\.\d{1,2})?$/.test(v), `${label} must be a number with up to 2 decimals`);
 
+const optionalAmount = (label: string) =>
+  z
+    .string()
+    .trim()
+    .refine((v) => v === "" || /^\d+(\.\d{1,2})?$/.test(v), `${label} must be a number with up to 2 decimals`);
+
 const isHttpUrl = (v: string) => {
   try {
     const u = new URL(v);
@@ -31,9 +37,10 @@ export const productSchema = z.object({
     .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/, "Use letters, numbers, dots, dashes or underscores"),
   name: z.string().trim().min(1, "Name is required").max(120, "Name must be 120 characters or fewer"),
   price: amount("Price"),
-  costPrice: amount("Cost price"),
+  costPrice: optionalAmount("Cost price"),
   categoryId: z.string().min(1, "Select a category"),
-  supplierId: z.string().min(1, "Select a supplier"),
+  // Optional on the backend: a product may have no supplier.
+  supplierId: z.string(),
   minStock: z
     .string()
     .trim()
@@ -63,9 +70,9 @@ export function toDefaults(p?: Product): ProductFormValues {
     sku: p?.sku ?? "",
     name: p?.name ?? "",
     price: p ? String(p.price) : "",
-    costPrice: p ? String(p.costPrice) : "",
+    costPrice: p?.costPrice != null ? String(p.costPrice) : "",
     categoryId: p ? String(p.categoryId) : "",
-    supplierId: p ? String(p.supplierId) : "",
+    supplierId: p?.supplierId != null ? String(p.supplierId) : "",
     minStock: p ? String(p.minStock) : "0",
     imageUrl: p?.imageUrl ?? "",
     barcode: p?.barcode ?? "",
@@ -80,9 +87,9 @@ export function toPayload(v: ProductFormValues) {
     sku: v.sku,
     name: v.name,
     price: Number(v.price),
-    costPrice: Number(v.costPrice),
+    costPrice: v.costPrice === "" ? null : Number(v.costPrice),
     categoryId: asId(v.categoryId),
-    supplierId: asId(v.supplierId),
+    supplierId: v.supplierId === "" ? null : asId(v.supplierId),
     minStock: Number(v.minStock),
     imageUrl: v.imageUrl || null,
     barcode: v.barcode || null,

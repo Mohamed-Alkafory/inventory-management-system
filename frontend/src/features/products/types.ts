@@ -10,9 +10,9 @@ export interface Product {
   sku: string;
   name: string;
   price: number;
-  costPrice: number;
+  costPrice?: number | null;
   categoryId: Id;
-  supplierId: Id;
+  supplierId?: Id | null;
   minStock: number;
   imageUrl?: string | null;
   barcode?: string | null;

@@ -271,7 +271,8 @@ export class ProductsService {
     // category/supplier. Checked up front so the API error is precise
     // (a DB FK failure would surface as a generic P2003 conflict).
     await this.assertCategoryExists(dto.categoryId);
-    if (dto.supplierId !== undefined) {
+    // Explicit `null` means "no supplier", the same as omitting the field.
+    if (dto.supplierId !== undefined && dto.supplierId !== null) {
       await this.assertSupplierExists(dto.supplierId);
     }
 

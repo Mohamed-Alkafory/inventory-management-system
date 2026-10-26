@@ -27,10 +27,15 @@ port). Path alias `@` maps to `src/` (see `vite.config.ts` and
 
 ## Environment
 
-`VITE_API_URL` (`frontend/.env.example`, e.g. `http://localhost:3000`) is
-reserved for the future API client — **no code reads it yet**, so no
-`frontend/.env` is needed today. Create one (`cp frontend/.env.example
-frontend/.env`) once frontend code uses `import.meta.env`.
+`VITE_API_URL` is the Nest API base URL **including the global `/api/v1`
+prefix** (e.g. `http://localhost:3000/api/v1`). Copy `frontend/.env.example`
+to `frontend/.env` and adjust it if your backend runs elsewhere. When the
+variable is unset, development falls back to `http://localhost:3000/api/v1`
+and production uses the same-origin `/api/v1`.
+
+Set `VITE_USE_MOCK=true` to run the auth/product list against the in-memory
+mocks instead of the backend. `VITE_USE_MOCK_API=true` does the same for the
+categories/suppliers screens.
 
 ## Reference
 

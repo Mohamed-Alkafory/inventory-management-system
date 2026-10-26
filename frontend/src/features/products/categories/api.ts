@@ -8,7 +8,7 @@ import type { CategoriesApi, CategoryListParams } from "./types";
  *   When the backend is merged, set  VITE_USE_MOCK_API=false  in your .env
  *   (or delete the mock line below). Nothing else changes.
  */
-export const USE_MOCK = import.meta.env?.VITE_USE_MOCK_API !== "false";
+export const USE_MOCK = import.meta.env?.VITE_USE_MOCK_API === "true";
 
 function buildQuery(p: CategoryListParams) {
   // The API contract uses `limit`, not the UI's `pageSize`.

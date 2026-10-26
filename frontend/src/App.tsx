@@ -8,7 +8,6 @@ export default function App() {
   return (
     <QueryProvider>
       <ToastProvider>
-<<<<<<< HEAD
         <AuthProvider>
           <RouterProvider router={router} />
         </AuthProvider>

@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import type { OnChangeFn, PaginationState, SortingState } from "@tanstack/react-table";
-import { Eye, Package, Pencil, Plus, Search, X } from "lucide-react";
+import { Eye, Package, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import { ApiError } from "../../api/errors";
 import { Button, DataTable, EmptyState, Input, Modal, Select, StatusBadge } from "../../components/ui";
 import type { DataTableColumn } from "../../components/ui";
 import { Card, CardBody } from "../../components/ui/Card";
-import { useToast } from "../../components/ui/toast/useToast";
 import { useAuth } from "../../context/auth/useAuth";
+import DeleteProductDialog from "../../features/products/DeleteProductDialog";
+import ProductFormDialog from "../../features/products/ProductFormDialog";
+import type { Product } from "../../features/products/types";
 import { useProductCategories, useProducts } from "../../hooks/useProducts";
 import { cn } from "../../lib/cn";
 import { formatPrice } from "../../lib/format";
@@ -23,6 +25,23 @@ const STOCK_LABELS: Record<StockStatus, string> = {
 };
 
 const SEARCH_DEBOUNCE_MS = 300;
+
+/** The list row carries everything the edit form needs except the supplier/barcode extras. */
+function toFormProduct(product: InventoryProduct): Product {
+  return {
+    id: product.id,
+    sku: product.sku,
+    name: product.name,
+    price: product.price,
+    costPrice: product.costPrice,
+    categoryId: product.categoryId,
+    supplierId: product.supplierId,
+    barcode: product.barcode,
+    minStock: product.reorderLevel,
+    imageUrl: product.imageUrl,
+    isActive: product.isActive ?? true,
+  };
+}
 
 /** Product picture; falls back to an icon when there is no image or it fails to load. */
 function ProductThumb({ product }: { product: InventoryProduct }) {
@@ -57,7 +76,6 @@ function Detail({ label, children }: { label: string; children: ReactNode }) {
 
 export default function Products() {
   const { hasRole } = useAuth();
-  const toast = useToast();
   const isAdmin = hasRole("ADMIN");
 
   const { query, update, clearFilters, hasFilters } = useProductFilters();
@@ -66,6 +84,8 @@ export default function Products() {
   const categories = useProductCategories();
 
   const [viewing, setViewing] = useState<InventoryProduct | null>(null);
+  const [dialog, setDialog] = useState<{ mode: "create" } | { mode: "edit"; product: InventoryProduct } | null>(null);
+  const [toDelete, setToDelete] = useState<InventoryProduct | null>(null);
 
   /* ---------- Search box: typing is debounced into the URL ---------- */
   const [searchText, setSearchText] = useState(query.search);
@@ -182,21 +202,31 @@ export default function Products() {
           <Eye className="size-4" aria-hidden="true" />
         </Button>
         {isAdmin && (
-          <Button
-            size="sm"
-            variant="ghost"
-            aria-label={`Edit ${product.name}`}
-            onClick={() => toast.info("Edit product", "The edit form is coming soon.")}
-          >
-            <Pencil className="size-4" aria-hidden="true" />
-          </Button>
+          <>
+            <Button
+              size="sm"
+              variant="ghost"
+              aria-label={`Edit ${product.name}`}
+              onClick={() => setDialog({ mode: "edit", product })}
+            >
+              <Pencil className="size-4" aria-hidden="true" />
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              aria-label={`Deactivate ${product.name}`}
+              onClick={() => setToDelete(product)}
+            >
+              <Trash2 className="size-4" aria-hidden="true" />
+            </Button>
+          </>
         )}
       </>
     ),
-    [isAdmin, toast],
+    [isAdmin],
   );
 
-  const addProduct = () => toast.info("Add product", "The product form is coming soon.");
+  const addProduct = () => setDialog({ mode: "create" });
 
   const errorMessage = isError ? (error instanceof ApiError ? error.message : "Couldn’t load the products.") : null;
 
@@ -205,7 +235,7 @@ export default function Products() {
   const showExtraCategory = Boolean(query.category) && !categoryOptions.some((c) => c.id === query.category);
 
   return (
-    <main className="min-h-[calc(100vh-72px)] bg-surface-alt py-10 text-ink">
+    <div className="min-h-[calc(100vh-72px)] bg-surface-alt py-10 text-ink">
       <div className="mx-auto w-full max-w-7xl px-4 sm:px-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -344,6 +374,14 @@ export default function Products() {
           </dl>
         )}
       </Modal>
-    </main>
+
+      <ProductFormDialog
+        open={dialog !== null}
+        product={dialog?.mode === "edit" ? toFormProduct(dialog.product) : undefined}
+        onClose={() => setDialog(null)}
+      />
+
+      <DeleteProductDialog product={toDelete ? toFormProduct(toDelete) : null} onClose={() => setToDelete(null)} />
+    </div>
   );
 }
