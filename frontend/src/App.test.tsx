@@ -53,7 +53,9 @@ describe("App", () => {
     expect(
       await screen.findByRole("heading", { level: 1, name: /welcome, test user/i }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("navigation", { name: "Main" })).toBeInTheDocument();
+    const nav = screen.getByRole("navigation", { name: "Main" });
+    expect(within(nav).getByRole("link", { name: "Home" })).toHaveAttribute("href", "/");
+    expect(screen.getByRole("link", { name: "Prodexa home" })).toHaveAttribute("href", "/");
   });
 
   it("renders the not-found page for unknown routes", async () => {

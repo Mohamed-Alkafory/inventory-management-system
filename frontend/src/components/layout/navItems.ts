@@ -2,6 +2,7 @@ import {
   BarChart3,
   Boxes,
   ClipboardList,
+  Home,
   LayoutDashboard,
   Package,
   Settings,
@@ -21,6 +22,7 @@ export interface NavItem {
 }
 
 export const navItems: NavItem[] = [
+  { label: "Home", to: "/", icon: Home },
   { label: "Dashboard", to: "/dashboard", icon: LayoutDashboard },
   { label: "Products", to: "/products", icon: Package },
   { label: "Inventory", to: "/inventory", icon: Boxes },

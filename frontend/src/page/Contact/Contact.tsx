@@ -1,107 +1,84 @@
 import { useState } from "react";
-import Button from "../../components/ui/Button";
-import teamPhoto from "../../img/team.jpg";
-import worldMap from "../../img/world-map.jpg";
 import type { ChangeEvent, FormEvent, ReactNode } from "react";
 import {
   ArrowRight,
   Building2,
   Check,
   ChevronDown,
-  ChevronRight,
-  Home,
   Mail,
+  MapPin,
   Phone,
   Send,
-  Settings,
-  User,
+  ShieldCheck,
+  Sparkles,
   Users,
 } from "lucide-react";
-
-/*
-  Palette (sampled from the design)
-  ink     #0E2A66   headings
-  muted   #5576AE   body text
-  orange  #FF5A26   buttons / accents
-  field   #F7FBFE   input background, border #D7EAF8
-*/
+import Button from "../../components/ui/Button";
+import Reveal from "../../components/motion/Reveal";
 
 const BRAND = "InRetail";
 
-/* ---------- Data ---------- */
-
-const assurances = ["Expert support", "Faster response", "Long-term partnership"];
-
-const contacts = [
+const contactCards = [
   {
-    icon: <Users className="h-6 w-6 text-[#FF5A26]" />,
-    circle: "bg-[#FDEEE8]",
-    title: "Sales & Multi-Store Expansion",
-    text: "Talk to our sales team about new store openings, partnerships, and multi-location expansion. We’ll help you find the right solution for your growing business.",
+    icon: <Users className="h-5 w-5" />,
+    title: "Sales & Partnerships",
+    text: "For new stores, expansion plans, and business inquiries.",
     email: "sales@inretail.com",
     phone: "+1 (555) 123-4567",
   },
   {
-    icon: <Settings className="h-6 w-6 text-[#1E4FA8]" />,
-    circle: "bg-[#E6EFFB]",
-    title: "Operations & Technical Desk",
-    text: "Get help with day-to-day operations, system integrations, API support and technical troubleshooting from our operations and technical experts.",
-    email: "ops@inretail.com",
+    icon: <ShieldCheck className="h-5 w-5" />,
+    title: "Technical Support",
+    text: "For integrations, system issues, and operational help.",
+    email: "support@inretail.com",
     phone: "+1 (555) 987-6543",
   },
   {
-    icon: <Home className="h-6 w-6 text-[#1F9D6B]" />,
-    circle: "bg-[#E4F6EE]",
-    title: "Physical Operations & Hubs",
-    text: "Inquiries about our fulfillment hubs, inventory handling, logistics and physical operations? Our operations team is here to support you.",
-    email: "hubs@inretail.com",
+    icon: <MapPin className="h-5 w-5" />,
+    title: "Operations & Hubs",
+    text: "For logistics, fulfillment hubs, and physical operations.",
+    email: "ops@inretail.com",
     phone: "+1 (555) 246-8100",
   },
 ];
 
-const purposes = contacts.map((c) => c.title);
-const ranges = ["1 – 50", "51 – 200", "201 – 500", "501 – 1,000", "1,001+"];
-
 const stats = [
-  { value: "99.8%", label: "Issue Resolution Rate" },
-  { value: "4.9 / 5", label: "Customer Satisfaction" },
-  { value: "24/7", label: "Support Availability" },
+  { value: "99.8%", label: "Resolution rate" },
+  { value: "4.9/5", label: "Customer satisfaction" },
+  { value: "24/7", label: "Support availability" },
 ];
 
 const faqs = [
-  { q: `How does ${BRAND} support multi-store operations and inventory management?`, a: "" },
-  { q: `Can I integrate my existing POS, ERP, or e-commerce systems with ${BRAND}?`, a: "" },
-  { q: "What kind of support do you offer for technical issues and system downtime?", a: "" },
-  { q: "How long does it typically take to onboard a new store or location?", a: "" },
+  {
+    q: `How does ${BRAND} support multi-store operations?`,
+    a: "We help you manage inventory, orders, and operations across multiple locations from one centralized system.",
+  },
+  {
+    q: "Can I integrate my existing systems with the platform?",
+    a: "Yes, the platform is built to support integrations with POS, ERP, and e-commerce systems.",
+  },
+  {
+    q: "What kind of support do you offer?",
+    a: "We provide expert support for technical issues, onboarding, operations, and ongoing assistance.",
+  },
+  {
+    q: "How long does onboarding usually take?",
+    a: "Most teams can get started quickly with guided setup and support from our team.",
+  },
 ];
 
-/* ---------- Shared ---------- */
-
-const pad = "w-full px-4 sm:px-6 lg:px-10";
-const card = "rounded-2xl border border-[#E6EFFA] bg-white shadow-[0_2px_14px_rgba(30,64,140,0.06)]";
-const fieldBase =
-  "h-11 w-full rounded-lg border border-[#D7EAF8] bg-[#F7FBFE] text-sm text-[#0E2A66] placeholder:text-[#92AED1] focus:border-[#FF5A26] focus:outline-none focus:ring-2 focus:ring-[#FF5A26]/20";
+const ranges = ["1 – 50", "51 – 200", "201 – 500", "501 – 1,000", "1,001+"];
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1.5 block text-xs font-semibold text-[#12307A]">
-        {label} <span className="text-[#FF5A26]">*</span>
-      </span>
+      <span className="mb-2 block text-sm font-medium text-ink">{label}</span>
       {children}
     </label>
   );
 }
 
-/* ---------- Page ---------- */
-
-export default function ContactPage({
-  teamImage = teamPhoto,
-  mapImage = worldMap,
-}: {
-  teamImage?: string;
-  mapImage?: string;
-}) {
+export default function ContactPage() {
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -111,293 +88,343 @@ export default function ContactPage({
     message: "",
     agree: true,
   });
-  const [open, setOpen] = useState<number | null>(null);
 
-  const onChange = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
-    setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
+  const [open, setOpen] = useState<number | null>(0);
+
+  const onChange = (
+    e: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>,
+  ) => setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
-    // TODO: send `form` to your API
+    // TODO: send form to API
   };
 
-
-
   return (
-    <main className="min-h-screen w-full overflow-x-hidden bg-[#FAFCFD] font-sans text-[#0E2A66]">
-      {/* ===== Hero ===== */}
-      <section className={`${pad} bg-[#F4F9FE] pb-10 pt-12 text-center sm:pt-14`}>
-        <div className="flex items-center justify-center gap-3">
-          <span className="h-0.5 w-6 bg-[#FF5A26]" />
-          <span className="text-[11px] font-semibold uppercase tracking-widest text-[#FF5A26]">Contact Our Team</span>
+    <main className="min-h-screen w-full overflow-x-hidden bg-[#FBFAF8] font-sans text-ink">
+      {/* Hero */}
+      <section className="relative isolate overflow-hidden bg-[linear-gradient(180deg,#FFF8F2_0%,#FBFAF8_100%)] px-4 pb-16 pt-16 sm:px-6 sm:pt-20 lg:px-10">
+        <div className="mx-auto max-w-7xl">
+          <div className="mx-auto max-w-3xl text-center">
+            <Reveal>
+              <div className="inline-flex items-center gap-2 rounded-full border border-[#F2E3D5] bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-primary-600 shadow-sm">
+                <Sparkles className="h-4 w-4" />
+                Contact Us
+              </div>
+            </Reveal>
+
+            <Reveal delay={100}>
+              <h1 className="mt-6 text-4xl font-bold leading-tight tracking-tight text-ink sm:text-6xl">
+                Let’s talk about your retail operations.
+              </h1>
+            </Reveal>
+
+            <Reveal delay={200}>
+              <p className="mx-auto mt-6 max-w-2xl text-base leading-8 text-muted sm:text-lg">
+                Whether you’re expanding, optimizing operations, or need
+                technical support, our team is ready to help you move faster and
+                work smarter.
+              </p>
+            </Reveal>
+          </div>
         </div>
-
-        <h1 className="mx-auto mt-4 max-w-3xl text-3xl font-extrabold leading-tight sm:text-5xl">
-          We’re Here to Help Your Retail Operations Thrive
-        </h1>
-
-        <p className="mx-auto mt-5 max-w-2xl leading-relaxed text-[#5576AE]">
-          Whether you’re expanding to new stores, optimizing operations, or need technical support — our team is
-          ready to help you move faster and operate smarter.
-        </p>
-
-        <ul className="mt-6 flex flex-wrap items-center justify-center gap-y-3 text-sm font-medium text-[#12307A]">
-          {assurances.map((a, i) => (
-            <li
-              key={a}
-              className={`flex items-center gap-2 px-5 ${i > 0 ? "sm:border-l sm:border-[#D7E3F4]" : ""}`}
-            >
-              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#12307A] text-white">
-                <Check className="h-3 w-3" strokeWidth={3} />
-              </span>
-              {a}
-            </li>
-          ))}
-        </ul>
       </section>
 
-      {/* ===== Contact cards + form ===== */}
-      <section className={`${pad} py-6`}>
-        <div className="grid items-start gap-5 lg:grid-cols-2">
-          {/* Left column */}
-          <div className="space-y-4">
-            {contacts.map((c) => (
-              <article key={c.title} className={`relative flex gap-4 p-5 ${card}`}>
-                <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-full ${c.circle}`}>
-                  {c.icon}
+      {/* Contact cards */}
+      <section className="px-4 pb-16 sm:px-6 lg:px-10">
+        <div className="mx-auto grid max-w-7xl gap-6 lg:grid-cols-3">
+          {contactCards.map((card, i) => (
+            <Reveal key={card.title} delay={i * 120} className="h-full">
+              <div className="h-full rounded-[1.75rem] border border-[#F0E4D8] bg-white p-6 shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-lg motion-reduce:transition-none motion-reduce:hover:translate-y-0">
+                <div className="mb-5 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-primary-50 text-primary-600">
+                  {card.icon}
                 </div>
-                <div className="min-w-0 pr-6">
-                  <h3 className="font-bold text-[#0E2A66]">{c.title}</h3>
-                  <p className="mt-1.5 text-sm leading-relaxed text-[#5576AE]">{c.text}</p>
-                  <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-                    <a href={`mailto:${c.email}`} className="flex items-center gap-2 font-medium text-[#FF5A26] hover:underline">
-                      <Mail className="h-4 w-4" />
-                      {c.email}
-                    </a>
-                    <span className="hidden h-5 w-px bg-[#D7E3F4] sm:block" />
-                    <a href={`tel:${c.phone.replace(/[^\d+]/g, "")}`} className="flex items-center gap-2 font-medium text-[#12307A] hover:underline">
-                      <Phone className="h-4 w-4" />
-                      {c.phone}
-                    </a>
-                  </div>
-                </div>
-                <ChevronRight className="absolute right-5 top-5 h-4 w-4 text-[#5576AE]" />
-              </article>
-            ))}
+                <h3 className="text-xl font-semibold text-ink">{card.title}</h3>
+                <p className="mt-3 text-sm leading-7 text-muted">{card.text}</p>
 
-            <article className={`flex items-center gap-5 p-4 ${card}`}>
-              <img
-                src={mapImage}
-                alt="World map with regional offices"
-                className="h-28 w-2/5 shrink-0 rounded-xl bg-[#E6F1FC] object-cover"
-              />
-              <div>
-                <h3 className="font-bold text-[#0E2A66]">Our Global Presence</h3>
-                <p className="mt-1.5 text-sm leading-relaxed text-[#5576AE]">
-                  We operate across multiple regions with local support teams.
-                </p>
-                <a href="#" className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-[#FF5A26] hover:underline">
-                  View all locations <ArrowRight className="h-3.5 w-3.5" />
-                </a>
-              </div>
-            </article>
-          </div>
-
-          {/* Form */}
-          <form onSubmit={onSubmit} className={`p-6 sm:p-7 ${card}`}>
-            <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#E6EFFB] text-[#1E4FA8]">
-                <Send className="h-5 w-5" />
-              </div>
-              <div>
-                <h2 className="text-xl font-bold text-[#0E2A66]">Send your retail team a message</h2>
-                <p className="mt-0.5 text-xs text-[#5576AE]">
-                  Tell us about your needs and we’ll get back to you as soon as possible.
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-6 grid gap-4 sm:grid-cols-2">
-              <Field label="Full Name">
-                <div className="relative">
-                  <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5576AE]" />
-                  <input name="name" value={form.name} onChange={onChange} required placeholder="Your full name" className={`${fieldBase} pl-10 pr-3`} />
-                </div>
-              </Field>
-              <Field label="Work Email">
-                <div className="relative">
-                  <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5576AE]" />
-                  <input type="email" name="email" value={form.email} onChange={onChange} required placeholder="you@company.com" className={`${fieldBase} pl-10 pr-3`} />
-                </div>
-              </Field>
-              <Field label="Business or Store Name">
-                <div className="relative">
-                  <Building2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5576AE]" />
-                  <input name="business" value={form.business} onChange={onChange} required placeholder="e.g. FreshMart, Retail Co." className={`${fieldBase} pl-10 pr-3`} />
-                </div>
-              </Field>
-              <Field label="Inquiry Purpose">
-                <div className="relative">
-                  <select
-                    name="purpose"
-                    value={form.purpose}
-                    onChange={onChange}
-                    required
-                    className={`${fieldBase} appearance-none px-3 pr-9 ${form.purpose ? "" : "text-[#5576AE]"}`}
+                <div className="mt-5 space-y-3 text-sm">
+                  <a
+                    href={`mailto:${card.email}`}
+                    className="flex items-center gap-2 font-medium text-primary-600 hover:underline"
                   >
-                    <option value="" disabled>
-                      Select a purpose
-                    </option>
-                    {purposes.map((p) => (
-                      <option key={p} value={p}>
-                        {p}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5576AE]" />
+                    <Mail className="h-4 w-4" />
+                    {card.email}
+                  </a>
+                  <a
+                    href={`tel:${card.phone.replace(/[^\d+]/g, "")}`}
+                    className="flex items-center gap-2 font-medium text-ink hover:underline"
+                  >
+                    <Phone className="h-4 w-4" />
+                    {card.phone}
+                  </a>
                 </div>
-              </Field>
-            </div>
-
-            <fieldset className="mt-5">
-              <legend className="mb-1.5 text-xs font-semibold text-[#12307A]">
-                Monthly Store Orders or Active SKU Count <span className="text-[#FF5A26]">*</span>
-              </legend>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-                {ranges.map((r) => {
-                  const active = form.range === r;
-                  return (
-                    <button
-                      key={r}
-                      type="button"
-                      aria-pressed={active}
-                      onClick={() => setForm((f) => ({ ...f, range: r }))}
-                      className={`h-10 rounded-lg border text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF5A26]/40 ${
-                        active
-                          ? "border-[#FF5A26] bg-[#FF5A26] text-white shadow-sm shadow-[#FF5A26]/30"
-                          : "border-[#D7EAF8] bg-white text-[#12307A] hover:border-[#FF5A26]/50"
-                      }`}
-                    >
-                      {r}
-                    </button>
-                  );
-                })}
               </div>
-            </fieldset>
+            </Reveal>
+          ))}
+        </div>
+      </section>
 
-            <div className="mt-5">
-              <Field label="Your Message">
-                <div className="relative">
+      {/* Form + info */}
+      <section className="px-4 pb-20 sm:px-6 lg:px-10">
+        <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[0.9fr_1.1fr]">
+          <Reveal>
+            <div className="rounded-[2rem] border border-[#F0E4D8] bg-white p-8 shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary-600">
+                Why {BRAND}
+              </p>
+              <h2 className="mt-4 text-3xl font-bold leading-tight text-ink sm:text-4xl">
+                Real support from real retail experts.
+              </h2>
+              <p className="mt-5 text-base leading-8 text-muted">
+                We’re not just a software provider — we’re a partner focused on
+                helping your business run better every day.
+              </p>
+
+              <div className="mt-8 grid grid-cols-3 gap-4">
+                {stats.map((stat) => (
+                  <div
+                    key={stat.label}
+                    className="rounded-2xl border border-[#F3E7DA] bg-[#FFF9F4] p-4 text-center"
+                  >
+                    <p className="text-2xl font-bold text-primary-600">
+                      {stat.value}
+                    </p>
+                    <p className="mt-1 text-xs text-muted">{stat.label}</p>
+                  </div>
+                ))}
+              </div>
+
+              <ul className="mt-8 space-y-3 text-sm text-ink">
+                {[
+                  "Expert support",
+                  "Fast response",
+                  "Long-term partnership",
+                ].map((item) => (
+                  <li key={item} className="flex items-center gap-3">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary-600 text-white">
+                      <Check className="h-3.5 w-3.5" strokeWidth={3} />
+                    </span>
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </Reveal>
+
+          <Reveal delay={150}>
+            <form
+              onSubmit={onSubmit}
+              className="rounded-[2rem] border border-[#F0E4D8] bg-white p-8 shadow-sm"
+            >
+              <div className="flex items-center gap-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary-50 text-primary-600">
+                  <Send className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-bold text-ink">
+                    Send us a message
+                  </h3>
+                  <p className="mt-1 text-sm text-muted">
+                    Tell us what you need and we’ll get back to you quickly.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-8 grid gap-5 sm:grid-cols-2">
+                <Field label="Full Name">
+                  <div className="relative">
+                    <Users className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+                    <input
+                      name="name"
+                      value={form.name}
+                      onChange={onChange}
+                      required
+                      placeholder="Your full name"
+                      className="h-12 w-full rounded-xl border border-[#F0E4D8] bg-[#FFF9F4] pl-10 pr-4 text-sm text-ink placeholder:text-muted focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                    />
+                  </div>
+                </Field>
+
+                <Field label="Work Email">
+                  <div className="relative">
+                    <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+                    <input
+                      type="email"
+                      name="email"
+                      value={form.email}
+                      onChange={onChange}
+                      required
+                      placeholder="you@company.com"
+                      className="h-12 w-full rounded-xl border border-[#F0E4D8] bg-[#FFF9F4] pl-10 pr-4 text-sm text-ink placeholder:text-muted focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                    />
+                  </div>
+                </Field>
+
+                <Field label="Business or Store Name">
+                  <div className="relative">
+                    <Building2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+                    <input
+                      name="business"
+                      value={form.business}
+                      onChange={onChange}
+                      required
+                      placeholder="e.g. FreshMart"
+                      className="h-12 w-full rounded-xl border border-[#F0E4D8] bg-[#FFF9F4] pl-10 pr-4 text-sm text-ink placeholder:text-muted focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                    />
+                  </div>
+                </Field>
+
+                <Field label="Inquiry Purpose">
+                  <div className="relative">
+                    <select
+                      name="purpose"
+                      value={form.purpose}
+                      onChange={onChange}
+                      required
+                      className="h-12 w-full appearance-none rounded-xl border border-[#F0E4D8] bg-[#FFF9F4] px-4 pr-10 text-sm text-ink focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                    >
+                      <option value="" disabled>
+                        Select a purpose
+                      </option>
+                      <option>Sales & Partnerships</option>
+                      <option>Technical Support</option>
+                      <option>Operations & Hubs</option>
+                    </select>
+                    <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+                  </div>
+                </Field>
+              </div>
+
+              <div className="mt-6">
+                <span className="mb-2 block text-sm font-medium text-ink">
+                  Monthly Store Orders or Active SKU Count
+                </span>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                  {ranges.map((range) => {
+                    const active = form.range === range;
+                    return (
+                      <button
+                        key={range}
+                        type="button"
+                        onClick={() => setForm((f) => ({ ...f, range }))}
+                        className={`h-11 rounded-xl border text-sm font-medium transition ${
+                          active
+                            ? "border-primary-500 bg-primary-500 text-white shadow-sm"
+                            : "border-[#F0E4D8] bg-white text-ink hover:border-primary-300"
+                        }`}
+                      >
+                        {range}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="mt-6">
+                <Field label="Your Message">
                   <textarea
                     name="message"
                     value={form.message}
                     onChange={onChange}
                     required
                     maxLength={1000}
-                    placeholder="Please tell us more about your business, your goals, or how we can help..."
-                    className={`${fieldBase} h-32 resize-none px-3 py-3`}
+                    placeholder="Tell us more about your business or how we can help..."
+                    className="h-36 w-full resize-none rounded-xl border border-[#F0E4D8] bg-[#FFF9F4] px-4 py-3 text-sm text-ink placeholder:text-muted focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
                   />
-                  <span className="pointer-events-none absolute bottom-2 right-3 text-[10px] text-[#92AED1]">
-                    {form.message.length}/1000
-                  </span>
-                </div>
-              </Field>
-            </div>
+                </Field>
+              </div>
 
-            <label className="mt-4 flex items-start gap-2.5 text-xs leading-relaxed text-[#12307A]">
-              <input
-                type="checkbox"
-                checked={form.agree}
-                onChange={(e) => setForm((f) => ({ ...f, agree: e.target.checked }))}
-                required
-                className="mt-0.5 h-4 w-4 shrink-0 accent-[#FF5A26]"
-              />
-              <span>
-                I agree to the processing of my personal data in accordance with the{" "}
-                <a href="#" className="text-[#FF5A26] underline">Privacy Policy</a> and{" "}
-                <a href="#" className="text-[#FF5A26] underline">Terms of Service</a>.
-              </span>
-            </label>
+              <label className="mt-5 flex items-start gap-3 text-sm text-muted">
+                <input
+                  type="checkbox"
+                  checked={form.agree}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, agree: e.target.checked }))
+                  }
+                  required
+                  className="mt-1 h-4 w-4 accent-primary-500"
+                />
+                <span>
+                  I agree to the processing of my personal data in accordance
+                  with the{" "}
+                  <a href="#" className="text-primary-600 underline">
+                    Privacy Policy
+                  </a>{" "}
+                  and{" "}
+                  <a href="#" className="text-primary-600 underline">
+                    Terms of Service
+                  </a>
+                  .
+                </span>
+              </label>
 
-            <Button
-              type="submit"
-              size="lg"
-              fullWidth
-              className="mt-5"
-              leftIcon={<Send className="h-4 w-4" />}
-              rightIcon={<ArrowRight className="h-4 w-4" />}
-            >
-              Send Inquiry
-            </Button>
-          </form>
+              <Button
+                type="submit"
+                size="lg"
+                fullWidth
+                className="mt-6"
+                leftIcon={<Send className="h-4 w-4" />}
+                rightIcon={<ArrowRight className="h-4 w-4" />}
+              >
+                Send Inquiry
+              </Button>
+            </form>
+          </Reveal>
         </div>
       </section>
 
-      {/* ===== Why ===== */}
-      <section className={`${pad} py-12 sm:py-16`}>
-        <div className="grid items-center gap-10 lg:grid-cols-2">
-          <div>
-            <div className="flex items-center gap-3">
-              <span className="h-0.5 w-6 bg-[#FF5A26]" />
-              <span className="text-[11px] font-semibold uppercase tracking-widest text-[#FF5A26]">Why {BRAND}</span>
+      {/* FAQ */}
+      <section className="px-4 pb-20 sm:px-6 lg:px-10">
+        <div className="mx-auto max-w-4xl">
+          <Reveal>
+            <div className="text-center">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary-600">
+                FAQ
+              </p>
+              <h2 className="mt-4 text-3xl font-bold text-ink sm:text-4xl">
+                Frequently asked questions
+              </h2>
+              <p className="mx-auto mt-4 max-w-2xl text-base leading-8 text-muted">
+                Quick answers to common questions about support, onboarding, and
+                integrations.
+              </p>
             </div>
-            <h2 className="mt-4 text-3xl font-extrabold leading-tight sm:text-4xl">
-              Real Retail Engineers.
-              <br className="hidden sm:block" /> Not Outsourced Ticket Queues.
-            </h2>
-            <p className="mt-5 max-w-lg leading-relaxed text-[#5576AE]">
-              We’re a dedicated team of retail engineers, product specialists and operations experts — focused on
-              your success. No third parties, no ticket queues, just real people who understand retail.
-            </p>
+          </Reveal>
 
-            <dl className="mt-8 flex flex-wrap gap-y-4">
-              {stats.map((s, i) => (
-                <div key={s.label} className={`pr-6 ${i > 0 ? "border-l border-[#D7E3F4] pl-6" : ""}`}>
-                  <dd className="text-3xl font-extrabold text-[#FF5A26]">{s.value}</dd>
-                  <dt className="mt-1 text-xs text-[#5576AE]">{s.label}</dt>
-                </div>
-              ))}
-            </dl>
-          </div>
-
-          <img
-            src={teamImage}
-            alt="The support team collaborating around a table"
-            className="aspect-[2/1] w-full rounded-2xl bg-[#E6F1FC] object-cover shadow-lg shadow-[#0E2A66]/10"
-          />
-        </div>
-      </section>
-
-      {/* ===== FAQ ===== */}
-      <section className={`${pad} pb-16 pt-4 sm:pb-24`}>
-        <div className="mx-auto max-w-3xl text-center">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-[#FF5A26]">
-            Frequently Asked Questions
-          </p>
-          <h2 className="mt-2 text-2xl font-extrabold sm:text-3xl">Everything You Need to Know Before Connecting</h2>
-          <p className="mt-2 text-sm text-[#5576AE]">
-            Find answers to the most common questions about our platform, support and operations.
-          </p>
-
-          <ul className="mt-8 space-y-3 text-left">
-            {faqs.map((f, i) => {
+          <div className="mt-10 space-y-4">
+            {faqs.map((faq, i) => {
               const isOpen = open === i;
               return (
-                <li key={f.q} className={card}>
-                  <button
-                    type="button"
-                    aria-expanded={isOpen}
-                    onClick={() => setOpen(isOpen ? null : i)}
-                    className="flex w-full items-center justify-between gap-4 rounded-2xl px-5 py-4 text-left text-sm font-semibold text-[#12307A] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF5A26]/40"
-                  >
-                    {f.q}
-                    <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`} />
-                  </button>
-                  {isOpen && f.a && <p className="px-5 pb-4 text-sm leading-relaxed text-[#5576AE]">{f.a}</p>}
-                </li>
+                <Reveal key={faq.q} delay={i * 80}>
+                  <div className="rounded-2xl border border-[#F0E4D8] bg-white shadow-sm">
+                    <button
+                      type="button"
+                      onClick={() => setOpen(isOpen ? null : i)}
+                      className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left text-sm font-semibold text-ink"
+                    >
+                      {faq.q}
+                      <ChevronDown
+                        className={`h-4 w-4 text-primary-600 transition-transform duration-300 motion-reduce:transition-none ${
+                          isOpen ? "rotate-180" : ""
+                        }`}
+                      />
+                    </button>
+                    <div
+                      className={`grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none ${
+                        isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+                      }`}
+                    >
+                      <div className="overflow-hidden">
+                        <p className="px-5 pb-5 text-sm leading-7 text-muted">
+                          {faq.a}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </Reveal>
               );
             })}
-          </ul>
+          </div>
         </div>
       </section>
     </main>

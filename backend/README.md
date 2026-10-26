@@ -18,7 +18,7 @@ npx prisma validate
 ```
 
 Env vars used: `DATABASE_URL` (Prisma, must match the container credentials),
-`PORT` (API port, defaults to `3000`), `JWT_SECRET` (reserved for upcoming
+`PORT` (API port; local development uses `3010`), `JWT_SECRET` (reserved for upcoming
 auth — no code reads it yet). Details in the
 [root README](../README.md#environment-variables).
 
@@ -38,7 +38,11 @@ auth — no code reads it yet). Details in the
 | `npm run lint` | oxlint over `src/` and `test/` |
 | `npm run format` | Prettier over `src/` and `test/` |
 
-Health check: `GET http://localhost:3000/api/v1/health` → `{"status":"ok","db":"up"}`.
+E2E tests need a dedicated database whose name contains `test` (default:
+`inventory_test`). The test helper refuses to truncate any other database.
+Set `E2E_DATABASE_URL` to override the default test connection.
+
+Health check: `GET http://localhost:3010/api/v1/health` → `{"status":"ok","db":"up"}`.
 
 ## Prisma
 
