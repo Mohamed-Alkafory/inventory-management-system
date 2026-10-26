@@ -1,12 +1,16 @@
 /* eslint-disable react-refresh/only-export-components -- route config, not a component module */
 import { lazy } from "react";
-import { createBrowserRouter, Navigate } from "react-router-dom";
+import { createBrowserRouter } from "react-router-dom";
 import AppLayout from "../layouts/AppLayout";
+import PublicLayout from "../layouts/PublicLayout";
 import RequireRole from "../auth/RequireRole";
 import GuestRoute from "../routes/GuestRoute";
 import ProtectedRoute from "../routes/ProtectedRoute";
 
 // Every page is lazy-loaded (one chunk per page).
+const Home = lazy(() => import("../page/home/Home"));
+const About = lazy(() => import("../page/About/About"));
+const Contact = lazy(() => import("../page/Contact/Contact"));
 const Login = lazy(() => import("../page/Login/Login"));
 const Register = lazy(() => import("../page/Register/Register"));
 const Dashboard = lazy(() => import("../page/Dashboard/Dashboard"));
@@ -23,6 +27,17 @@ const Forbidden = lazy(() => import("../page/app/Forbidden"));
 const NotFound = lazy(() => import("../page/app/NotFound"));
 
 export const router = createBrowserRouter([
+  // Public marketing site: anyone can browse these pages.
+  {
+    path: "/",
+    element: <PublicLayout />,
+    children: [
+      { index: true, element: <Home /> },
+      { path: "about", element: <About /> },
+      { path: "contact", element: <Contact /> },
+    ],
+  },
+
   // Only for signed-out visitors.
   {
     element: <GuestRoute />,
@@ -40,7 +55,6 @@ export const router = createBrowserRouter([
         path: "/",
         element: <AppLayout />,
         children: [
-          { index: true, element: <Navigate to="/dashboard" replace /> },
           { path: "dashboard", element: <Dashboard /> },
           { path: "products", element: <Products /> },
           { path: "seller/onboarding", element: <SellerOnboarding /> },

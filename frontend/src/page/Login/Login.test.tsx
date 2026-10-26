@@ -28,6 +28,7 @@ function renderLogin() {
                 <Route path="/login" element={<Login />} />
               </Route>
               <Route path="/dashboard" element={<p>Dashboard page</p>} />
+              <Route path="/" element={<p>Home page</p>} />
             </Routes>
           </AuthProvider>
         </MemoryRouter>
@@ -64,7 +65,7 @@ describe("Login page", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Invalid email or password.");
   });
 
-  it("signs in and redirects to the dashboard", async () => {
+  it("signs in and redirects to the home page", async () => {
     login.mockResolvedValue({
       user: { id: "2", name: "Sami Staff", email: "staff@prodexa.com", role: "STAFF" },
       tokens: { accessToken: "a", refreshToken: "r" },
@@ -75,7 +76,7 @@ describe("Login page", () => {
     fireEvent.change(screen.getByLabelText(/^password/i), { target: { value: "Staff@123" } });
     fireEvent.click(screen.getByRole("button", { name: /^sign in$/i }));
 
-    await waitFor(() => expect(screen.getByText("Dashboard page")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Home page")).toBeInTheDocument());
     expect(tokenStorage.getSession()?.user.role).toBe("STAFF");
   });
 });

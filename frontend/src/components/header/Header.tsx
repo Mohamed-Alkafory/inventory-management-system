@@ -25,6 +25,10 @@ export default function Header() {
     navigate("/", { replace: true });
   };
 
+  // While signed in, the navbar points at the app pages; visitors get the
+  // public product catalogue link, which prompts them to sign in.
+  const dashboardLink = isAuthenticated ? "/dashboard" : "/login";
+
   return (
     <header className="header">
       <div className="header__inner">
@@ -43,7 +47,7 @@ export default function Header() {
             ))}
             {isAuthenticated && (
               <li>
-                <Link to="/dashboard" className="nav-link" onClick={closeMenu}>
+                <Link to={dashboardLink} className="nav-link" onClick={closeMenu}>
                   Dashboard
                 </Link>
               </li>
