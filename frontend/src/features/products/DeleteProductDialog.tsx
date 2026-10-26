@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import Modal from "../../components/ui/Modal";
-import { ApiError } from "./errors";
+import { ApiError } from "../../lib/http";
 import { useDeleteProduct } from "./hooks";
 import type { Product } from "./types";
 

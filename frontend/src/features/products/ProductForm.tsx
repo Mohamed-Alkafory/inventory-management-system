@@ -3,7 +3,7 @@ import type { InputHTMLAttributes, ReactNode } from "react";
 import { useForm } from "react-hook-form";
 import type { FieldError, UseFormRegisterReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ApiError } from "./errors";
+import { ApiError } from "../../lib/http";
 import { useCategories, useSaveProduct, useSuppliers } from "./hooks";
 import { PRODUCT_FIELDS, productSchema, toDefaults } from "./schema";
 import type { ProductField, ProductFormValues } from "./schema";
@@ -77,6 +77,7 @@ function SelectField({
   error,
   query,
   noun,
+  required = true,
 }: {
   id: string;
   label: string;
@@ -85,9 +86,10 @@ function SelectField({
   error?: FieldError;
   query: OptionsQuery;
   noun: string;
+  required?: boolean;
 }) {
   return (
-    <Field id={id} label={label} required error={error}>
+    <Field id={id} label={label} required={required} error={error}>
       {query.isPending ? (
         <div className={`${inputClass(false)} flex items-center bg-[#F9FAFB] text-[#9CA3AF]`}>Loading {noun}…</div>
       ) : query.isError ? (
@@ -182,10 +184,10 @@ export default function ProductForm({
         </div>
 
         <TextField id="pf-price" label="Price" required reg={register("price")} error={errors.price} inputMode="decimal" placeholder="0.00" />
-        <TextField id="pf-cost" label="Cost price" required reg={register("costPrice")} error={errors.costPrice} inputMode="decimal" placeholder="0.00" />
+        <TextField id="pf-cost" label="Cost price" reg={register("costPrice")} error={errors.costPrice} inputMode="decimal" placeholder="Optional" />
 
         <SelectField id="pf-category" label="Category" placeholder="Select a category" noun="categories" reg={register("categoryId")} error={errors.categoryId} query={categories} />
-        <SelectField id="pf-supplier" label="Supplier" placeholder="Select a supplier" noun="suppliers" reg={register("supplierId")} error={errors.supplierId} query={suppliers} />
+        <SelectField id="pf-supplier" label="Supplier" placeholder="No supplier" noun="suppliers" reg={register("supplierId")} error={errors.supplierId} query={suppliers} required={false} />
 
         <TextField id="pf-min" label="Min stock" required reg={register("minStock")} error={errors.minStock} inputMode="numeric" placeholder="0" />
         <TextField id="pf-image" label="Image URL" reg={register("imageUrl")} error={errors.imageUrl} inputMode="url" placeholder="https://…" autoComplete="off" />

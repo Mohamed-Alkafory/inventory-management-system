@@ -427,6 +427,19 @@ describe('ProductsService', () => {
       expect(supplierFindUnique).not.toHaveBeenCalled();
     });
 
+    it('treats supplierId: null as "no supplier" instead of a lookup', async () => {
+      productCreate.mockResolvedValue(productRow());
+
+      await service.create(validCreateDto({ supplierId: null }));
+
+      expect(supplierFindUnique).not.toHaveBeenCalled();
+      expect(productCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ supplierId: null }),
+        }),
+      );
+    });
+
     it('lets duplicate sku/barcode surface as a Prisma P2002 (409 via the global filter)', async () => {
       productCreate.mockRejectedValue(
         new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {

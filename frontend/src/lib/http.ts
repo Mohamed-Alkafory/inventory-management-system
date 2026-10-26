@@ -1,4 +1,7 @@
-const BASE = import.meta.env?.VITE_API_URL ?? "";
+import { tokenStorage } from "../api/tokenStorage";
+import { API_URL } from "./env";
+
+const BASE = API_URL;
 
 export class ApiError extends Error {
   status: number;
@@ -66,12 +69,17 @@ export function extractFieldErrors(body: unknown): Record<string, string> {
 }
 
 export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const token = tokenStorage.getAccessToken();
+  const headers = new Headers(init.headers);
+  if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  if (token && !headers.has("Authorization")) headers.set("Authorization", `Bearer ${token}`);
+
   let res: Response;
   try {
     res = await fetch(`${BASE}${path}`, {
-      credentials: "include", // TODO: or add `Authorization: Bearer <token>` below if you use tokens
       ...init,
-      headers: { "Content-Type": "application/json", ...init.headers },
+      credentials: "include",
+      headers,
     });
   } catch {
     throw new ApiError(0, "Can’t reach the server. Check your connection and try again.");

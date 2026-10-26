@@ -248,7 +248,7 @@ The frontend currently displays the initial application shell. The backend expos
 | `CORS_ORIGIN`       | Allowed CORS origin for frontend client      |
 | `JWT_SECRET`        | Secret for signing JWT authentication tokens |
 | `JWT_EXPIRES_IN`    | Access token expiration duration (e.g. `15m`)|
-| `VITE_API_URL`      | Backend API URL used by the frontend         |
+| `VITE_API_URL`      | Backend API base URL incl. `/api/v1`         |
 
 Environment templates contain placeholders only. Keep actual secrets in ignored local `.env` files and never commit them.
 

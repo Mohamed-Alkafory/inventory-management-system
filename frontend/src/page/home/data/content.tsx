@@ -16,10 +16,10 @@ export const HERO_TAGS = [
 export const ASSURANCES = ["No credit card required", "5-minute guided setup", "Cancel anytime"];
 
 export const STATS = [
-  { value: "99.9%", label: "Stock count accuracy" },
-  { value: "3×", label: "Faster order processing" },
-  { value: "40%", label: "Less manual data entry" },
-  { value: "5 min", label: "Average setup time" },
+  { to: 99.9, decimals: 1, suffix: "%", label: "Stock count accuracy" },
+  { to: 3, suffix: "×", label: "Faster order processing" },
+  { to: 40, suffix: "%", label: "Less manual data entry" },
+  { to: 5, suffix: " min", label: "Average setup time" },
 ];
 
 export const FEATURES: { icon: ReactNode; title: string; text: string }[] = [

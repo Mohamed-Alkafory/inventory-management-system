@@ -1,7 +1,7 @@
 import { Navigate, Outlet } from "react-router-dom";
 import { LOGIN_PATH } from "../config";
-import { useAuth } from "./useAuth";
-import type { Role } from "./auth-context";
+import { useAuth } from "../context/auth/useAuth";
+import type { Role } from "../types/auth";
 
 /** Route guard: not signed in → login, wrong role → 403. */
 export default function RequireRole({ roles }: { roles: Role[] }) {

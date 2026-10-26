@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Pencil, Plus, Search, Trash2 } from "lucide-react";
 import Pagination from "../../../components/ui/Pagination";
-import { useAuth } from "../../../auth/useAuth";
+import { useAuth } from "../../../context/auth/useAuth";
 import { USE_MOCK } from "../../../features/products/categories/api";
 import CategoryFormDialog from "../../../features/products/categories/CategoryFormDialog";
 import DeleteCategoryDialog from "../../../features/products/categories/DeleteCategoryDialog";
@@ -15,7 +15,7 @@ type DialogState = { mode: "create" } | { mode: "edit"; category: Category } | n
 
 export default function Categories() {
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
+  const isAdmin = user?.role === "ADMIN";
 
   const [searchInput, setSearchInput] = useState("");
   const search = useDebouncedValue(searchInput, 300);
