@@ -19,6 +19,7 @@ export type { ModalProps } from "./Modal";
 export { default as ConfirmDialog } from "./ConfirmDialog";
 export { default as Spinner } from "./Spinner";
 export { Skeleton, SkeletonText } from "./Skeleton";
+export { default as Pagination } from "./Pagination";
 export { default as EmptyState } from "./EmptyState";
 export { default as ErrorState } from "./ErrorState";
 export { default as SectionHeading } from "./SectionHeading";

@@ -26,10 +26,10 @@ export default function DeleteProductDialog({ product, onClose }: { product: Pro
   const message = del.error instanceof ApiError ? del.error.message : del.error ? "Something went wrong. Please try again." : null;
 
   return (
-    <Modal open={product !== null} onClose={onClose} title="Deactivate product?">
+    <Modal open={product !== null} onClose={onClose} title="Delete product?">
       <p className="text-sm leading-relaxed text-[#6B7280]">
-        <span className="font-semibold text-[#111827]">{product?.name}</span> will be deactivated (soft delete). It
-        will disappear from the active list, and its history is kept.
+        <span className="font-semibold text-[#111827]">{product?.name}</span> will be deleted. It will disappear
+        from the product list (the server keeps its history).
       </p>
 
       {message && (
@@ -53,7 +53,7 @@ export default function DeleteProductDialog({ product, onClose }: { product: Pro
           disabled={del.isPending}
           className="rounded-lg bg-[#DC2626] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#B91C1C] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#DC2626] focus-visible:ring-offset-2 disabled:opacity-60"
         >
-          {del.isPending ? "Deactivating…" : "Deactivate"}
+          {del.isPending ? "Deleting…" : "Delete"}
         </button>
       </div>
     </Modal>

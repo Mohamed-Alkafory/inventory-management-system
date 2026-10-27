@@ -19,3 +19,11 @@ export const PRODUCT_ENDPOINTS = {
   list: "/products",
   categories: "/categories",
 } as const;
+
+/*
+  Order endpoints. POST /orders takes { items: [{ productId, quantity }]
+  plus optional customer info — prices and totals are computed server-side.
+*/
+export const ORDER_ENDPOINTS = {
+  create: "/orders",
+} as const;

@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -7,6 +7,8 @@ import { ApiError } from "../../api/errors";
 import { tokenStorage } from "../../api/tokenStorage";
 import ToastProvider from "../../components/ui/toast/ToastProvider";
 import AuthProvider from "../../context/auth/AuthProvider";
+import CartProvider from "../../context/cart/CartProvider";
+import FavoritesProvider from "../../context/favorites/FavoritesProvider";
 import type { InventoryProduct, ProductQuery } from "../../types/inventory";
 import type { Role } from "../../types/auth";
 import Products from "./Products";
@@ -48,7 +50,11 @@ function renderPage(url = "/products") {
       <ToastProvider>
         <MemoryRouter initialEntries={[url]}>
           <AuthProvider>
-            <Products />
+            <CartProvider>
+              <FavoritesProvider>
+                <Products />
+              </FavoritesProvider>
+            </CartProvider>
           </AuthProvider>
         </MemoryRouter>
       </ToastProvider>
@@ -57,6 +63,7 @@ function renderPage(url = "/products") {
 }
 
 beforeEach(() => {
+  localStorage.clear();
   tokenStorage.clear();
   list.mockReset();
   list.mockResolvedValue({ items: [product()], total: 1 });
@@ -64,23 +71,24 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("Products page", () => {
-  it("shows the table, the cost price column and Add Product for ADMIN", async () => {
+  it("shows product cards with price and Order, plus Add Product for ADMIN", async () => {
     signIn("ADMIN");
     renderPage();
 
     expect(await screen.findByText("Wireless Mouse")).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: /cost price/i })).toBeInTheDocument();
+    expect(screen.getByText("450 EGP")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^order$/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /add product/i })).toBeInTheDocument();
   });
 
-  it("hides cost price and Add Product from STAFF", async () => {
+  it("hides Add Product from STAFF", async () => {
     signIn("STAFF");
     renderPage();
 
     expect(await screen.findByText("Wireless Mouse")).toBeInTheDocument();
-    expect(screen.queryByRole("columnheader", { name: /cost price/i })).not.toBeInTheDocument();
     expect(screen.queryByText("280 EGP")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /add product/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^order$/i })).toBeInTheDocument();
   });
 
   it("reads the filters from the URL and sends them to the API", async () => {
@@ -120,8 +128,7 @@ describe("Products page", () => {
     renderPage("/products?q=zzz");
 
     expect(await screen.findByText(/no products match your filters/i)).toBeInTheDocument();
-    const table = screen.getByRole("table");
-    expect(within(table).getByRole("button", { name: /clear filters/i })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /clear filters/i }).length).toBeGreaterThan(0);
   });
 
   it("shows the error state and retries", async () => {

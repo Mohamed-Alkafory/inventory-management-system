@@ -1,18 +1,18 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import type { ReactNode } from "react";
-import type { OnChangeFn, PaginationState, SortingState } from "@tanstack/react-table";
-import { Eye, Package, Pencil, Plus, Search, Trash2, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Plus, Search, X } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { ApiError } from "../../api/errors";
-import { Button, DataTable, EmptyState, Input, Modal, Select, StatusBadge } from "../../components/ui";
-import type { DataTableColumn } from "../../components/ui";
+import { Button, EmptyState, Input, Pagination, Select } from "../../components/ui";
 import { Card, CardBody } from "../../components/ui/Card";
+import { ProductCard, ProductCardSkeleton } from "../../components/shop/ProductCard";
+import { useCart } from "../../context/cart/useCart";
+import { useFavorites } from "../../context/favorites/useFavorites";
 import { useAuth } from "../../context/auth/useAuth";
 import DeleteProductDialog from "../../features/products/DeleteProductDialog";
 import ProductFormDialog from "../../features/products/ProductFormDialog";
 import type { Product } from "../../features/products/types";
 import { useProductCategories, useProducts } from "../../hooks/useProducts";
 import { cn } from "../../lib/cn";
-import { formatPrice } from "../../lib/format";
 import { STOCK_STATUSES } from "../../types/inventory";
 import type { InventoryProduct, ProductSortField, StockStatus } from "../../types/inventory";
 import { PAGE_SIZES } from "./productQuery";
@@ -23,6 +23,16 @@ const STOCK_LABELS: Record<StockStatus, string> = {
   low_stock: "Low Stock",
   out_of_stock: "Out of Stock",
 };
+
+const SORT_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: "", label: "Default order" },
+  { value: "name-asc", label: "Name A → Z" },
+  { value: "name-desc", label: "Name Z → A" },
+  { value: "price-asc", label: "Price low → high" },
+  { value: "price-desc", label: "Price high → low" },
+  { value: "stock-asc", label: "Stock low → high" },
+  { value: "stock-desc", label: "Stock high → low" },
+];
 
 const SEARCH_DEBOUNCE_MS = 300;
 
@@ -43,47 +53,18 @@ function toFormProduct(product: InventoryProduct): Product {
   };
 }
 
-/** Product picture; falls back to an icon when there is no image or it fails to load. */
-function ProductThumb({ product }: { product: InventoryProduct }) {
-  const [failed, setFailed] = useState(false);
-
-  if (!product.imageUrl || failed) {
-    return (
-      <div className="flex size-10 items-center justify-center rounded-control bg-slate-100 text-slate-400" aria-hidden="true">
-        <Package className="size-5" />
-      </div>
-    );
-  }
-  return (
-    <img
-      src={product.imageUrl}
-      alt=""
-      loading="lazy"
-      onError={() => setFailed(true)}
-      className="size-10 rounded-control bg-slate-100 object-cover"
-    />
-  );
-}
-
-function Detail({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div>
-      <dt className="text-xs font-semibold uppercase tracking-wide text-muted">{label}</dt>
-      <dd className="mt-0.5 text-sm text-ink">{children}</dd>
-    </div>
-  );
-}
-
-export default function Products() {
+export default function Products({ embedded = false }: { embedded?: boolean }) {
   const { hasRole } = useAuth();
   const isAdmin = hasRole("ADMIN");
+  const navigate = useNavigate();
+  const cart = useCart();
+  const favorites = useFavorites();
 
   const { query, update, clearFilters, hasFilters } = useProductFilters();
 
   const { data, isPending, isError, error, refetch, isPlaceholderData } = useProducts(query);
   const categories = useProductCategories();
 
-  const [viewing, setViewing] = useState<InventoryProduct | null>(null);
   const [dialog, setDialog] = useState<{ mode: "create" } | { mode: "edit"; product: InventoryProduct } | null>(null);
   const [toDelete, setToDelete] = useState<InventoryProduct | null>(null);
 
@@ -109,7 +90,7 @@ export default function Products() {
     clearFilters();
   };
 
-  /* ---------- Paging / sorting wiring for the DataTable ---------- */
+  /* ---------- Sorting / paging driven by the URL ---------- */
   const total = data?.total ?? 0;
   const pageCount = Math.max(1, Math.ceil(total / query.pageSize));
 
@@ -120,123 +101,47 @@ export default function Products() {
     }
   }, [data, isPlaceholderData, total, query.page, pageCount, update]);
 
-  const sorting = useMemo<SortingState>(
-    () => (query.sortBy ? [{ id: query.sortBy, desc: query.sortDir === "desc" }] : []),
-    [query.sortBy, query.sortDir],
-  );
-
-  const pagination = useMemo<PaginationState>(
-    () => ({ pageIndex: query.page - 1, pageSize: query.pageSize }),
-    [query.page, query.pageSize],
-  );
-
-  const handleSortingChange: OnChangeFn<SortingState> = (updater) => {
-    const next = typeof updater === "function" ? updater(sorting) : updater;
-    const first = next[0];
-    if (first) update({ sortBy: first.id as ProductSortField, sortDir: first.desc ? "desc" : "asc" });
-    else update({ sortBy: null, sortDir: "asc" });
-  };
-
-  const handlePaginationChange: OnChangeFn<PaginationState> = (updater) => {
-    const next = typeof updater === "function" ? updater(pagination) : updater;
-    if (next.pageSize !== pagination.pageSize) update({ pageSize: next.pageSize });
-    else update({ page: next.pageIndex + 1 });
-  };
-
-  /* ---------- Columns ---------- */
-  const columns = useMemo<DataTableColumn<InventoryProduct>[]>(() => {
-    const cols: DataTableColumn<InventoryProduct>[] = [
-      {
-        id: "image",
-        header: () => <span className="sr-only">Image</span>,
-        enableSorting: false,
-        cell: ({ row }) => <ProductThumb product={row.original} />,
-      },
-      {
-        accessorKey: "name",
-        header: "Name",
-        cell: ({ row }) => <span className="font-medium">{row.original.name}</span>,
-      },
-      {
-        accessorKey: "sku",
-        header: "SKU",
-        cell: ({ row }) => <span className="font-mono text-xs text-muted">{row.original.sku}</span>,
-      },
-      { accessorKey: "category", header: "Category", enableSorting: false },
-      {
-        accessorKey: "price",
-        header: "Price",
-        cell: ({ row }) => <span className="whitespace-nowrap">{formatPrice(row.original.price)}</span>,
-      },
-    ];
-
-    // Cost price is internal: only ADMIN gets the column.
-    if (isAdmin) {
-      cols.push({
-        accessorKey: "costPrice",
-        header: "Cost price",
-        cell: ({ row }) => (
-          <span className="whitespace-nowrap text-muted">
-            {row.original.costPrice === undefined ? "—" : formatPrice(row.original.costPrice)}
-          </span>
-        ),
-      });
+  const sortValue = query.sortBy ? `${query.sortBy}-${query.sortDir}` : "";
+  const handleSortChange = (value: string) => {
+    if (!value) {
+      update({ sortBy: null, sortDir: "asc" });
+      return;
     }
+    const separator = value.lastIndexOf("-");
+    update({
+      sortBy: value.slice(0, separator) as ProductSortField,
+      sortDir: value.endsWith("-desc") ? "desc" : "asc",
+    });
+  };
 
-    cols.push(
-      { accessorKey: "stock", header: "Stock" },
-      {
-        id: "status",
-        header: "Status",
-        enableSorting: false,
-        cell: ({ row }) => <StatusBadge status={row.original.status} />,
-      },
-    );
-    return cols;
-  }, [isAdmin]);
+  const handlePageChange = (page: number) => update({ page });
 
-  const rowActions = useCallback(
-    (product: InventoryProduct) => (
-      <>
-        <Button size="sm" variant="ghost" aria-label={`View ${product.name}`} onClick={() => setViewing(product)}>
-          <Eye className="size-4" aria-hidden="true" />
-        </Button>
-        {isAdmin && (
-          <>
-            <Button
-              size="sm"
-              variant="ghost"
-              aria-label={`Edit ${product.name}`}
-              onClick={() => setDialog({ mode: "edit", product })}
-            >
-              <Pencil className="size-4" aria-hidden="true" />
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              aria-label={`Deactivate ${product.name}`}
-              onClick={() => setToDelete(product)}
-            >
-              <Trash2 className="size-4" aria-hidden="true" />
-            </Button>
-          </>
-        )}
-      </>
-    ),
-    [isAdmin],
-  );
+  const from = total === 0 ? 0 : (query.page - 1) * query.pageSize + 1;
+  const to = Math.min(query.page * query.pageSize, total);
+
+  const products = data?.items ?? [];
 
   const addProduct = () => setDialog({ mode: "create" });
 
-  const errorMessage = isError ? (error instanceof ApiError ? error.message : "Couldn’t load the products.") : null;
+  /** Order click → put the product in the cart, then jump to the Cart page. */
+  const handleOrder = (product: InventoryProduct) => {
+    cart.addToCart(product);
+    navigate("/cart");
+  };
+
+  const handleToggleFavorite = (product: InventoryProduct) => {
+    favorites.toggle(product);
+  };
+
+  const errorMessage = isError ? (error instanceof ApiError ? error.message : "Couldn't load the products.") : null;
 
   // A category that is in the URL but not (yet) in the loaded list must still show as selected.
   const categoryOptions = categories.data ?? [];
   const showExtraCategory = Boolean(query.category) && !categoryOptions.some((c) => c.id === query.category);
 
   return (
-    <div className="min-h-[calc(100vh-72px)] bg-surface-alt py-10 text-ink">
-      <div className="mx-auto w-full max-w-7xl px-4 sm:px-6">
+    <div className={embedded ? "text-ink" : "min-h-[calc(100vh-128px)] bg-surface-alt py-10 text-ink"}>
+      <div className={embedded ? "mx-auto w-full max-w-7xl" : "mx-auto w-full max-w-7xl px-4 sm:px-6"}>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-3xl font-bold">Products</h1>
@@ -297,6 +202,19 @@ export default function Products() {
               ))}
             </Select>
 
+            <Select
+              aria-label="Sort products"
+              value={sortValue}
+              onChange={(e) => handleSortChange(e.target.value)}
+              wrapperClassName="md:w-52"
+            >
+              {SORT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </Select>
+
             {hasFilters && (
               <Button variant="ghost" onClick={handleClear} leftIcon={<X className="size-4" aria-hidden="true" />}>
                 Clear filters
@@ -305,18 +223,38 @@ export default function Products() {
           </CardBody>
         </Card>
 
+        {errorMessage && (
+          <div className="mt-4 flex flex-col gap-2 rounded-card border border-line bg-surface p-4" role="alert">
+            <p className="text-sm font-medium text-danger-600">{errorMessage}</p>
+            <Button size="sm" variant="secondary" onClick={() => void refetch()}>
+              Try again
+            </Button>
+          </div>
+        )}
+
         <div aria-busy={isPlaceholderData} className={cn("mt-4 transition-opacity", isPlaceholderData && "opacity-60")}>
-          <DataTable<InventoryProduct>
-            caption="Products"
-            columns={columns}
-            data={data?.items ?? []}
-            getRowId={(row) => row.id}
-            rowActions={rowActions}
-            loading={isPending}
-            error={errorMessage}
-            onRetry={() => void refetch()}
-            empty={
-              hasFilters ? (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {isPending
+              ? Array.from({ length: 8 }, (_, i) => <ProductCardSkeleton key={i} />)
+              : products.map((product) => (
+                  <ProductCard
+                    key={product.id}
+                    product={product}
+                    isAdmin={isAdmin}
+                    isFavorite={favorites.has(product.id)}
+                    disabled={isPlaceholderData}
+                    onOpen={(product) => navigate(`/products/${product.id}`)}
+                    onEdit={(product) => setDialog({ mode: "edit", product })}
+                    onDelete={setToDelete}
+                    onOrder={handleOrder}
+                    onToggleFavorite={handleToggleFavorite}
+                  />
+                ))}
+          </div>
+
+          {!isPending && !errorMessage && products.length === 0 && (
+            <div className="mt-4">
+              {hasFilters ? (
                 <EmptyState
                   title="No products match your filters"
                   description="Try a different search or clear the filters to see everything."
@@ -329,51 +267,41 @@ export default function Products() {
               ) : (
                 <EmptyState
                   title="No products yet"
-                  description={isAdmin ? "Add your first product to start tracking stock." : "Products will show up here once an admin adds them."}
+                  description={
+                    isAdmin
+                      ? "Add your first product to start tracking stock."
+                      : "Products will show up here once an admin adds them."
+                  }
                   action={isAdmin ? <Button onClick={addProduct}>Add Product</Button> : undefined}
                 />
-              )
-            }
-            pageSize={query.pageSize}
-            pageSizeOptions={PAGE_SIZES}
-            pageCount={pageCount}
-            totalRows={total}
-            pagination={pagination}
-            onPaginationChange={handlePaginationChange}
-            sorting={sorting}
-            onSortingChange={handleSortingChange}
-          />
+              )}
+            </div>
+          )}
         </div>
-      </div>
 
-      <Modal
-        open={viewing !== null}
-        onClose={() => setViewing(null)}
-        title={viewing?.name ?? "Product"}
-        description={viewing ? `SKU ${viewing.sku}` : undefined}
-        footer={
-          <Button variant="secondary" onClick={() => setViewing(null)}>
-            Close
-          </Button>
-        }
-      >
-        {viewing && (
-          <dl className="grid grid-cols-2 gap-4">
-            <Detail label="Category">{viewing.category}</Detail>
-            <Detail label="Status">
-              <StatusBadge status={viewing.status} />
-            </Detail>
-            <Detail label="Price">{formatPrice(viewing.price)}</Detail>
-            {isAdmin && (
-              <Detail label="Cost price">
-                {viewing.costPrice === undefined ? "—" : formatPrice(viewing.costPrice)}
-              </Detail>
-            )}
-            <Detail label="In stock">{viewing.stock}</Detail>
-            <Detail label="Reorder level">{viewing.reorderLevel}</Detail>
-          </dl>
+        {!isPending && !errorMessage && total > 0 && (
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-muted" aria-live="polite">
+              Showing {from}–{to} of {total} {total === 1 ? "product" : "products"}
+            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              <Select
+                aria-label="Products per page"
+                value={String(query.pageSize)}
+                onChange={(e) => update({ pageSize: Number(e.target.value), page: 1 })}
+                wrapperClassName="w-44"
+              >
+                {PAGE_SIZES.map((size) => (
+                  <option key={size} value={size}>
+                    {size} per page
+                  </option>
+                ))}
+              </Select>
+              <Pagination page={query.page} totalPages={pageCount} onChange={handlePageChange} />
+            </div>
+          </div>
         )}
-      </Modal>
+      </div>
 
       <ProductFormDialog
         open={dialog !== null}

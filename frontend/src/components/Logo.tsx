@@ -1,6 +1,6 @@
 
 
-const ProdexaLogo = ({ size = 56, className = "" }) => {
+const ProdexaLogo = ({ size = 56, className = "", showWordmark = true }) => {
   return (
     <div className={`flex flex-col items-center ${className}`} style = {{ display: "flex", flexDirection: "row", alignItems: "center" }}>
       
@@ -50,11 +50,12 @@ const ProdexaLogo = ({ size = 56, className = "" }) => {
       </svg>
 
       
-      <p className="mt-2 text-2xl font-extrabold tracking-widest text-[#FF6B00]">
-        PRODEXA
-      </p>
+      {showWordmark && (
+        <p className="mt-2 text-2xl font-extrabold tracking-widest text-[#FF6B00]">
+          PRODEXA
+        </p>
+      )}
 
-    
     </div>
   );
 };

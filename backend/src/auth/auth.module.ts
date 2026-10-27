@@ -1,6 +1,10 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import type { SignOptions } from 'jsonwebtoken';
+
+/** Default access-token lifetime (also mirrored in auth.service.ts). */
+const JWT_ACCESS_TTL = '15m';
 
 import { JwtAuthGuard } from './guards/jwt-auth.guard.js';
 import { RolesGuard } from './guards/roles.guard.js';
@@ -20,8 +24,11 @@ import { AuditModule } from '../audit/audit.module.js';
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_SECRET'),
-        signOptions: { expiresIn: '15m' },
+        secret: configService.getOrThrow<string>('JWT_SECRET'),
+        signOptions: {
+          expiresIn: (configService.get<string>('JWT_EXPIRES_IN') ??
+            JWT_ACCESS_TTL) as SignOptions['expiresIn'],
+        },
       }),
     }),
   ],
