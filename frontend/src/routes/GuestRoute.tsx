@@ -4,9 +4,9 @@ import { getPostLoginTarget } from "./redirect";
 
 /** For /login: signed-in users are bounced to where they were going (or the home page). */
 export default function GuestRoute() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, role } = useAuth();
   const location = useLocation();
 
-  if (isAuthenticated) return <Navigate to={getPostLoginTarget(location.state)} replace />;
+  if (isAuthenticated) return <Navigate to={getPostLoginTarget(location.state, role)} replace />;
   return <Outlet />;
 }

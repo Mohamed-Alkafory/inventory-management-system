@@ -42,24 +42,45 @@ export function toApiError(error: unknown): ApiError {
 
   if (axios.isAxiosError(error)) {
     if (!error.response) {
-      return new ApiError(
-        error.code === "ECONNABORTED"
-          ? "The request timed out. Please try again."
-          : "Can't reach the server. Check your connection and try again.",
-        { isNetworkError: true },
-      );
+      const timedOut = error.code === "ECONNABORTED";
+      const base = error.config?.baseURL ?? "";
+      const target = `${base}${error.config?.url ?? ""}`;
+      const absolute = /^https?:\/\//i.test(base) ? base : `${window.location.origin}${base}`;
+
+      // No HTTP response at all: backend down, wrong URL/port, blocked by CORS, or the dev proxy is missing.
+      // The browser hides which one, so surface the exact URL we tried to reach to make it diagnosable.
+      if (import.meta.env.DEV) {
+        console.error(
+          `[api] No response from ${error.config?.method?.toUpperCase() ?? "request"} ${target} (${error.code ?? "unknown"}).\n` +
+            `Resolved API base: ${absolute}\n` +
+            "Check: 1) the backend is running  2) VITE_API_URL / the Vite proxy points at it  " +
+            "3) the backend allows this origin (CORS) — see the Network tab for the real reason.",
+          error,
+        );
+      }
+
+      const message = timedOut
+        ? "The request timed out. Please try again."
+        : import.meta.env.DEV
+          ? `Can't reach the server at ${absolute}. Make sure the backend is running and the API URL is correct.`
+          : "Can't reach the server. Check your connection and try again.";
+
+      return new ApiError(message, { isNetworkError: true, code: error.code });
     }
 
     const { status, data } = error.response;
     const body = (typeof data === "object" && data !== null ? data : {}) as Record<string, unknown>;
     // Nest sends `message` as a string, or as a string[] for validation errors.
-    const serverMessage = Array.isArray(body.message)
+    let serverMessage = Array.isArray(body.message)
       ? body.message.filter((m): m is string => typeof m === "string").join(" · ") || undefined
       : typeof body.message === "string"
         ? body.message
         : typeof body.error === "string"
           ? body.error
           : undefined;
+
+    // A bare "Internal Server Error" tells the user nothing useful — prefer the status-based hint.
+    if (serverMessage === "Internal Server Error") serverMessage = undefined;
 
     return new ApiError(serverMessage ?? defaultMessage(status), {
       status,

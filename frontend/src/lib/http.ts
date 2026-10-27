@@ -97,7 +97,10 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
 
   if (!res.ok) {
     const serverMessage = isObject(body) ? (text(body.message) ?? text(body.error) ?? null) : null;
-    throw new ApiError(res.status, serverMessage ?? `Request failed (${res.status})`, {
+    // A bare "Internal Server Error" alone doesn't help the user — fall back to it
+    // only when we have nothing better to say.
+    const helpful = serverMessage === "Internal Server Error" ? null : serverMessage;
+    throw new ApiError(res.status, helpful ?? `Request failed (${res.status})`, {
       fieldErrors: extractFieldErrors(body),
       serverMessage,
     });

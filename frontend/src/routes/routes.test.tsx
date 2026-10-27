@@ -81,9 +81,15 @@ describe("route guards", () => {
     expect(screen.getByText("Admin page")).toBeInTheDocument();
   });
 
-  it("sends signed-in users away from guest-only pages to the home page", () => {
-    signIn("ADMIN");
+  it("sends signed-in STAFF away from guest-only pages to the home page", () => {
+    signIn("STAFF");
     renderAt("/guest-only");
     expect(screen.getByText("Home page")).toBeInTheDocument();
+  });
+
+  it("sends a signed-in ADMIN away from guest-only pages to the admin panel", () => {
+    signIn("ADMIN");
+    renderAt("/guest-only");
+    expect(screen.getByText("Admin page")).toBeInTheDocument();
   });
 });

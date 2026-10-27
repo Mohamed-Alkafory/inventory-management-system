@@ -64,6 +64,7 @@ export function toProduct(data: unknown): InventoryProduct {
     barcode: text(data.barcode),
     isActive: typeof data.isActive === "boolean" ? data.isActive : true,
     category,
+    description: text(data.description),
     price: num(data.price) ?? 0,
     costPrice: num(pick(data, "costPrice", "cost_price", "cost")),
     stock,
