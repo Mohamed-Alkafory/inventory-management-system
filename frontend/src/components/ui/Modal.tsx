@@ -21,6 +21,8 @@ export type ModalProps = {
   title: string;
   description?: string;
   size?: Size;
+  /** Optional width class override (e.g. "max-w-md", "max-w-4xl"). */
+  widthClass?: string;
   /** Buttons row rendered at the bottom. */
   footer?: ReactNode;
   /** Set false while a request is running so the dialog cannot be dismissed. */
@@ -34,6 +36,7 @@ export default function Modal({
   title,
   description,
   size = "md",
+  widthClass,
   footer,
   dismissible = true,
   children,
@@ -108,7 +111,7 @@ export default function Modal({
         tabIndex={-1}
         className={cn(
           "w-full rounded-modal bg-surface shadow-overlay outline-none animate-pop-in motion-reduce:animate-none",
-          sizes[size],
+          widthClass ?? sizes[size],
         )}
       >
         <div className="flex items-start justify-between gap-4 px-6 pt-6">
