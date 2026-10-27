@@ -12,8 +12,9 @@ npm ci
 npm run dev
 ```
 
-Open <http://localhost:5173> (Vite default; `vite.config.ts` sets no custom
-port). Path alias `@` maps to `src/` (see `vite.config.ts` and
+Open <http://localhost:5173>. `vite.config.ts` pins the port with
+`strictPort: true`, so Vite fails instead of moving to another port when
+`5173` is occupied. Path alias `@` maps to `src/` (see `vite.config.ts` and
 `tsconfig.app.json`).
 
 ## Scripts (all run from `frontend/`)
@@ -27,10 +28,19 @@ port). Path alias `@` maps to `src/` (see `vite.config.ts` and
 
 ## Environment
 
-`VITE_API_URL` (`frontend/.env.example`, e.g. `http://localhost:3000`) is
-reserved for the future API client — **no code reads it yet**, so no
-`frontend/.env` is needed today. Create one (`cp frontend/.env.example
-frontend/.env`) once frontend code uses `import.meta.env`.
+Development requests use the relative base URL `/api/v1` and Vite proxies
+`/api` to `http://localhost:3010` (see `vite.config.ts`). This keeps browser
+requests same-origin, so CORS is not involved during proxied development.
+
+`VITE_API_URL` is optional and must include the global `/api/v1` prefix when
+set. Use it for production or a non-proxied deployment, for example
+`VITE_API_URL=https://api.example.com/api/v1`. When unset, the frontend uses
+the relative `/api/v1` base URL. Copy `frontend/.env.example` to
+`frontend/.env` if you need local overrides.
+
+Set `VITE_USE_MOCK=true` to run the auth/product list against the in-memory
+mocks instead of the backend. `VITE_USE_MOCK_API=true` does the same for the
+categories/suppliers screens.
 
 ## Reference
 

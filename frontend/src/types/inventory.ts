@@ -20,6 +20,10 @@ export type InventoryProduct = {
   name: string;
   sku: string;
   categoryId: string;
+  /** Optional: needed when opening the edit form. */
+  supplierId?: string;
+  barcode?: string;
+  isActive?: boolean;
   /** Category name ("" when the API only sent the id; the hook fills it from the category list). */
   category: string;
   price: number;

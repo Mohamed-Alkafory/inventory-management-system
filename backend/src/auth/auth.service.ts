@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   Injectable,
   UnauthorizedException,
   UnprocessableEntityException,
@@ -12,6 +13,7 @@ import { Prisma } from '../generated/prisma/client.js';
 import { AuditService } from '../audit/audit.service.js';
 import { LoginDto } from './dto/login.dto.js';
 import { RefreshTokenDto } from './dto/refresh-token.dto.js';
+import { RegisterDto } from './dto/register.dto.js';
 import { type ChangePasswordDto } from './dto/change-password.dto.js';
 import { type UpdateProfileDto } from './dto/update-profile.dto.js';
 
@@ -45,6 +47,14 @@ export type AuthUserResponse = Prisma.UserGetPayload<{
   select: typeof PUBLIC_USER_SELECT;
 }>;
 
+/** What the client may know about the signed-in user (never `passwordHash`). */
+export interface SessionUser {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+}
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -71,21 +81,56 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    const accessToken = await this.signAccessToken(user.id, user.role);
-    const refreshToken = await this.issueRefreshToken(user.id);
+    return this.buildSession(user);
+  }
 
-    return {
-      accessToken,
-      refreshToken,
-      tokenType: 'Bearer',
-      expiresIn: ACCESS_TOKEN_TTL_SECONDS,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
+  /**
+   * Public self-registration. Always creates a STAFF account (ADMIN accounts are
+   * created by an admin through POST /users) and signs it in, so the response
+   * has the same shape as `login`.
+   */
+  async register(registerDto: RegisterDto) {
+    const existing = await this.prisma.user.findUnique({
+      where: { email: registerDto.email },
+      select: { id: true },
+    });
+
+    if (existing) {
+      throw new ConflictException(
+        `User with email ${registerDto.email} already exists`,
+      );
+    }
+
+    const passwordHash = await bcrypt.hash(registerDto.password, BCRYPT_ROUNDS);
+
+    const user = await this.prisma.user.create({
+      data: {
+        name: registerDto.name,
+        email: registerDto.email,
+        passwordHash,
+        role: 'STAFF',
       },
-    };
+      select: { id: true, name: true, email: true, role: true },
+    });
+
+    return this.buildSession(user);
+  }
+
+  /**
+   * `GET /auth/me` — the authenticated user's own public profile. A missing
+   * or deactivated account answers 401 (the session is no longer valid).
+   */
+  async me(userId: string): Promise<AuthUserResponse> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: PUBLIC_USER_SELECT,
+    });
+
+    if (!user || !user.isActive) {
+      throw new UnauthorizedException('Invalid session');
+    }
+
+    return user;
   }
 
   /**
@@ -149,23 +194,6 @@ export class AuthService {
         data: { revokedAt: new Date() },
       });
     }
-  }
-
-  /**
-   * `GET /auth/me` — the authenticated user's own public profile. A missing
-   * or deactivated account answers 401 (the session is no longer valid).
-   */
-  async me(userId: string): Promise<AuthUserResponse> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: PUBLIC_USER_SELECT,
-    });
-
-    if (!user || !user.isActive) {
-      throw new UnauthorizedException('Invalid session');
-    }
-
-    return user;
   }
 
   /**
@@ -269,6 +297,24 @@ export class AuthService {
 
       return updated;
     });
+  }
+
+  private async buildSession(user: SessionUser) {
+    const accessToken = await this.signAccessToken(user.id, user.role);
+    const refreshToken = await this.issueRefreshToken(user.id);
+
+    return {
+      accessToken,
+      refreshToken,
+      tokenType: 'Bearer',
+      expiresIn: ACCESS_TOKEN_TTL_SECONDS,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+    };
   }
 
   private signAccessToken(userId: string, role: string): Promise<string> {

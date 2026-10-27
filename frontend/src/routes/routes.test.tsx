@@ -31,6 +31,7 @@ function renderAt(path: string) {
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<p>Login page</p>} />
+          <Route path="/" element={<p>Home page</p>} />
           <Route path="/forbidden" element={<p>Forbidden page</p>} />
           <Route element={<GuestRoute />}>
             <Route path="/guest-only" element={<p>Guest page</p>} />
@@ -80,9 +81,9 @@ describe("route guards", () => {
     expect(screen.getByText("Admin page")).toBeInTheDocument();
   });
 
-  it("sends signed-in users away from guest-only pages", () => {
+  it("sends signed-in users away from guest-only pages to the home page", () => {
     signIn("ADMIN");
     renderAt("/guest-only");
-    expect(screen.getByText("Dashboard page")).toBeInTheDocument();
+    expect(screen.getByText("Home page")).toBeInTheDocument();
   });
 });

@@ -122,11 +122,11 @@ docker compose up --build -d
 
 The backend waits for PostgreSQL to become healthy and applies pending Prisma migrations before starting.
 
-If port `3000` is already in use on your machine, publish the API on another host port by setting `BACKEND_PORT` for that command, e.g. `BACKEND_PORT=3001 docker compose up --build -d`.
+The API is published on host port `3010` by default (the container still listens on `3000` internally). If that port is already in use, publish it on another host port by setting `BACKEND_PORT` for that command, e.g. `BACKEND_PORT=3011 docker compose up --build -d`.
 
-- API base URL: `http://localhost:3000/api/v1`
-- Health endpoint: `http://localhost:3000/api/v1/health`
-- Swagger UI: `http://localhost:3000/api/docs`
+- API base URL: `http://localhost:3010/api/v1`
+- Health endpoint: `http://localhost:3010/api/v1/health`
+- Swagger UI: `http://localhost:3010/api/docs`
 
 ### Stop the application
 
@@ -213,27 +213,27 @@ Each application has its own `package.json` and lockfile. Install dependencies s
 
 ### 6. Start the applications
 
-Start the backend from `backend/`:
-
-```bash
-npm run start:dev
-```
-
-Start the frontend from `frontend/` in a separate terminal:
+From the repository root:
 
 ```bash
 npm run dev
 ```
+
+This starts the backend in watch mode on port `3010` and the frontend on port `5173`. The command refuses to start if either port is occupied, reports the conflicting PID, and stops both servers when you press `Ctrl+C`.
+
+If you prefer separate terminals, run `npm run start:dev` from `backend/` and `npm run dev` from `frontend/`.
+
+The frontend calls the API through Vite's `/api` proxy, so no backend URL needs to be configured for local development.
 
 ### 7. Open the applications
 
 | Service     | URL                   |
 | ----------- | --------------------- |
 | Frontend    | http://localhost:5173 |
-| Backend API | http://localhost:3000 |
+| Backend API | http://localhost:3010 |
 | PostgreSQL  | localhost:5432        |
 
-The frontend currently displays the initial application shell. The backend exposes `GET /api/v1/health` for container health monitoring and readiness checks.
+The backend exposes `GET /api/v1/health` for readiness checks. Through the Vite proxy, the same endpoint is available at `http://localhost:5173/api/v1/health`.
 
 ## Environment Variables
 
@@ -244,11 +244,11 @@ The frontend currently displays the initial application shell. The backend expos
 | `POSTGRES_DB`       | Database name                                |
 | `POSTGRES_PORT`     | Host port mapped to PostgreSQL               |
 | `DATABASE_URL`      | Database connection string used by Prisma    |
-| `PORT`              | Backend API port; defaults to `3000`         |
-| `CORS_ORIGIN`       | Allowed CORS origin for frontend client      |
+| `PORT`              | Backend API port; local development uses `3010` |
+| `CORS_ORIGIN`       | Allowed CORS origin for direct frontend requests |
 | `JWT_SECRET`        | Secret for signing JWT authentication tokens |
 | `JWT_EXPIRES_IN`    | Access token expiration duration (e.g. `15m`)|
-| `VITE_API_URL`      | Backend API URL used by the frontend         |
+| `VITE_API_URL`      | Optional full API base URL incl. `/api/v1`; development uses the Vite proxy by default |
 
 Environment templates contain placeholders only. Keep actual secrets in ignored local `.env` files and never commit them.
 
@@ -329,6 +329,8 @@ npm run build
 
 Run each command from its corresponding application directory.
 
+Backend E2E tests reset their database between tests. They use a dedicated test database whose name contains `test` (default: `inventory_test`); set `E2E_DATABASE_URL` to override it. The test helper refuses to truncate any database without `test` in its name.
+
 ## Troubleshooting
 
 ### PostgreSQL connection errors
@@ -343,9 +345,9 @@ If Prisma reports `P1001` or the connection is refused:
 
 ### Port already in use
 
-If a port is occupied, stop the conflicting process or configure an alternative port. If you change the PostgreSQL host port, update `DATABASE_URL` accordingly.
+Local development uses fixed ports: backend `3010` and frontend `5173`. `npm run dev` checks both ports and reports the conflicting PID instead of starting a second instance. Stop that process and run the command again.
 
-Vite may automatically select another port if `5173` is unavailable.
+Vite is configured with `strictPort: true`, so it fails instead of silently moving to `5174` (which would not match the backend CORS origin). If you change the PostgreSQL host port, update `DATABASE_URL` accordingly.
 
 ### Dependency installation errors
 

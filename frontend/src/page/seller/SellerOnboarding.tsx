@@ -5,7 +5,7 @@ import Button from "../../components/ui/Button";
 import Input from "../../components/ui/Input";
 import { BRAND } from "../../lib/brand";
 
-const DASHBOARD_PATH = "/seller/dashboard"; // غيّره لمسار لوحة البائع عندك
+const DASHBOARD_PATH = "/dashboard";
 
 const STEPS = ["How it works", "Your store", "Add products", "Launch"];
 

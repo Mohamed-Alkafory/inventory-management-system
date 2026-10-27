@@ -28,6 +28,7 @@ function renderRegister() {
                 <Route path="/register" element={<Register />} />
               </Route>
               <Route path="/dashboard" element={<p>Dashboard page</p>} />
+              <Route path="/" element={<p>Home page</p>} />
             </Routes>
           </AuthProvider>
         </MemoryRouter>
@@ -91,7 +92,7 @@ describe("Register page", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("An account with this email already exists.");
   });
 
-  it("creates the account and redirects to the dashboard", async () => {
+  it("creates the account and redirects to the home page", async () => {
     register.mockResolvedValue({
       user: { id: "9", name: "Nour Ahmed", email: "nour@prodexa.com", role: "STAFF" },
       tokens: { accessToken: "a", refreshToken: "r" },
@@ -102,7 +103,7 @@ describe("Register page", () => {
     fireEvent.click(screen.getByRole("checkbox"));
     submit();
 
-    await waitFor(() => expect(screen.getByText("Dashboard page")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Home page")).toBeInTheDocument());
     expect(register).toHaveBeenCalledWith({ name: "Nour Ahmed", email: "nour@prodexa.com", password: "Strong#Pass1" });
   });
 });

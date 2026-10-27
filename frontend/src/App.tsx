@@ -1,5 +1,7 @@
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import AdminDashboard from "./admin/pages/Dashboard/AdminDashboard";
+import Categories from "./admin/pages/Categories/Categories";
+import Suppliers from "./admin/pages/Suppliers/Suppliers";
 import Header from "./components/header/Header";
 import ToastProvider from "./components/ui/toast/ToastProvider";
 import AuthProvider from "./context/auth/AuthProvider";
@@ -45,6 +47,8 @@ export default function App() {
                 {/* ADMIN only — STAFF is sent to /forbidden */}
                 <Route element={<RoleRoute allow={["ADMIN"]} />}>
                   <Route path="/admin" element={<AdminDashboard />} />
+                  <Route path="/admin/categories" element={<Categories />} />
+                  <Route path="/admin/suppliers" element={<Suppliers />} />
                 </Route>
               </Route>
             </Routes>

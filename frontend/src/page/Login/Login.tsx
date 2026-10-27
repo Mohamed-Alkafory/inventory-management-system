@@ -25,8 +25,7 @@ const schema = z.object({
 type LoginValues = z.infer<typeof schema>;
 
 // حط الصورة في public/auth-bg.jpg
-// صورة مستودع من Unsplash (مجانية للاستخدام التجاري)
-const BG_IMAGE = "https://unsplash.com/photos/CpIWRMy0jkg/download?force=true&w=1800";
+const BG_IMAGE = "/auth-bg.jpg";
 
 const HIGHLIGHTS = [
   { icon: Package, text: "Products, stock and suppliers in one place" },

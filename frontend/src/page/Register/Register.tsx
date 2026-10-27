@@ -96,19 +96,21 @@ export default function Register() {
   const strength = strengthLabel(score);
 
   const createAccount = useMutation({
-    mutationFn: ({ name, email, password: pw, accountType: role }: RegisterValues) =>
-      signUp({ name, email, password: pw }),
+    mutationFn: ({ name, email, password: pw }: RegisterValues) => signUp({ name, email, password: pw }),
     onSuccess: (user, variables) => {
       toast.success(`Account created — welcome, ${user.name}`);
-      navigate(destinationFor(variables.accountType), { replace: true });
+      // Route through GuestRoute's redirect contract so it doesn't bounce us elsewhere.
+      const target = destinationFor(variables.accountType);
+      navigate(target, { replace: true, state: { from: { pathname: target } } });
     },
   });
 
   const googleSignUp = useMutation({
-    mutationFn: ({ idToken, role }: { idToken: string; role: AccountType }) => loginWithGoogle(idToken),
+    mutationFn: ({ idToken }: { idToken: string; role: AccountType }) => loginWithGoogle(idToken),
     onSuccess: (user, variables) => {
       toast.success(`Welcome, ${user.name}`);
-      navigate(destinationFor(variables.role), { replace: true });
+      const target = destinationFor(variables.role);
+      navigate(target, { replace: true, state: { from: { pathname: target } } });
     },
   });
 

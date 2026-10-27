@@ -77,8 +77,11 @@ export class CreateProductDto {
   @IsUUID()
   categoryId!: string;
 
-  @ApiPropertyOptional({ example: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd' })
+  @ApiPropertyOptional({
+    example: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+    nullable: true,
+  })
   @IsOptional()
   @IsUUID()
-  supplierId!: string;
+  supplierId?: string | null;
 }
