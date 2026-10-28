@@ -32,7 +32,8 @@ COPY --from=builder /usr/src/app/dist ./dist
 COPY --from=builder /usr/src/app/prisma ./prisma
 COPY --from=builder /usr/src/app/prisma.config.ts ./prisma.config.ts
 
-RUN chown -R node:node /usr/src/app
+RUN mkdir -p /usr/src/app/uploads \
+  && chown -R node:node /usr/src/app
 
 USER node
 

@@ -18,6 +18,9 @@ export default defineConfig({
     globals: true,
     root: './',
     include: ['**/*.e2e-spec.ts'],
+    // The real-database suites call resetDb(); running them in parallel would
+    // truncate each other's fixtures.
+    fileParallelism: false,
     setupFiles: ['./test/setup-env.ts'],
     env: {
       DATABASE_URL: testDatabaseUrl,

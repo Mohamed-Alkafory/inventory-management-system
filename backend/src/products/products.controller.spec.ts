@@ -57,6 +57,8 @@ describe('ProductsController', () => {
   const create = vi.fn();
   const update = vi.fn();
   const remove = vi.fn();
+  const uploadImage = vi.fn();
+  const removeImage = vi.fn();
 
   beforeEach(async () => {
     findAll.mockReset();
@@ -64,13 +66,23 @@ describe('ProductsController', () => {
     create.mockReset();
     update.mockReset();
     remove.mockReset();
+    uploadImage.mockReset();
+    removeImage.mockReset();
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [ProductsController],
       providers: [
         {
           provide: ProductsService,
-          useValue: { findAll, findOne, create, update, remove },
+          useValue: {
+            findAll,
+            findOne,
+            create,
+            update,
+            remove,
+            uploadImage,
+            removeImage,
+          },
         },
       ],
     }).compile();
@@ -191,6 +203,75 @@ describe('ProductsController', () => {
     expect(rolesFor(ProductsController.prototype.remove)).toEqual(['ADMIN']);
     expect(rolesFor(ProductsController.prototype.findAll)).toEqual([]);
     expect(rolesFor(ProductsController.prototype.findOne)).toEqual([]);
+  });
+
+  describe('product image endpoints', () => {
+    const id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const file = { buffer: Buffer.from('image'), size: 5 } as never;
+
+    it('uploads/replaces an image for ADMIN and returns the product', async () => {
+      uploadImage.mockResolvedValue(sampleProduct);
+
+      await expect(controller.uploadImage(id, file, ADMIN)).resolves.toEqual(
+        sampleProduct,
+      );
+      expect(uploadImage).toHaveBeenCalledWith(id, file, 'admin-id');
+    });
+
+    it('returns 200 for the upload and 204 for the image delete', () => {
+      expect(
+        Reflect.getMetadata(
+          '__httpCode__',
+          ProductsController.prototype.uploadImage,
+        ),
+      ).toBe(HttpStatus.OK);
+      expect(
+        Reflect.getMetadata(
+          '__httpCode__',
+          ProductsController.prototype.removeImage,
+        ),
+      ).toBe(HttpStatus.NO_CONTENT);
+    });
+
+    it('requires ADMIN for both image endpoints', () => {
+      const rolesFor = (handler: (...args: never[]) => unknown) =>
+        reflector.get<string[]>(ROLES_KEY, handler) ?? [];
+
+      expect(rolesFor(ProductsController.prototype.uploadImage)).toEqual([
+        'ADMIN',
+      ]);
+      expect(rolesFor(ProductsController.prototype.removeImage)).toEqual([
+        'ADMIN',
+      ]);
+    });
+
+    it('propagates 404 for a missing product', async () => {
+      uploadImage.mockRejectedValue(
+        new NotFoundException(`Product ${id} not found`),
+      );
+
+      await expect(
+        controller.uploadImage(id, file, ADMIN),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('propagates 400 for a missing or invalid file', async () => {
+      uploadImage.mockRejectedValue(
+        new BadRequestException('An image file is required'),
+      );
+
+      await expect(
+        controller.uploadImage(id, undefined, ADMIN),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(uploadImage).toHaveBeenCalledWith(id, undefined, 'admin-id');
+    });
+
+    it('deletes an image via the service', async () => {
+      removeImage.mockResolvedValue(undefined);
+
+      await expect(controller.removeImage(id, ADMIN)).resolves.toBeUndefined();
+      expect(removeImage).toHaveBeenCalledWith(id, 'admin-id');
+    });
   });
 
   describe('input validation (400) — body DTOs', () => {

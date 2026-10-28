@@ -9,6 +9,10 @@ import {
   ListProductsQueryDto,
   type ProductSortableField,
 } from './dto/list-products.query.dto.js';
+import {
+  ProductImageService,
+  type UploadedImageFile,
+} from './product-image.service.js';
 
 /**
  * Contract §3.4 `Product` shape. `price`/`costPrice` are Decimal(12,2) in the
@@ -100,6 +104,7 @@ export class ProductsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly images: ProductImageService,
   ) {}
 
   /**
@@ -383,6 +388,85 @@ export class ProductsService {
     });
 
     return serializeProduct(product, ADMIN_ROLE);
+  }
+
+  /**
+   * Replaces a product image with an uploaded file. The new file is written
+   * first; if the database update fails it is removed again so no orphan is
+   * left behind. The previous local file is deleted only after the DB commit.
+   */
+  async uploadImage(
+    id: string,
+    file: UploadedImageFile | undefined,
+    userId?: string,
+  ): Promise<ProductResponse> {
+    const existing = await this.prisma.product.findUnique({
+      where: { id },
+      select: PRODUCT_SELECT,
+    });
+
+    if (!existing) {
+      throw new NotFoundException(`Product ${id} not found`);
+    }
+
+    const imageUrl = await this.images.save(file);
+
+    let product: Prisma.ProductGetPayload<{ select: typeof PRODUCT_SELECT }>;
+    try {
+      product = await this.prisma.product.update({
+        where: { id },
+        data: { imageUrl },
+        select: PRODUCT_SELECT,
+      });
+    } catch (error) {
+      await this.images.remove(imageUrl);
+      throw error;
+    }
+
+    await this.images.remove(existing.imageUrl);
+
+    await this.audit.log({
+      userId,
+      action: 'product.image_updated',
+      entityType: 'product',
+      entityId: id,
+      oldValues: existing,
+      newValues: product,
+    });
+
+    return serializeProduct(product, ADMIN_ROLE);
+  }
+
+  /**
+   * Clears a product image. The local file is removed only after the database
+   * update succeeds; external URLs are never touched on disk.
+   */
+  async removeImage(id: string, userId?: string): Promise<void> {
+    const existing = await this.prisma.product.findUnique({
+      where: { id },
+      select: PRODUCT_SELECT,
+    });
+
+    if (!existing) {
+      throw new NotFoundException(`Product ${id} not found`);
+    }
+
+    const product = await this.prisma.product.update({
+      where: { id },
+      data: { imageUrl: null },
+      select: PRODUCT_SELECT,
+    });
+
+    await this.images.remove(existing.imageUrl);
+
+    await this.audit.log({
+      userId,
+      action: 'product.image_deleted',
+      entityType: 'product',
+      entityId: id,
+      oldValues: existing,
+      newValues: product,
+    });
   }
 
   /**
