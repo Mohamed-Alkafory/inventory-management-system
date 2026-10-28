@@ -11,7 +11,7 @@ export default function Dashboard() {
   const { user, role } = useAuth();
 
   return (
-    <div className="min-h-[calc(100vh-72px)] bg-surface-alt py-12 text-ink">
+    <div className="min-h-[calc(100vh-128px)] bg-surface-alt py-12 text-ink">
       <Container>
         <h1 className="text-3xl font-bold">Welcome, {user?.name}</h1>
         <p className="mt-2 flex items-center gap-2 text-muted">

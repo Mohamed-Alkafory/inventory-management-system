@@ -20,7 +20,7 @@ import {
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { AuditService } from '../audit/audit.service.js';
 
-/** Contract §3.6 `StockMovement` shape (all scalar fields). */
+/** Contract §3.6 `StockMovement` shape plus the light `product`/`createdBy` stamps. */
 export interface MovementResponse {
   id: string;
   productId: string;
@@ -32,6 +32,10 @@ export interface MovementResponse {
   purchaseOrderId: string | null;
   createdById: string;
   createdAt: Date;
+  /** Included so the UI can show product name/sku without extra requests. */
+  product: { id: string; name: string; sku: string };
+  /** Included so the UI can attribute the movement to a user. */
+  createdBy: { id: string; name: string };
 }
 
 /** Movement list response — §1 pagination envelope. */
@@ -69,6 +73,8 @@ const MOVEMENT_SELECT = {
   purchaseOrderId: true,
   createdById: true,
   createdAt: true,
+  product: { select: { id: true, name: true, sku: true } },
+  createdBy: { select: { id: true, name: true } },
 } satisfies Prisma.StockMovementSelect;
 
 const P2034_RETRY_DELAY_MS = 50;

@@ -9,6 +9,13 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  const config = app.get(ConfigService);
+
+  const corsOrigin = config.getOrThrow<string>('CORS_ORIGIN');
+  app.enableCors({
+    origin: Array.isArray(corsOrigin) ? corsOrigin : [corsOrigin],
+    credentials: true,
+  });
   app.setGlobalPrefix('api/v1');
   app.useGlobalPipes(
     new ValidationPipe({
@@ -17,11 +24,6 @@ async function bootstrap() {
       transform: true,
     }),
   );
-  const config = app.get(ConfigService);
-  app.enableCors({
-    origin: config.getOrThrow('CORS_ORIGIN'),
-    credentials: true,
-  });
   const documentBuilder = new DocumentBuilder()
     .setTitle('Inventory Management System')
     .setDescription('The inventory management system API description')
@@ -34,7 +36,10 @@ async function bootstrap() {
   SwaggerModule.setup('api/docs', app, documentFactory);
 
   app.use(helmet());
-  app.useGlobalFilters(new PrismaExceptionFilter(), new AllExceptionsFilter());
+  // Order matters: Nest evaluates the LAST registered filter first, so the
+  // specific Prisma filter must come AFTER the catch-all one; otherwise every
+  // Prisma error is swallowed into a generic "Internal Server Error".
+  app.useGlobalFilters(new AllExceptionsFilter(), new PrismaExceptionFilter());
   await app.listen(config.get('PORT') || 3000);
 }
 void bootstrap();

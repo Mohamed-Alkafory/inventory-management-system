@@ -101,6 +101,16 @@ function compare(a: InventoryProduct, b: InventoryProduct, field: NonNullable<Pr
 }
 
 export const mockProductsApi: ProductsApi = {
+  async get(id) {
+    await delay(300);
+    const row = CATALOG.find((p) => p.id === id);
+    if (!row) throw new ApiError("We couldn't find what you were looking for.", { status: 404 });
+    if (isAdmin()) return { ...row };
+    const copy = { ...row };
+    delete copy.costPrice;
+    return copy;
+  },
+
   async list(query) {
     const term = query.search.trim().toLowerCase();
     if (term === "!slow") await delay(3000);

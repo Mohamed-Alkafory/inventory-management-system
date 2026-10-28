@@ -7,7 +7,7 @@ export default function Forbidden() {
   const { isAuthenticated } = useAuth();
 
   return (
-    <main className="flex min-h-[calc(100vh-72px)] items-center justify-center bg-[#FDFDFC] px-4 text-center text-ink">
+    <main className="flex min-h-[calc(100vh-128px)] items-center justify-center bg-[#FDFDFC] px-4 text-center text-ink">
       <div className="max-w-md">
         <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-danger-50 text-danger-600">
           <ShieldAlert className="h-8 w-8" aria-hidden="true" />

@@ -7,6 +7,7 @@ import type { InventoryProduct, ProductPage, ProductQuery } from "../types/inven
 export const productKeys = {
   all: ["products"] as const,
   list: (query: ProductQuery) => ["products", "list", query] as const,
+  detail: (id: string) => ["products", "detail", id] as const,
   categories: ["products", "categories"] as const,
 };
 
@@ -53,5 +54,26 @@ export function useProductCategories() {
     queryKey: productKeys.categories,
     queryFn: () => productsApi.categories(),
     staleTime: 5 * 60_000,
+  });
+}
+
+/** One product for the detail page. Cost is stripped for STAFF, same as the list. */
+export function useProduct(id: string) {
+  const { hasRole } = useAuth();
+  const canSeeCost = hasRole("ADMIN");
+  const categories = useProductCategories().data;
+
+  return useQuery({
+    queryKey: productKeys.detail(id),
+    queryFn: () => productsApi.get(id),
+    select: useCallback(
+      (product: InventoryProduct): InventoryProduct => {
+        const joined = product.category
+          ? product
+          : { ...product, category: (categories ?? []).find((c) => c.id === product.categoryId)?.name ?? "" };
+        return canSeeCost ? joined : withoutCost(joined);
+      },
+      [canSeeCost, categories],
+    ),
   });
 }

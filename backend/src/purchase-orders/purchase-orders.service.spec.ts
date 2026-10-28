@@ -101,6 +101,7 @@ describe('PurchaseOrdersService', () => {
         quantityOrdered: 10,
         quantityReceived: receivedA,
         unitCost: new Prisma.Decimal('1.99'),
+        product: { id: PRODUCT_A, name: 'Ballpoint Pen', sku: 'OFF-PEN-002' },
       },
       {
         id: 'line-b',
@@ -109,6 +110,7 @@ describe('PurchaseOrdersService', () => {
         quantityOrdered: 4,
         quantityReceived: receivedB,
         unitCost: new Prisma.Decimal('0.5'),
+        product: { id: PRODUCT_B, name: 'Stapler', sku: 'OFF-STA-003' },
       },
     ],
   });

@@ -26,6 +26,8 @@ export type InventoryProduct = {
   isActive?: boolean;
   /** Category name ("" when the API only sent the id; the hook fills it from the category list). */
   category: string;
+  /** Optional marketing text shown on the product card. */
+  description?: string;
   price: number;
   /** ADMIN only. The UI strips it for STAFF (and the backend never sends it to them). */
   costPrice?: number;

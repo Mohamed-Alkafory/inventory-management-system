@@ -9,6 +9,10 @@ export const AUTH_ENDPOINTS = {
   refresh: "/auth/refresh",
   logout: "/auth/logout",
   me: "/auth/me",
+  /** PATCH /auth/me — update own name and/or password. */
+  updateMe: "/auth/me",
+  /** DELETE /auth/me — deactivate the account (irreversible from the profile page). */
+  deleteMe: "/auth/me",
 } as const;
 
 /*
@@ -18,4 +22,12 @@ export const AUTH_ENDPOINTS = {
 export const PRODUCT_ENDPOINTS = {
   list: "/products",
   categories: "/categories",
+} as const;
+
+/*
+  Order endpoints. POST /orders takes { items: [{ productId, quantity }]
+  plus optional customer info — prices and totals are computed server-side.
+*/
+export const ORDER_ENDPOINTS = {
+  create: "/orders",
 } as const;

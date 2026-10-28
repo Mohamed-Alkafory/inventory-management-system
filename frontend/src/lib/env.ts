@@ -14,3 +14,9 @@ export const USE_MOCK: boolean = import.meta.env.VITE_USE_MOCK === "true";
 
 /** OAuth client ID from Google Cloud Console (needed for "Continue with Google" with a real backend). */
 export const GOOGLE_CLIENT_ID: string | undefined = import.meta.env.VITE_GOOGLE_CLIENT_ID || undefined;
+
+
+if (import.meta.env.DEV && !USE_MOCK) {
+  // One-line hint in the dev console so a wrong API target is obvious.
+  console.info(`[env] API_URL = ${API_URL}${configuredApiUrl ? " (from VITE_API_URL)" : " (default → needs the Vite /api proxy)"}`);
+}

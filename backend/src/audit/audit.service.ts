@@ -33,6 +33,8 @@ export interface AuditLogEntry {
 export interface AuditLogResponse {
   id: string;
   userId: string | null;
+  /** Actor snapshot (join) so the UI can show a name — null for system rows. */
+  user: { id: string; name: string } | null;
   action: string;
   entityType: string;
   entityId: string | null;
@@ -49,6 +51,7 @@ export interface AuditLogListResponse {
 const AUDIT_LOG_SELECT = {
   id: true,
   userId: true,
+  user: { select: { id: true, name: true } },
   action: true,
   entityType: true,
   entityId: true,

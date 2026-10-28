@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -58,6 +59,17 @@ export class AuthController {
     @Body() dto: ChangePasswordDto,
   ): Promise<void> {
     return this.authService.changePassword(user.sub, dto);
+  }
+
+  /**
+   * Authenticated: self-deactivation (#54). Deactivates the account, revokes
+   * every active refresh token (this device included) and answers 204.
+   * Reactivation stays ADMIN-only.
+   */
+  @Delete('me')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  deactivateMe(@CurrentUser() user: AuthenticatedUser): Promise<void> {
+    return this.authService.deactivate(user.sub);
   }
 
   @Get('admin-only')
