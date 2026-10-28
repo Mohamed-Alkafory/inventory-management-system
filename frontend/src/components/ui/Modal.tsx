@@ -110,11 +110,11 @@ export default function Modal({
         aria-describedby={description ? descId : undefined}
         tabIndex={-1}
         className={cn(
-          "w-full rounded-modal bg-surface shadow-overlay outline-none animate-pop-in motion-reduce:animate-none",
+          "flex max-h-[calc(100dvh-2rem)] w-full flex-col rounded-modal bg-surface shadow-overlay outline-none animate-pop-in motion-reduce:animate-none",
           widthClass ?? sizes[size],
         )}
       >
-        <div className="flex items-start justify-between gap-4 px-6 pt-6">
+        <div className="flex shrink-0 items-start justify-between gap-4 px-6 pt-6">
           <div>
             <h2 id={titleId} className="text-lg font-bold text-ink">
               {title}
@@ -137,10 +137,10 @@ export default function Modal({
           )}
         </div>
 
-        {children && <div className="px-6 py-5">{children}</div>}
+        {children && <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">{children}</div>}
 
         {footer && (
-          <div className="flex flex-col-reverse gap-3 border-t border-line px-6 py-4 sm:flex-row sm:justify-end">
+          <div className="flex shrink-0 flex-col-reverse gap-3 border-t border-line px-6 py-4 sm:flex-row sm:justify-end">
             {footer}
           </div>
         )}

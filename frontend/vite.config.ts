@@ -17,6 +17,11 @@ export default defineConfig({
         target: "http://localhost:3010",
         changeOrigin: true,
       },
+      // Uploaded product images are served by the backend at /uploads (outside /api/v1).
+      "/uploads": {
+        target: "http://localhost:3010",
+        changeOrigin: true,
+      },
     },
   },
 });

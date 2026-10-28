@@ -71,7 +71,10 @@ export function extractFieldErrors(body: unknown): Record<string, string> {
 export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = tokenStorage.getAccessToken();
   const headers = new Headers(init.headers);
-  if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  // FormData bodies must keep the browser-generated multipart boundary, so the
+  // JSON Content-Type is only set for non-FormData requests.
+  const isFormData = typeof FormData !== "undefined" && init.body instanceof FormData;
+  if (!isFormData && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
   if (token && !headers.has("Authorization")) headers.set("Authorization", `Bearer ${token}`);
 
   let res: Response;

@@ -3,8 +3,10 @@ import type { InputHTMLAttributes, ReactNode } from "react";
 import { useForm } from "react-hook-form";
 import type { FieldError, UseFormRegisterReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useToast } from "../../components/ui";
 import { ApiError } from "../../lib/http";
-import { useCategories, useSaveProduct, useSuppliers } from "./hooks";
+import { useCategories, useDeleteProductImage, useSaveProduct, useSuppliers, useUploadProductImage } from "./hooks";
+import ImageUploadField from "./ImageUploadField";
 import { PRODUCT_FIELDS, productSchema, toDefaults } from "./schema";
 import type { ProductField, ProductFormValues } from "./schema";
 import type { Option, Product } from "./types";
@@ -135,7 +137,13 @@ export default function ProductForm({
   const categories = useCategories();
   const suppliers = useSuppliers();
   const save = useSaveProduct();
+  const uploadImage = useUploadProductImage();
+  const deleteImage = useDeleteProductImage();
+  const toast = useToast();
   const [formError, setFormError] = useState<string | null>(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imageRemoved, setImageRemoved] = useState(false);
+  const busy = save.isPending || uploadImage.isPending || deleteImage.isPending;
 
   const {
     register,
@@ -149,14 +157,21 @@ export default function ProductForm({
     mode: "onTouched",
   });
 
+  /** Dropping a newly picked file clears it; dropping the saved image marks it for DELETE on save. */
+  const handleImageRemove = () => {
+    if (imageFile) setImageFile(null);
+    else if (product?.imageUrl) setImageRemoved(true);
+  };
+
   const onSubmit = handleSubmit(async (values) => {
     setFormError(null);
+
+    let saved: Product;
     try {
-      await save.mutateAsync({ id: product?.id, values });
-      onSaved();
+      saved = await save.mutateAsync({ id: product?.id, values });
     } catch (err) {
       if (err instanceof ApiError) {
-        // Put each server message under its own field (e.g. duplicate SKU → SKU field).
+        // Put each server message under its own field (e.g. duplicate SKU -> SKU field).
         const fields = PRODUCT_FIELDS.filter((f) => err.fieldErrors[f]);
         fields.forEach((f: ProductField) => setError(f, { type: "server", message: err.fieldErrors[f] }));
         if (fields.length > 0) setFocus(fields[0]);
@@ -164,7 +179,28 @@ export default function ProductForm({
       } else {
         setFormError("Something went wrong. Please try again.");
       }
+      return;
     }
+
+    // The product exists from here on: an image failure must not undo it.
+    const id = product?.id ?? saved.id;
+    try {
+      if (imageFile) {
+        await uploadImage.mutateAsync({ id, file: imageFile });
+      } else if (imageRemoved && product?.imageUrl) {
+        await deleteImage.mutateAsync(id);
+      }
+    } catch (err) {
+      const reason = err instanceof ApiError ? err.message : "Please try again.";
+      toast.error(
+        imageFile
+          ? "Product saved, but the image could not be uploaded."
+          : "Product saved, but the image could not be removed.",
+        `${reason} Edit the product to try again.`,
+      );
+    }
+
+    onSaved();
   });
 
   return (
@@ -190,24 +226,37 @@ export default function ProductForm({
         <SelectField id="pf-supplier" label="Supplier" placeholder="No supplier" noun="suppliers" reg={register("supplierId")} error={errors.supplierId} query={suppliers} required={false} />
 
         <TextField id="pf-min" label="Min stock" required reg={register("minStock")} error={errors.minStock} inputMode="numeric" placeholder="0" />
-        <TextField id="pf-image" label="Image URL" reg={register("imageUrl")} error={errors.imageUrl} inputMode="url" placeholder="https://…" autoComplete="off" />
+        <div className="sm:col-span-2">
+          <ImageUploadField
+            currentUrl={product?.imageUrl ?? null}
+            file={imageFile}
+            removed={imageRemoved}
+            onFileSelect={(file) => {
+              setImageFile(file);
+              setImageRemoved(false);
+            }}
+            onRemove={handleImageRemove}
+            disabled={save.isPending}
+            loading={uploadImage.isPending || deleteImage.isPending}
+          />
+        </div>
       </div>
 
       <div className="mt-6 flex justify-end gap-3">
         <button
           type="button"
           onClick={onCancel}
-          disabled={save.isPending}
+          disabled={busy}
           className="rounded-lg border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm font-semibold text-[#374151] hover:bg-[#F9FAFB] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF5615] disabled:opacity-60"
         >
           Cancel
         </button>
         <button
           type="submit"
-          disabled={save.isPending}
+          disabled={busy}
           className="rounded-lg bg-[#FF5615] px-5 py-2.5 text-sm font-semibold text-white shadow-md shadow-[#FF5615]/25 hover:bg-[#E84A0E] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF5615] focus-visible:ring-offset-2 disabled:opacity-60"
         >
-          {save.isPending ? "Saving…" : product ? "Save changes" : "Add product"}
+          {busy ? "Saving…" : product ? "Save changes" : "Add product"}
         </button>
       </div>
     </form>

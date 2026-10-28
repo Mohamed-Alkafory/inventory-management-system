@@ -19,15 +19,6 @@ const optionalAmount = (label: string) =>
     .trim()
     .refine((v) => v === "" || /^\d+(\.\d{1,2})?$/.test(v), `${label} must be a number with up to 2 decimals`);
 
-const isHttpUrl = (v: string) => {
-  try {
-    const u = new URL(v);
-    return u.protocol === "http:" || u.protocol === "https:";
-  } catch {
-    return false;
-  }
-};
-
 export const productSchema = z.object({
   sku: z
     .string()
@@ -46,7 +37,9 @@ export const productSchema = z.object({
     .trim()
     .min(1, "Min stock is required")
     .refine((v) => v === "" || /^\d+$/.test(v), "Min stock must be a whole number (0 or more)"),
-  imageUrl: z.string().trim().refine((v) => v === "" || isHttpUrl(v), "Enter a valid image URL (https://…)"),
+  // Display-only: the image itself is uploaded through POST /products/:id/image.
+  // It stays in the form values so edit mode can show the current picture.
+  imageUrl: z.string(),
   barcode: z.string().trim().max(64, "Barcode must be 64 characters or fewer"),
 });
 
@@ -82,6 +75,11 @@ export function toDefaults(p?: Product): ProductFormValues {
 // Select values are strings; send numeric ids back as numbers.
 const asId = (v: string) => (/^\d+$/.test(v) ? Number(v) : v);
 
+/**
+ * Body for POST/PATCH /products. `imageUrl` is deliberately NOT sent: images
+ * are managed through the dedicated upload/delete endpoints, so an edit never
+ * clears an existing (local or external) image by accident.
+ */
 export function toPayload(v: ProductFormValues) {
   return {
     sku: v.sku,
@@ -91,7 +89,6 @@ export function toPayload(v: ProductFormValues) {
     categoryId: asId(v.categoryId),
     supplierId: v.supplierId === "" ? null : asId(v.supplierId),
     minStock: Number(v.minStock),
-    imageUrl: v.imageUrl || null,
     barcode: v.barcode || null,
   };
 }

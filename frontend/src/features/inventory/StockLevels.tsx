@@ -4,6 +4,7 @@ import { ArrowUpDown, History, PackagePlus, Search } from "lucide-react";
 import Pagination from "../../components/ui/Pagination";
 import RowActionsMenu from "../../components/ui/RowActionsMenu";
 import { useDebouncedValue } from "../../lib/useDebouncedValue";
+import { resolveImageUrl } from "../../lib/imageUrl";
 import AdjustStockDialog from "./AdjustStockDialog";
 import { useInventory, useInventoryCategories } from "./hooks";
 import ProductHistoryDialog from "./ProductHistoryDialog";
@@ -111,12 +112,14 @@ export default function StockLevels() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#F3F4F6]">
-                {data.items.map((i) => (
+                {data.items.map((i) => {
+                  const imageSrc = resolveImageUrl(i.imageUrl);
+                  return (
                   <tr key={i.id}>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
-                        {i.imageUrl ? (
-                          <img src={i.imageUrl} alt="" className="h-9 w-9 rounded-lg object-cover" />
+                        {imageSrc ? (
+                          <img src={imageSrc} alt="" className="h-9 w-9 rounded-lg object-cover" />
                         ) : (
                           <span aria-hidden="true" className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#FFF1EB] text-sm font-bold text-[#FF5615]">
                             {i.name.charAt(0)}
@@ -171,7 +174,8 @@ export default function StockLevels() {
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
