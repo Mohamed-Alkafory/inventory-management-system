@@ -149,3 +149,15 @@ The dependency "Reports API" did not exist, so this issue defines the report sur
 - **Whole result, no pagination:** a report must be complete; `page`/`limit` are rejected as unknown query params (400) rather than silently ignored.
 - **CSV contract:** UTF-8, RFC-4180 (CRLF, doubled quotes, quoted commas/newlines), a header row always present (also for zero rows), and text starting with `= + - @` prefixed with `'` against formula injection. Filenames are `attachment` with a report-specific, date-stamped name.
 - `low_stock` is expressed with a Prisma field reference (`quantity: { lte: prisma.product.fields.minStock }`), not raw SQL.
+
+## AD-013 — Product images are uploaded files, publicly served (issue: product image upload)
+
+**Status:** Accepted — **Date:** 2026-10-28
+
+Product images can be uploaded through `POST /products/:id/image` (ADMIN only, multipart field `image`) and removed through `DELETE /products/:id/image` (ADMIN only, `204`).
+
+- **Validation:** real content is checked with magic bytes (`file-type`), not the client MIME type or extension. Only JPEG, PNG and WebP are accepted; the maximum size is **2 MB**. Rejected files answer `400` (type/missing file) or `413` (size).
+- **Storage:** local disk under `UPLOADS_DIR` (default `./uploads`), in `uploads/products/`. Filenames are generated UUIDs with the detected extension; the client filename is never used. The database stores only the relative public path, `/uploads/products/<uuid>.<ext>`.
+- **Compatibility:** `Product.imageUrl` remains an optional string. Existing external `https://...` URLs keep working and are never deleted from disk; replacement/deletion only removes files under `/uploads/products/`.
+- **Public access:** uploaded files are served statically at `/uploads` (outside `/api/v1`) without a JWT, so catalogue images work on the public storefront. Helmet's `crossOriginResourcePolicy` is set to `cross-origin` for that reason; all other Helmet defaults remain.
+- **Consistency:** missing products answer `404`; inactive (soft-deleted) products follow the existing update behaviour and still resolve by id. A failed database update removes the just-written file (no orphans). The audit vocabulary gains `product.image_updated` and `product.image_deleted` (no file contents).
