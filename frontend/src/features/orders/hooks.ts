@@ -35,15 +35,19 @@ export function useOrderAction() {
 }
 
 /**
- * Places an order and refreshes the product lists afterwards: the backend
- * deducts stock in the same transaction, so quantities on screen would
- * otherwise go stale. Returns the invalidation promise so the dialog can
- * keep its "placing order" state until the list has been refreshed.
+ * Places an order and refreshes the caches afterwards: the backend deducts
+ * stock in the same transaction, so product quantities and every orders list
+ * (admin list, profile, my orders) would otherwise go stale. Returns the
+ * invalidation promise so the dialog can keep its "placing order" state
+ * until the lists have been refreshed.
  */
 export function useCreateOrder() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (order: CreateOrderInput): Promise<CreatedOrder> => globalOrdersApi.create(order),
-    onSuccess: () => qc.invalidateQueries({ queryKey: productKeys.all }),
+    onSuccess: () => Promise.all([
+      qc.invalidateQueries({ queryKey: productKeys.all }),
+      qc.invalidateQueries({ queryKey: orderKeys.all }),
+    ]),
   });
 }

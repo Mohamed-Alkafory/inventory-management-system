@@ -17,6 +17,13 @@ const NAV_LINKS = [
   { label: "Contact", href: "/contact" },
 ];
 
+/** Admin-only extra link: straight into the admin panel, between Home and Products. */
+const ADMIN_NAV_LINKS = [
+  ...NAV_LINKS.slice(0, 1), // Home
+  { label: "Dashboard", href: "/admin" },
+  ...NAV_LINKS.slice(1), // Products, About, Contact
+];
+
 /** Icon + orange count badge; guests are sent to sign in first. */
 function IconLink({
   to,
@@ -51,12 +58,14 @@ export default function Header() {
   const [open, setOpen] = useState(false);
   const [catsOpen, setCatsOpen] = useState(false);
   const [searchText, setSearchText] = useState("");
-  const { isAuthenticated, logout } = useAuth();
+  const { isAuthenticated, logout, hasRole } = useAuth();
   const { totalItems } = useCart();
   const { items: favorites } = useFavorites();
   const categories = useProductCategories();
   const navigate = useNavigate();
   const catsRef = useRef<HTMLDivElement>(null);
+
+  const navLinks = hasRole("ADMIN") ? ADMIN_NAV_LINKS : NAV_LINKS;
 
   const closeMenu = () => setOpen(false);
 
@@ -100,7 +109,7 @@ export default function Header() {
 
   const links = (
     <ul className="nav-list" id="main-nav-list">
-      {NAV_LINKS.map((link) => (
+      {navLinks.map((link) => (
         <li key={link.label}>
           <Link to={link.href} className="nav-link" onClick={closeMenu}>
             {link.label}
@@ -236,7 +245,7 @@ export default function Header() {
             </div>
 
             <div className="header__links">
-              {NAV_LINKS.map((link) => (
+              {navLinks.map((link) => (
                 <Link key={link.label} to={link.href}>
                   {link.label}
                 </Link>
@@ -259,7 +268,7 @@ export default function Header() {
                   <Link to="/login" className="btn--plain">
                     Log in
                   </Link>
-                  <Link to="/register" className="btn--primary">
+                  <Link to="/register" className="btn btn--primary">
                     Sign up
                   </Link>
                 </>

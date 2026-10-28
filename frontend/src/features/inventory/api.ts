@@ -1,14 +1,14 @@
 import { request } from "../../lib/http";
+import { USE_MOCK } from "../../lib/env";
 import { mockInventoryApi } from "./mockApi";
 import { toItemPage, toMovementPage } from "./normalize";
 import type { InventoryApi, InventoryListParams, MovementListParams, Option } from "./types";
 
 /**
- * ► CONNECTING THE REAL API
- *   When the backend is merged, set  VITE_USE_MOCK_API=false  in your .env
- *   (the same switch the categories and suppliers pages use). Nothing else changes.
+ * One switch for the whole app: the shared `VITE_USE_MOCK` flag (lib/env).
+ * Re-exported so existing `USE_MOCK` imports keep working.
  */
-export const USE_MOCK = import.meta.env?.VITE_USE_MOCK_API !== "false";
+export { USE_MOCK };
 
 function qs(entries: Record<string, string | number | undefined>) {
   const q = new URLSearchParams();
@@ -17,10 +17,21 @@ function qs(entries: Record<string, string | number | undefined>) {
 }
 
 const listQuery = (p: InventoryListParams) =>
-  qs({ page: p.page, pageSize: p.pageSize, search: p.search, categoryId: p.categoryId, status: p.status });
+  // The backend list is `GET /products` (contract §3.4): it takes `limit`
+  // (not `pageSize`) and lowercase stock-status tokens; unknown params are
+  // rejected outright by `forbidNonWhitelisted`.
+  qs({ page: p.page, limit: p.pageSize, search: p.search, categoryId: p.categoryId, stockStatus: p.status ? p.status : undefined });
+
+// `createdAt` range: expand local calendar days to full-day bounds.
+const dayFrom = (d: string) => (d.trim() ? `${d}T00:00:00` : undefined);
+const dayTo = (d: string) => (d.trim() ? `${d}T23:59:59` : undefined);
 
 const movementsQuery = (p: MovementListParams) =>
-  qs({ page: p.page, pageSize: p.pageSize, productId: p.productId, search: p.search, type: p.type, from: p.from, to: p.to });
+  // `GET /stock/movements` (contract §3.6): page/limit + productId + the
+  // full-day from/to range. The movement `type` enum has no single value
+  // for increase/decrease, so the sign filter is applied client-side after
+  // normalizing (see realInventoryApi.movements).
+  qs({ page: p.page, limit: p.pageSize, productId: p.productId !== undefined ? p.productId : undefined, from: dayFrom(p.from), to: dayTo(p.to) });
 
 function toOptions(body: unknown): Option[] {
   const arr = Array.isArray(body)
@@ -35,17 +46,28 @@ function toOptions(body: unknown): Option[] {
 
 export const realInventoryApi: InventoryApi = {
   async list(p) {
-    return toItemPage(await request<unknown>(`/inventory?${listQuery(p)}`), p);
+    return toItemPage(await request<unknown>(`/products?${listQuery(p)}`), p);
   },
   async movements(p) {
-    return toMovementPage(await request<unknown>(`/inventory/movements?${movementsQuery(p)}`), p);
+    const page = await toMovementPage(await request<unknown>(`/stock/movements?${movementsQuery(p)}`), p);
+    if (p.type) {
+      // The backend's movement types don't collapse to increase/decrease
+      // (PURCHASE_RECEIPT/RETURN add stock, SALE removes, ADJUSTMENT does
+      // both), so the sign filter happens here on the signed change.
+      const wantIncrease = p.type === "increase";
+      return { ...page, items: page.items.filter((m) => (wantIncrease ? m.change > 0 : m.change < 0)) };
+    }
+    return page;
   },
   async categories() {
     return toOptions(await request<unknown>("/categories"));
   },
-  /** If your API uses another route for adjustments, change only this line. */
+  /** `POST /stock/adjustments` — signed quantityChange + required reason. */
   async adjust(productId, payload) {
-    await request<unknown>(`/inventory/${productId}/adjustments`, { method: "POST", body: JSON.stringify(payload) });
+    await request<unknown>("/stock/adjustments", {
+      method: "POST",
+      body: JSON.stringify({ productId: String(productId), quantityChange: payload.change, reason: payload.reason }),
+    });
   },
 };
 

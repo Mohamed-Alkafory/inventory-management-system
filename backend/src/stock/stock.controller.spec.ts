@@ -38,6 +38,8 @@ const sampleMovement = {
   purchaseOrderId: null,
   createdById: USER_ID,
   createdAt: new Date('2026-10-23T12:00:00Z'),
+  product: { id: PRODUCT_ID, name: 'Ballpoint Pen', sku: 'OFF-PEN-002' },
+  createdBy: { id: USER_ID, name: 'Staff User' },
 };
 
 const samplePage: MovementListResponse = {

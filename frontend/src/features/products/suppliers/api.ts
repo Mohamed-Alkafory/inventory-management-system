@@ -1,14 +1,14 @@
 import { request } from "../../../lib/http";
+import { USE_MOCK } from "../../../lib/env";
 import { mockSuppliersApi } from "./mockApi";
 import { toPage } from "./normalize";
 import type { SupplierListParams, SuppliersApi } from "./types";
 
 /**
- * ► CONNECTING THE REAL API
- *   When the backend is merged, set  VITE_USE_MOCK_API=false  in your .env
- *   (the same switch the categories page uses). Nothing else changes.
+ * One switch for the whole app: the shared `VITE_USE_MOCK` flag (lib/env).
+ * Re-exported so existing `USE_MOCK` imports keep working.
  */
-export const USE_MOCK = import.meta.env?.VITE_USE_MOCK_API === "true";
+export { USE_MOCK };
 
 function buildQuery(p: SupplierListParams) {
   // The API contract uses `limit`, not the UI's `pageSize`.

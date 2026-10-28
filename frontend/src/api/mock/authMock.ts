@@ -2,7 +2,7 @@ import type { AuthApi } from "../authApi";
 import { ApiError } from "../errors";
 import { delay } from "../mockSwitch";
 import { tokenStorage } from "../tokenStorage";
-import type { AuthSession, User } from "../../types/auth";
+import type { AuthSession, UpdateProfilePayload, User } from "../../types/auth";
 
 type MockAccount = User & { password: string };
 
@@ -76,6 +76,40 @@ export const mockAuthApi: AuthApi = {
     const account = allAccounts().find((a) => a.id === id);
     if (!account) throw new ApiError("Session expired.", { status: 401 });
     return strip(account);
+  },
+
+  async updateProfile(payload: UpdateProfilePayload) {
+    await delay();
+    const id = tokenStorage.getAccessToken()?.split(".")[1];
+    const account = allAccounts().find((a) => a.id === id);
+    if (!account || account.password === "") {
+      throw new ApiError("Session expired.", { status: 401 });
+    }
+
+    if (payload.name !== undefined) account.name = payload.name;
+    if (payload.password) {
+      if (account.password && payload.password.current !== account.password) {
+        throw new ApiError("Current password is incorrect.", { status: 422 });
+      }
+      account.password = payload.password.next;
+    }
+
+    // Persist name/password changes for registered accounts (built-in demo
+    // accounts are reset on reload anyway).
+    if (!MOCK_ACCOUNTS.some((a) => a.id === account.id)) {
+      saveExtra(loadExtra().map((a) => (a.id === account.id ? account : a)));
+    }
+
+    return strip(account);
+  },
+
+  async deleteAccount() {
+    await delay();
+    const id = tokenStorage.getAccessToken()?.split(".")[1];
+    if (MOCK_ACCOUNTS.some((a) => a.id === id)) {
+      throw new ApiError("The built-in demo account cannot be deleted.", { status: 403 });
+    }
+    saveExtra(loadExtra().filter((a) => a.id !== id));
   },
 
   async logout() {

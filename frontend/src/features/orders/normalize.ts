@@ -32,6 +32,8 @@ const arr = (...c: unknown[]): unknown[] => (c.find(Array.isArray) as unknown[] 
 export function readStatus(v: unknown): OrderStatus | undefined {
   let s = str(v)?.toLowerCase().trim();
   if (s === "canceled") s = "cancelled";
+  // The API's CONFIRMED state is shown as "Processing" in this shopping-flow UI.
+  if (s === "confirmed") s = "processing";
   return STATUSES.find((x) => x === s);
 }
 
@@ -52,6 +54,7 @@ export function normalizeSummary(raw: unknown): OrderSummary {
     createdAt: str(r.createdAt) ?? str(r.created_at) ?? str(r.date) ?? "",
     total: num(r.total) ?? num(r.totalAmount) ?? num(r.total_amount) ?? 0,
     status: readStatus(r.status) ?? "pending",
+    createdById: str(r.createdById) ?? str(r.created_by),
     allowedActions: readActions(r.allowedActions ?? r.allowed_actions),
   };
 }

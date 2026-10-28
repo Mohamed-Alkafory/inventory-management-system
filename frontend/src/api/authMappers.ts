@@ -36,6 +36,7 @@ export function toUser(data: unknown): User {
     email,
     name: str(raw.name) ?? str(raw.fullName) ?? str(raw.full_name) ?? email.split("@")[0],
     role: toRole(raw.role),
+    ...(str(raw.createdAt) ?? str(raw.created_at) ? { createdAt: str(raw.createdAt) ?? str(raw.created_at) } : {}),
   };
 }
 

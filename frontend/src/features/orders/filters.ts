@@ -15,7 +15,8 @@ export function filterOrders<T extends OrderSummary>(orders: T[], p: OrderListPa
         (!q || o.number.toLowerCase().replace(/^#/, "").includes(q) || o.customerName.toLowerCase().includes(q)) &&
         (!p.status || o.status === p.status) &&
         (!p.from || localDay(o.createdAt) >= p.from) &&
-        (!p.to || localDay(o.createdAt) <= p.to),
+        (!p.to || localDay(o.createdAt) <= p.to) &&
+        (!p.createdById || o.createdById === p.createdById),
     )
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
