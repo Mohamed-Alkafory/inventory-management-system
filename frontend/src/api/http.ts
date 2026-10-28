@@ -2,9 +2,9 @@ import axios from "axios";
 import type { InternalAxiosRequestConfig } from "axios";
 import { API_URL } from "../lib/env";
 import { emitSessionExpired } from "./authEvents";
-import { toTokens } from "./authMappers";
 import { AUTH_ENDPOINTS } from "./endpoints";
-import { ApiError, toApiError } from "./errors";
+import { toApiError } from "./errors";
+import { refreshAccessToken } from "./sessionRefresh";
 import { tokenStorage } from "./tokenStorage";
 
 const baseConfig = {
@@ -15,9 +15,6 @@ const baseConfig = {
 
 /** The app-wide axios instance. Always import this, never `axios` directly. */
 export const http = axios.create(baseConfig);
-
-/** Bare client for the refresh call: no interceptors, so it can never loop. */
-const refreshClient = axios.create(baseConfig);
 
 /** Login / register / Google / refresh / logout failures must never trigger a refresh attempt. */
 const AUTH_PATHS: string[] = [
@@ -40,28 +37,7 @@ http.interceptors.request.use((config) => {
   return config;
 });
 
-/* ---------- 401: refresh once (shared by concurrent requests), then retry ---------- */
-let refreshing: Promise<string> | null = null;
-
-function refreshAccessToken(): Promise<string> {
-  const refreshToken = tokenStorage.getRefreshToken();
-  if (!refreshToken) return Promise.reject(new ApiError("Session expired.", { status: 401 }));
-
-  refreshing ??= refreshClient
-    .post(AUTH_ENDPOINTS.refresh, { refreshToken })
-    .then((res) => {
-      const tokens = toTokens(res.data);
-      tokenStorage.setTokens(tokens);
-      return tokens.accessToken;
-    })
-    .finally(() => {
-      refreshing = null;
-    });
-
-  return refreshing;
-}
-
-/* ---------- Response: refresh on 401, normalise every other error ---------- */
+/* ---------- Response: refresh on 401 (once, shared by concurrent requests), then retry ---------- */
 http.interceptors.response.use(
   (response) => response,
   async (error: unknown) => {

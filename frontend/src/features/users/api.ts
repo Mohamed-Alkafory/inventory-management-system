@@ -22,8 +22,8 @@ function unpack(body: unknown): { items: AdminUser[]; total: number } {
   const b: Obj = isObject(body) ? body : {};
   const meta: Obj = isObject(b.meta) ? b.meta : {};
   const items = Array.isArray(b.data) ? b.data.map(normalizeUser) : [];
-  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : items.length);
-  return { items, total: num(b.total) ?? num(meta.total) };
+  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
+  return { items, total: num(b.total) ?? num(meta.total) ?? items.length };
 }
 
 /**
