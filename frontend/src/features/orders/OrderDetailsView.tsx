@@ -26,9 +26,9 @@ export default function OrderDetailsView({ id }: { id: string }) {
 
   if (isPending) {
     return (
-      <div>
+      <div className="mx-auto w-full max-w-5xl px-4 sm:px-6">
         <BackLink />
-        <p role="status" className="p-10 text-center text-sm text-[#6B7280]">
+        <p role="status" className="py-10 text-center text-sm text-[#6B7280]">
           Loading order…
         </p>
       </div>
@@ -38,9 +38,9 @@ export default function OrderDetailsView({ id }: { id: string }) {
   if (isError) {
     const missing = error instanceof ApiError && error.status === 404;
     return (
-      <div>
+      <div className="mx-auto w-full max-w-5xl px-4 sm:px-6">
         <BackLink />
-        <div role="alert" className="p-10 text-center text-sm">
+        <div role="alert" className="py-10 text-center text-sm">
           <p className={missing ? "font-semibold text-[#111827]" : "text-[#DC2626]"}>{missing ? "Order not found" : "Couldn’t load this order."}</p>
           {missing ? (
             <p className="mt-1 text-[#6B7280]">It may have been removed, or the link is wrong.</p>
@@ -59,12 +59,12 @@ export default function OrderDetailsView({ id }: { id: string }) {
   const history = [...order.history].sort((a, b) => b.at.localeCompare(a.at));
 
   return (
-    <div>
+    <div className="mx-auto w-full max-w-5xl px-4 sm:px-6">
       <BackLink />
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-extrabold text-[#111827]">Order {formatNumber(order.number)}</h1>
+        <div className="flex flex-wrap items-center gap-2">
+          <h1 className="text-xl font-extrabold text-[#111827]">Order {formatNumber(order.number)}</h1>
           <StatusBadge status={order.status} />
         </div>
         {allowed.length > 0 && (
@@ -73,9 +73,9 @@ export default function OrderDetailsView({ id }: { id: string }) {
               <button
                 type="button"
                 onClick={() => setTarget({ action: "confirm", order: ref })}
-                className="inline-flex items-center gap-2 rounded-lg bg-[#FF5615] px-4 py-2.5 text-sm font-semibold text-white shadow-md shadow-[#FF5615]/25 hover:bg-[#E84A0E] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF5615] focus-visible:ring-offset-2"
+                className="inline-flex items-center gap-2 rounded-lg bg-[#FF5615] px-3.5 py-2 text-[13px] font-semibold text-white shadow-md shadow-[#FF5615]/25 hover:bg-[#E84A0E] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF5615] focus-visible:ring-offset-2"
               >
-                <CheckCircle2 className="h-4 w-4" />
+                <CheckCircle2 className="h-3.5 w-3.5" />
                 {ACTION_RULES.confirm.label}
               </button>
             )}
@@ -83,9 +83,9 @@ export default function OrderDetailsView({ id }: { id: string }) {
               <button
                 type="button"
                 onClick={() => setTarget({ action: "cancel", order: ref })}
-                className="inline-flex items-center gap-2 rounded-lg border border-[#FECACA] bg-white px-4 py-2.5 text-sm font-semibold text-[#DC2626] hover:bg-[#FEF2F2] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#DC2626]"
+                className="inline-flex items-center gap-2 rounded-lg border border-[#FECACA] bg-white px-3.5 py-2 text-[13px] font-semibold text-[#DC2626] hover:bg-[#FEF2F2] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#DC2626]"
               >
-                <Ban className="h-4 w-4" />
+                <Ban className="h-3.5 w-3.5" />
                 {ACTION_RULES.cancel.label}
               </button>
             )}
@@ -93,39 +93,39 @@ export default function OrderDetailsView({ id }: { id: string }) {
         )}
       </div>
 
-      <div className="mt-6 grid gap-5 lg:grid-cols-3">
-        <div className="space-y-5 lg:col-span-2">
+      <div className="mt-5 grid gap-4 lg:grid-cols-3">
+        <div className="space-y-4 lg:col-span-2">
           {/* Items + totals */}
           <section aria-labelledby="items-h" className={`${card} overflow-hidden`}>
-            <h2 id="items-h" className="px-5 py-4 text-base font-bold text-[#111827]">
+            <h2 id="items-h" className="px-4 py-3 text-sm font-bold text-[#111827]">
               Items
             </h2>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[520px] text-left text-sm">
-                <thead className="bg-[#F8F8F8] text-xs font-semibold text-[#6B7280]">
+              <table className="w-full min-w-[480px] text-left text-[13px]">
+                <thead className="bg-[#F8F8F8] text-[11px] font-semibold text-[#6B7280]">
                   <tr>
-                    <th className="px-5 py-3">Product</th>
-                    <th className="px-5 py-3">SKU</th>
-                    <th className="px-5 py-3 text-right">Qty</th>
-                    <th className="px-5 py-3 text-right">Unit price</th>
-                    <th className="px-5 py-3 text-right">Total</th>
+                    <th className="px-4 py-2.5">Product</th>
+                    <th className="px-4 py-2.5">SKU</th>
+                    <th className="px-4 py-2.5 text-right">Qty</th>
+                    <th className="px-4 py-2.5 text-right">Unit price</th>
+                    <th className="px-4 py-2.5 text-right">Total</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#F3F4F6]">
                   {order.items.map((i, n) => (
                     <tr key={`${i.sku}-${n}`}>
-                      <td className="px-5 py-3 font-semibold text-[#111827]">{i.name}</td>
-                      <td className="px-5 py-3 text-[#6B7280]">{i.sku}</td>
-                      <td className="px-5 py-3 text-right text-[#374151]">{i.quantity}</td>
-                      <td className="px-5 py-3 text-right text-[#374151]">{formatMoney(i.unitPrice)}</td>
-                      <td className="px-5 py-3 text-right font-semibold text-[#111827]">{formatMoney(i.quantity * i.unitPrice)}</td>
+                      <td className="px-4 py-2.5 font-semibold text-[#111827]">{i.name}</td>
+                      <td className="px-4 py-2.5 text-[#6B7280]">{i.sku}</td>
+                      <td className="px-4 py-2.5 text-right text-[#374151]">{i.quantity}</td>
+                      <td className="px-4 py-2.5 text-right text-[#374151]">{formatMoney(i.unitPrice)}</td>
+                      <td className="px-4 py-2.5 text-right font-semibold text-[#111827]">{formatMoney(i.quantity * i.unitPrice)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
 
-            <dl className="ml-auto w-full max-w-xs space-y-2 border-t border-[#F3F4F6] px-5 py-4 text-sm sm:mr-0">
+            <dl className="ml-auto w-full max-w-xs space-y-1.5 border-t border-[#F3F4F6] px-4 py-3 text-[13px] sm:mr-0">
               <div className="flex justify-between">
                 <dt className="text-[#6B7280]">Subtotal</dt>
                 <dd className="text-[#111827]">{formatMoney(order.subtotal)}</dd>
@@ -146,7 +146,7 @@ export default function OrderDetailsView({ id }: { id: string }) {
                   <dd className="text-[#1F8F6B]">−{formatMoney(order.discount)}</dd>
                 </div>
               )}
-              <div className="flex justify-between border-t border-[#F3F4F6] pt-2 text-base font-extrabold">
+              <div className="flex justify-between border-t border-[#F3F4F6] pt-1.5 text-sm font-extrabold">
                 <dt className="text-[#111827]">Total</dt>
                 <dd className="text-[#111827]">{formatMoney(order.total)}</dd>
               </div>
@@ -154,38 +154,38 @@ export default function OrderDetailsView({ id }: { id: string }) {
           </section>
         </div>
 
-        <div className="space-y-5">
+        <div className="space-y-4">
           {/* Summary */}
-          <section aria-labelledby="summary-h" className={`${card} p-5`}>
-            <h2 id="summary-h" className="text-base font-bold text-[#111827]">
+          <section aria-labelledby="summary-h" className={`${card} p-4`}>
+            <h2 id="summary-h" className="text-sm font-bold text-[#111827]">
               Order summary
             </h2>
-            <dl className="mt-3 space-y-3 text-sm">
+            <dl className="mt-3 space-y-2.5 text-[13px]">
               <div>
-                <dt className="text-xs font-semibold text-[#6B7280]">Customer</dt>
+                <dt className="text-[11px] font-semibold text-[#6B7280]">Customer</dt>
                 <dd className="mt-0.5 font-semibold text-[#111827]">{order.customerName || "—"}</dd>
                 {order.customerEmail && <dd className="text-[#6B7280]">{order.customerEmail}</dd>}
               </div>
               <div>
-                <dt className="text-xs font-semibold text-[#6B7280]">Placed on</dt>
+                <dt className="text-[11px] font-semibold text-[#6B7280]">Placed on</dt>
                 <dd className="mt-0.5 text-[#111827]">{formatDateTime(order.createdAt)}</dd>
               </div>
               <div>
-                <dt className="text-xs font-semibold text-[#6B7280]">Created by</dt>
+                <dt className="text-[11px] font-semibold text-[#6B7280]">Created by</dt>
                 <dd className="mt-0.5 text-[#111827]">{order.createdBy || "—"}</dd>
               </div>
             </dl>
           </section>
 
           {/* Status history */}
-          <section aria-labelledby="history-h" className={`${card} p-5`}>
-            <h2 id="history-h" className="text-base font-bold text-[#111827]">
+          <section aria-labelledby="history-h" className={`${card} p-4`}>
+            <h2 id="history-h" className="text-sm font-bold text-[#111827]">
               Status history
             </h2>
             {history.length === 0 ? (
-              <p className="mt-3 text-sm text-[#6B7280]">No status changes recorded.</p>
+              <p className="mt-3 text-[13px] text-[#6B7280]">No status changes recorded.</p>
             ) : (
-              <ol className="mt-4 space-y-4">
+              <ol className="mt-3 space-y-3.5">
                 {history.map((h, n) => (
                   <li key={`${h.at}-${n}`} className="relative pl-6">
                     <span aria-hidden="true" className={`absolute left-0 top-1.5 h-2.5 w-2.5 rounded-full ${n === 0 ? "bg-[#FF5615]" : "bg-[#D1D5DB]"}`} />
@@ -195,7 +195,7 @@ export default function OrderDetailsView({ id }: { id: string }) {
                       {formatDateTime(h.at)}
                       {h.by ? ` · ${h.by}` : ""}
                     </p>
-                    {h.note && <p className="mt-0.5 text-sm text-[#374151]">{h.note}</p>}
+                    {h.note && <p className="mt-0.5 text-[13px] text-[#374151]">{h.note}</p>}
                   </li>
                 ))}
               </ol>

@@ -5,6 +5,10 @@ import AdminProducts from "./admin/pages/Products/AdminProducts";
 import Categories from "./admin/pages/Categories/Categories";
 import Inventory from "./admin/pages/Inventory/Inventory";
 import Suppliers from "./admin/pages/Suppliers/Suppliers";
+import Users from "./admin/pages/Users/Users";
+import Audit from "./admin/pages/Audit/Audit";
+import PurchaseOrders from "./admin/pages/PurchaseOrders/PurchaseOrders";
+import PurchaseOrderDetails from "./admin/pages/PurchaseOrders/PurchaseOrderDetails";
 import Header from "./components/header/Header";
 import ToastProvider from "./components/ui/toast/ToastProvider";
 import AuthProvider from "./context/auth/AuthProvider";
@@ -22,6 +26,8 @@ import Login from "./page/Login/Login";
 import Products from "./page/Products/Products";
 import ProductDetail from "./page/Products/ProductDetail";
 import Register from "./page/Register/Register";
+import MyOrders from "./page/Orders/MyOrders";
+import OrderDetails from "./page/Orders/OrderDetails";
 import QueryProvider from "./providers/QueryProvider";
 import GuestRoute from "./routes/GuestRoute";
 import ProtectedRoute from "./routes/ProtectedRoute";
@@ -60,6 +66,8 @@ export default function App() {
                     <Route path="/checkout" element={<Checkout />} />
                     <Route path="/favorites" element={<Favorites />} />
                     <Route path="/profile" element={<Profile />} />
+                    <Route path="/orders" element={<MyOrders />} />
+                    <Route path="/orders/:id" element={<OrderDetails />} />
 
                     {/* ADMIN only — STAFF is sent to /forbidden */}
                     <Route element={<RoleRoute allow={["ADMIN"]} />}>
@@ -69,6 +77,10 @@ export default function App() {
                         <Route path="inventory" element={<Inventory />} />
                         <Route path="categories" element={<Categories />} />
                         <Route path="suppliers" element={<Suppliers />} />
+                        <Route path="purchase-orders" element={<PurchaseOrders />} />
+                        <Route path="purchase-orders/:id" element={<PurchaseOrderDetails />} />
+                        <Route path="users" element={<Users />} />
+                        <Route path="audit-logs" element={<Audit />} />
                       </Route>
                     </Route>
                   </Route>

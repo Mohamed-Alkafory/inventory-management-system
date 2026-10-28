@@ -221,6 +221,50 @@ export class AuthService {
   }
 
   /**
+   * `DELETE /auth/me` — self-deactivation. Deactivates the account and
+   * revokes every active refresh token in ONE transaction, so the signed-in
+   * session (and any other device) is invalid at once. Idempotent: an
+   * already-deactivated account still ends in 204 — the response never
+   * leaks whether the account existed. Reactivation is ADMIN-only
+   * (`PATCH /users/:id`), exactly like the admin `DELETE /users/:id` flow.
+   */
+  async deactivate(userId: string): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.findUnique({
+        where: { id: userId },
+        select: PUBLIC_USER_SELECT,
+      });
+
+      if (!user || !user.isActive) {
+        return; // already gone or deactivated — nothing to do, still 204
+      }
+
+      await tx.user.update({
+        where: { id: userId },
+        data: { isActive: false },
+        select: { id: true },
+      });
+
+      await tx.refreshToken.updateMany({
+        where: { userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+
+      await this.audit.log(
+        {
+          userId,
+          action: 'user.deactivated',
+          entityType: 'user',
+          entityId: userId,
+          oldValues: { isActive: true },
+          newValues: { isActive: false },
+        },
+        tx,
+      );
+    });
+  }
+
+  /**
    * Applies profile changes in ONE transaction: user row, refresh-token
    * revocation and the audit entry commit (or roll back) together.
    */

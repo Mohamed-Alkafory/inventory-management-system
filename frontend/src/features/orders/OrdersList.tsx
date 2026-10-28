@@ -18,7 +18,7 @@ const PAGE_SIZE = 10;
 const control =
   "h-10 rounded-lg border border-[#E5E7EB] bg-white px-3 text-sm text-[#111827] focus:border-[#FF5615] focus:outline-none focus:ring-2 focus:ring-[#FF5615]/25";
 
-export default function OrdersList() {
+export default function OrdersList({ createdById }: { createdById?: string } = {}) {
   const navigate = useNavigate();
   const [searchInput, setSearchInput] = useState("");
   const search = useDebouncedValue(searchInput, 300);
@@ -28,7 +28,7 @@ export default function OrdersList() {
   const [page, setPage] = useState(1);
   const [target, setTarget] = useState<ActionTarget | null>(null);
 
-  const { data, isPending, isError, isFetching, refetch } = useOrders({ search, status, from, to, page, pageSize: PAGE_SIZE });
+  const { data, isPending, isError, isFetching, refetch } = useOrders({ search, status, from, to, page, pageSize: PAGE_SIZE, createdById });
 
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));

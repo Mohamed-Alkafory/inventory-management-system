@@ -25,24 +25,25 @@ const r2 = (n: number) => Math.round(n * 100) / 100;
 const HOUR = 3_600_000;
 const now = Date.now();
 
-// number, customer, email, createdBy, status, items, shipping, tax rate
-const SEED: Array<[string, string, string, string, OrderStatus, Array<[Key, number]>, number, number]> = [
-  ["ORD-1001", "Ahmed Mohamed", "ahmed.mohamed@example.com", "Sara Ali", "pending", [["headphones", 1], ["bottle", 2]], 9.99, 0],
-  ["ORD-1002", "Sarah Ali", "sarah.ali@example.com", "Demo Admin", "processing", [["watch", 1], ["backpack", 1]], 0, 0.08],
-  ["ORD-1003", "Omar Hassan", "omar.hassan@example.com", "Sara Ali", "shipped", [["tshirt", 2], ["shoes", 1]], 0, 0],
-  ["ORD-1004", "Fatima Ahmed", "fatima.ahmed@example.com", "Demo Admin", "delivered", [["coffee", 1], ["lamp", 2]], 0, 0.08],
-  ["ORD-1005", "Khaled Salem", "khaled.salem@example.com", "Demo Admin", "cancelled", [["bottle", 3], ["lamp", 1]], 9.99, 0],
-  ["ORD-1006", "Layla Mostafa", "layla.mostafa@example.com", "Sara Ali", "processing", [["shoes", 2], ["tshirt", 1]], 0, 0],
-  ["ORD-1007", "Youssef Khaled", "youssef.khaled@example.com", "Demo Admin", "pending", [["lamp", 2]], 9.99, 0],
-  ["ORD-1008", "Nada Hassan", "nada.hassan@example.com", "Sara Ali", "delivered", [["headphones", 2]], 0, 0.08],
-  ["ORD-1009", "Mona Fathy", "mona.fathy@example.com", "Demo Admin", "shipped", [["coffee", 2], ["bottle", 1]], 0, 0],
-  ["ORD-1010", "Hany Samir", "hany.samir@example.com", "Sara Ali", "pending", [["backpack", 2], ["tshirt", 3]], 0, 0],
-  ["ORD-1011", "Dina Adel", "dina.adel@example.com", "Demo Admin", "cancelled", [["watch", 1]], 0, 0],
-  ["ORD-1012", "Tarek Wahba", "tarek.wahba@example.com", "Sara Ali", "delivered", [["shoes", 1], ["lamp", 1]], 9.99, 0],
+// number, customer, email, createdById, createdBy, status, items, shipping, tax rate
+// (mock account ids: "1" = Amira Admin, "2" = Sami Staff — see api/mock/authMock.ts)
+const SEED: Array<[string, string, string, string, string, OrderStatus, Array<[Key, number]>, number, number]> = [
+  ["ORD-1001", "Ahmed Mohamed", "ahmed.mohamed@example.com", "2", "Sara Ali", "pending", [["headphones", 1], ["bottle", 2]], 9.99, 0],
+  ["ORD-1002", "Sarah Ali", "sarah.ali@example.com", "1", "Demo Admin", "processing", [["watch", 1], ["backpack", 1]], 0, 0.08],
+  ["ORD-1003", "Omar Hassan", "omar.hassan@example.com", "2", "Sara Ali", "shipped", [["tshirt", 2], ["shoes", 1]], 0, 0],
+  ["ORD-1004", "Fatima Ahmed", "fatima.ahmed@example.com", "1", "Demo Admin", "delivered", [["coffee", 1], ["lamp", 2]], 0, 0.08],
+  ["ORD-1005", "Khaled Salem", "khaled.salem@example.com", "1", "Demo Admin", "cancelled", [["bottle", 3], ["lamp", 1]], 9.99, 0],
+  ["ORD-1006", "Layla Mostafa", "layla.mostafa@example.com", "2", "Sara Ali", "processing", [["shoes", 2], ["tshirt", 1]], 0, 0],
+  ["ORD-1007", "Youssef Khaled", "youssef.khaled@example.com", "1", "Demo Admin", "pending", [["lamp", 2]], 9.99, 0],
+  ["ORD-1008", "Nada Hassan", "nada.hassan@example.com", "2", "Sara Ali", "delivered", [["headphones", 2]], 0, 0.08],
+  ["ORD-1009", "Mona Fathy", "mona.fathy@example.com", "1", "Demo Admin", "shipped", [["coffee", 2], ["bottle", 1]], 0, 0],
+  ["ORD-1010", "Hany Samir", "hany.samir@example.com", "2", "Sara Ali", "pending", [["backpack", 2], ["tshirt", 3]], 0, 0],
+  ["ORD-1011", "Dina Adel", "dina.adel@example.com", "1", "Demo Admin", "cancelled", [["watch", 1]], 0, 0],
+  ["ORD-1012", "Tarek Wahba", "tarek.wahba@example.com", "2", "Sara Ali", "delivered", [["shoes", 1], ["lamp", 1]], 9.99, 0],
 ];
 
 function build(row: (typeof SEED)[number], idx: number): OrderDetails {
-  const [number, customerName, customerEmail, createdBy, status, lines, shipping, taxRate] = row;
+  const [number, customerName, customerEmail, createdById, createdBy, status, lines, shipping, taxRate] = row;
   const items = lines.map(([k, quantity]) => ({ productId: null, name: CATALOG[k].name, sku: CATALOG[k].sku, quantity, unitPrice: CATALOG[k].price }));
   const subtotal = r2(items.reduce((s, i) => s + i.quantity * i.unitPrice, 0));
   const tax = r2(subtotal * taxRate);
@@ -59,7 +60,7 @@ function build(row: (typeof SEED)[number], idx: number): OrderDetails {
     }
   }
   return {
-    id: idx + 1, number, customerName, customerEmail, createdBy, status, createdAt: iso(0),
+    id: idx + 1, number, customerName, customerEmail, createdById, createdBy, status, createdAt: iso(0),
     items, subtotal, shipping, tax, discount: 0, total: r2(subtotal + shipping + tax), history,
   };
 }
@@ -89,7 +90,7 @@ export const mockOrdersApi: OrdersApi = {
   async list(p) {
     await sleep(LATENCY);
     const r = paginate(filterOrders(db, p), p.page, p.pageSize);
-    return { items: r.items.map((o) => ({ id: o.id, number: o.number, customerName: o.customerName, createdAt: o.createdAt, total: o.total, status: o.status })), total: r.total };
+    return { items: r.items.map((o) => ({ id: o.id, number: o.number, customerName: o.customerName, createdAt: o.createdAt, total: o.total, status: o.status, createdById: o.createdById })), total: r.total };
   },
   async get(id) {
     await sleep(LATENCY);

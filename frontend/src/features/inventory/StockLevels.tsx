@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowUpDown, History, Search } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { ArrowUpDown, History, PackagePlus, Search } from "lucide-react";
 import Pagination from "../../components/ui/Pagination";
 import RowActionsMenu from "../../components/ui/RowActionsMenu";
 import { useDebouncedValue } from "../../lib/useDebouncedValue";
@@ -16,6 +17,7 @@ const control =
   "h-10 rounded-lg border border-[#E5E7EB] bg-white px-3 text-sm text-[#111827] focus:border-[#FF5615] focus:outline-none focus:ring-2 focus:ring-[#FF5615]/25";
 
 export default function StockLevels() {
+  const navigate = useNavigate();
   const [searchInput, setSearchInput] = useState("");
   const search = useDebouncedValue(searchInput, 300);
   const [categoryId, setCategoryId] = useState("");
@@ -143,6 +145,27 @@ export default function StockLevels() {
                           actions={[
                             { label: "Adjust stock", icon: ArrowUpDown, onSelect: () => setAdjusting(i) },
                             { label: "View history", icon: History, onSelect: () => setHistory(i) },
+                            // Reorder only makes sense when the stock ran low — it opens
+                            // a purchase-order draft with this product pre-filled.
+                            ...(i.status === "low_stock" || i.status === "out_of_stock"
+                              ? [
+                                  {
+                                    label: "Reorder from supplier",
+                                    icon: PackagePlus,
+                                    onSelect: () =>
+                                      navigate("/admin/purchase-orders", {
+                                        state: {
+                                          reorderProduct: {
+                                            productId: i.id,
+                                            name: i.name,
+                                            sku: i.sku,
+                                            quantity: Math.max(1, i.reorderPoint - i.currentStock),
+                                          },
+                                        },
+                                      }),
+                                  },
+                                ]
+                              : []),
                           ]}
                         />
                       </div>

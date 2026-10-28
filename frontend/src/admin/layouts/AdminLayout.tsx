@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
-import { Boxes, FolderTree, LayoutDashboard, Menu, Package, Truck, X } from "lucide-react";
+import { Boxes, ClipboardList, FolderTree, LayoutDashboard, Menu, Package, ScrollText, Truck, Users as UsersIcon, X } from "lucide-react";
 import { useAuth } from "../../context/auth/useAuth";
 import { cn } from "../../lib/cn";
 
@@ -8,8 +8,11 @@ const NAV = [
   { to: "/admin", label: "Dashboard", icon: LayoutDashboard, end: true },
   { to: "/admin/products", label: "Products", icon: Package, end: false },
   { to: "/admin/inventory", label: "Inventory", icon: Boxes, end: false },
+  { to: "/admin/purchase-orders", label: "Purchase Orders", icon: ClipboardList, end: false },
   { to: "/admin/categories", label: "Categories", icon: FolderTree, end: false },
   { to: "/admin/suppliers", label: "Suppliers", icon: Truck, end: false },
+  { to: "/admin/users", label: "Users", icon: UsersIcon, end: false },
+  { to: "/admin/audit-logs", label: "Audit Log", icon: ScrollText, end: false },
 ] as const;
 
 /** Shell for every /admin page: sidebar on desktop, slide-down menu on mobile. */
