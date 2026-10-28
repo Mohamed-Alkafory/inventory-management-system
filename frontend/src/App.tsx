@@ -33,6 +33,7 @@ import GuestRoute from "./routes/GuestRoute";
 import ProtectedRoute from "./routes/ProtectedRoute";
 import RoleRoute from "./routes/RoleRoute";
 import Profile from "./page/Profile/Profile";
+import Settings from "./page/Settings/Settings";
 
 export default function App() {
   return (
@@ -66,6 +67,7 @@ export default function App() {
                     <Route path="/checkout" element={<Checkout />} />
                     <Route path="/favorites" element={<Favorites />} />
                     <Route path="/profile" element={<Profile />} />
+                    <Route path="/settings" element={<Settings />} />
                     <Route path="/orders" element={<MyOrders />} />
                     <Route path="/orders/:id" element={<OrderDetails />} />
 

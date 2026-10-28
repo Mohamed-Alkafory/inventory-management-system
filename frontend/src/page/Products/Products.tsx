@@ -54,6 +54,7 @@ function toFormProduct(product: InventoryProduct): Product {
 }
 
 export default function Products({ embedded = false }: { embedded?: boolean }) {
+  const Heading: "h1" | "h2" = embedded ? "h2" : "h1";
   const { hasRole } = useAuth();
   const isAdmin = hasRole("ADMIN");
   const navigate = useNavigate();
@@ -144,7 +145,9 @@ export default function Products({ embedded = false }: { embedded?: boolean }) {
       <div className={embedded ? "mx-auto w-full max-w-7xl" : "mx-auto w-full max-w-7xl px-4 sm:px-6"}>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold">Products</h1>
+            {/* Standalone page gets an h1; embedded inside the admin dashboard gets an h2,
+              so the dashboard keeps exactly one h1 ("Dashboard"). */}
+            <Heading className="text-3xl font-bold">Products</Heading>
             <p className="mt-1 text-sm text-muted" aria-live="polite">
               {data ? `${total} ${total === 1 ? "product" : "products"}${hasFilters ? " found" : ""}` : "Loading products…"}
             </p>

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { FaBars, FaSignOutAlt, FaTimes, FaUser } from "react-icons/fa";
+import { FaBars, FaCog, FaSignOutAlt, FaTimes, FaUser } from "react-icons/fa";
 import { ChevronDown, Heart, LayoutGrid, Search, ShoppingCart } from "lucide-react";
 import { useAuth } from "../../context/auth/useAuth";
 import { useCart } from "../../context/cart/useCart";
@@ -17,11 +17,11 @@ const NAV_LINKS = [
   { label: "Contact", href: "/contact" },
 ];
 
-/** Admin-only extra link: straight into the admin panel, between Home and Products. */
+/** Admin-only extra link: straight into the admin panel, between Home and About. */
 const ADMIN_NAV_LINKS = [
   ...NAV_LINKS.slice(0, 1), // Home
   { label: "Dashboard", href: "/admin" },
-  ...NAV_LINKS.slice(1), // Products, About, Contact
+  ...NAV_LINKS.slice(2), // About, Contact — admins pick Products through the admin pages
 ];
 
 /** Icon + orange count badge; guests are sent to sign in first. */
@@ -172,6 +172,10 @@ export default function Header() {
                     <FaSignOutAlt aria-hidden="true" style={{ marginRight: 8 }} />
                     Log out
                   </button>
+                  <Link to="/settings" className="btn btn--ghost" onClick={closeMenu}>
+                    <FaCog aria-hidden="true" style={{ marginRight: 8 }} />
+                    Settings
+                  </Link>
                   <Link to="/profile" className="btn btn--primary" onClick={closeMenu}>
                     <FaUser aria-hidden="true" style={{ marginRight: 8 }} />
                     My profile
@@ -259,6 +263,9 @@ export default function Header() {
                     <FaSignOutAlt aria-hidden="true" />
                     Log out
                   </button>
+                  <Link to="/settings" className="icon-btn" aria-label="Account settings">
+                    <FaCog aria-hidden="true" />
+                  </Link>
                   <Link to="/profile" className="icon-btn" aria-label="Your profile">
                     <FaUser aria-hidden="true" />
                   </Link>

@@ -11,6 +11,8 @@ export const AUTH_ENDPOINTS = {
   me: "/auth/me",
   /** PATCH /auth/me — update own name and/or password. */
   updateMe: "/auth/me",
+  /** POST /auth/change-password — change the own password (current + new). */
+  changePassword: "/auth/change-password",
   /** DELETE /auth/me — deactivate the account (irreversible from the profile page). */
   deleteMe: "/auth/me",
 } as const;
@@ -30,4 +32,13 @@ export const PRODUCT_ENDPOINTS = {
 */
 export const ORDER_ENDPOINTS = {
   create: "/orders",
+} as const;
+
+/*
+  Notification endpoints. The current user's unread list / read markers live
+  under /notifications too — only the preferences are exposed here for now.
+*/
+export const NOTIFICATION_ENDPOINTS = {
+  /** GET/PUT /notifications/preferences — own preference rows (defaults filled). */
+  preferences: "/notifications/preferences",
 } as const;

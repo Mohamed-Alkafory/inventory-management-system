@@ -1,8 +1,10 @@
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, ArrowRight, Boxes, FolderTree, PackageCheck, PackageX, Plus, Truck } from "lucide-react";
+import { AlertTriangle, ArrowRight, Boxes, FolderTree, PackageCheck, PackageX, Plus, Truck, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { productsApi } from "../../../api/productsApi";
+import AdminProducts from "../Products/AdminProducts";
 import { Button, EmptyState, ErrorState, Skeleton, StatusBadge } from "../../../components/ui";
 import { Card, CardBody, CardHeader } from "../../../components/ui/Card";
 import { buttonClass } from "../../../components/ui/buttonClass";
@@ -107,6 +109,22 @@ export default function AdminDashboard() {
   const { user } = useAuth();
   const { data, isError, refetch } = useQuery({ queryKey: ["products", "admin-dashboard"], queryFn: loadStats, staleTime: 30_000 });
 
+  /*
+    The product management section is hidden while you are on the dashboard and
+    opens in place (no navigation) the moment you ask for it — "Manage products"
+    toggles it.
+  */
+  const [showProducts, setShowProducts] = useState(false);
+  const productsRef = useRef<HTMLDivElement>(null);
+
+  // After expanding, bring the section into view — it is far below the stats.
+  useEffect(() => {
+    if (showProducts) productsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [showProducts]);
+
+  const toggleProducts = () => setShowProducts((v) => !v);
+  const manageLabel = showProducts ? "Hide products" : "Manage products";
+
   return (
     <div className="mx-auto max-w-6xl">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -114,9 +132,9 @@ export default function AdminDashboard() {
           <h1 className="text-3xl font-bold">Dashboard</h1>
           <p className="mt-1 text-sm text-muted">Welcome back, {user?.name}. Here is how your store looks today.</p>
         </div>
-        <Link to="/admin/products" className={buttonClass("primary", "md")}>
-          <Plus className="size-4" aria-hidden="true" /> Manage products
-        </Link>
+        <button type="button" className={buttonClass("primary", "md")} onClick={toggleProducts} aria-expanded={showProducts}>
+          {showProducts ? <X className="size-4" aria-hidden="true" /> : <Plus className="size-4" aria-hidden="true" />} {manageLabel}
+        </button>
       </div>
 
       {isError ? (
@@ -175,9 +193,9 @@ export default function AdminDashboard() {
           <Card className="mt-6">
             <CardHeader title="Quick actions" />
             <CardBody className="flex flex-wrap gap-3">
-              <Link to="/admin/products" className={buttonClass("primary", "md")}>
-                Add / edit products
-              </Link>
+              <button type="button" className={buttonClass("primary", "md")} onClick={toggleProducts}>
+                {manageLabel}
+              </button>
               <Link to="/admin/categories" className={buttonClass("secondary", "md")}>
                 Categories
               </Link>
@@ -190,6 +208,18 @@ export default function AdminDashboard() {
             </CardBody>
           </Card>
         </>
+      )}
+
+      {/* Full product management (search, filters, add / edit / delete, pagination)
+          — only mounted after the admin asks for it, so the dashboard itself stays
+          short. Opening is instant: react-query serves the cached list on remount. */}
+      {showProducts && (
+        <div ref={productsRef} className="mt-10 scroll-mt-[104px]">
+          <div className="h-px bg-line" aria-hidden="true" />
+          <section aria-label="Product management" className="mt-6">
+            <AdminProducts />
+          </section>
+        </div>
       )}
     </div>
   );

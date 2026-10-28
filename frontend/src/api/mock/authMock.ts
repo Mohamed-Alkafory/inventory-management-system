@@ -103,6 +103,11 @@ export const mockAuthApi: AuthApi = {
     return strip(account);
   },
 
+  async changePassword({ currentPassword, newPassword }) {
+    await delay();
+    await mockAuthApi.updateProfile({ password: { current: currentPassword, next: newPassword } });
+  },
+
   async deleteAccount() {
     await delay();
     const id = tokenStorage.getAccessToken()?.split(".")[1];

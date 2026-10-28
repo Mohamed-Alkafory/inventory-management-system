@@ -30,6 +30,13 @@ export type UpdateProfilePayload = {
   };
 };
 
+export type ChangePasswordPayload = {
+  /** The current password, to prove it is really the owner asking. */
+  currentPassword: string;
+  /** At least 8 characters — hashed and stored; all refresh tokens are revoked. */
+  newPassword: string;
+};
+
 export type AuthTokens = {
   accessToken: string;
   /** Optional: absent when the backend refreshes through an httpOnly cookie. */

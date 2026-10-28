@@ -1,4 +1,11 @@
-import type { AuthSession, LoginPayload, RegisterPayload, UpdateProfilePayload, User } from "../types/auth";
+import type {
+  AuthSession,
+  ChangePasswordPayload,
+  LoginPayload,
+  RegisterPayload,
+  UpdateProfilePayload,
+  User,
+} from "../types/auth";
 import { toAuthSession, toUser } from "./authMappers";
 import { AUTH_ENDPOINTS } from "./endpoints";
 import { http } from "./http";
@@ -15,6 +22,12 @@ export type AuthApi = {
   me(): Promise<User>;
   /** Updates the signed-in user's name and/or password; resolves with the fresh user. */
   updateProfile(payload: UpdateProfilePayload): Promise<User>;
+  /**
+   * Changes the signed-in user's password (verifies the current one, answers
+   * 422 otherwise). Revokes every refresh token, so other devices must sign
+   * in again.
+   */
+  changePassword(payload: ChangePasswordPayload): Promise<void>;
   /** Deactivates the signed-in account. The local session is cleared by the caller. */
   deleteAccount(): Promise<void>;
   logout(): Promise<void>;
@@ -44,6 +57,11 @@ const realAuthApi: AuthApi = {
   async updateProfile(payload) {
     const { data } = await http.patch(AUTH_ENDPOINTS.updateMe, payload);
     return toUser(data);
+  },
+
+  async changePassword(payload) {
+    // 204 on success; 422 when the current password is wrong.
+    await http.post(AUTH_ENDPOINTS.changePassword, payload);
   },
 
   async deleteAccount() {
