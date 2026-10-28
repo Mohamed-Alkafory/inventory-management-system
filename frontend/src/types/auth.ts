@@ -30,6 +30,7 @@ export type UpdateProfilePayload = {
   };
 };
 
+<<<<<<< HEAD
 export type ChangePasswordPayload = {
   /** The current password, to prove it is really the owner asking. */
   currentPassword: string;
@@ -37,6 +38,8 @@ export type ChangePasswordPayload = {
   newPassword: string;
 };
 
+=======
+>>>>>>> upstream/main
 export type AuthTokens = {
   accessToken: string;
   /** Optional: absent when the backend refreshes through an httpOnly cookie. */

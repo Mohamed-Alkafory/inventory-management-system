@@ -17,11 +17,13 @@ const NAV_LINKS = [
   { label: "Contact", href: "/contact" },
 ];
 
+
 /** Admin-only extra link: straight into the admin panel, between Home and About. */
 const ADMIN_NAV_LINKS = [
   ...NAV_LINKS.slice(0, 1), // Home
   { label: "Dashboard", href: "/admin" },
   ...NAV_LINKS.slice(2), // About, Contact — admins pick Products through the admin pages
+
 ];
 
 /** Icon + orange count badge; guests are sent to sign in first. */

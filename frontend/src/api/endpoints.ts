@@ -11,8 +11,10 @@ export const AUTH_ENDPOINTS = {
   me: "/auth/me",
   /** PATCH /auth/me — update own name and/or password. */
   updateMe: "/auth/me",
+
   /** POST /auth/change-password — change the own password (current + new). */
   changePassword: "/auth/change-password",
+
   /** DELETE /auth/me — deactivate the account (irreversible from the profile page). */
   deleteMe: "/auth/me",
 } as const;
