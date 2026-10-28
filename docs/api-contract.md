@@ -168,8 +168,13 @@ Errors: `409` when deleting (or renaming to) a category while another category a
 | POST   | `/products`     | admin | `{ sku, name, description?, imageUrl?, barcode?, price, costPrice?, quantity?, minStock?, categoryId, supplierId? }`                                 | `Product` (201)                                | 400, 401, 403, 404 (bad categoryId/supplierId), 409 (duplicate sku/barcode) |
 | PATCH  | `/products/:id` | admin | same fields, all optional — **`quantity` not directly editable, use `/stock`**                                                                       | `Product`                                      | 400, 401, 403, 404, 409, 422                                                |
 | DELETE | `/products/:id` | admin | —                                                                                                                                                    | `204` (soft delete)                            | 401, 403, 404, 422                                                          |
+| POST   | `/products/:id/image` | admin | `multipart/form-data` with one binary field, `image` (JPEG, PNG or WebP, max 2 MB) | `Product` (200) with the new `imageUrl`        | 400 (missing/unsupported image), 401, 403, 404, 413 (too large)              |
+| DELETE | `/products/:id/image` | admin | —                                                                                                                                                    | `204` (image cleared)                          | 401, 403, 404                                                               |
 
 `Product` shape: `{ id, sku, name, description, imageUrl, barcode, price, costPrice, quantity, minStock, isActive, categoryId, supplierId, createdAt, updatedAt }`.
+
+- `imageUrl` is either an external `https://...` URL or a relative path served by the API: `/uploads/products/<uuid>.<jpg|png|webp>`. Uploads are **public** (no JWT required) and outside the `/api/v1` prefix. The client filename and MIME type are not trusted; the real type is detected from the file's magic bytes.
+- `POST /products/:id/image` replaces an existing image and deletes the previous local file; external URLs are never deleted from disk. `DELETE /products/:id/image` clears `imageUrl` and deletes the local file if it is a `/uploads/products/...` path.
 
 - `costPrice` is included **only** for ADMIN (see decisions §4). STAFF responses omit the field entirely (not `null`).
 - `stockStatus=low_stock` filters `quantity <= minStock`; `in_stock` → `quantity > 0`;
