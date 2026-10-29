@@ -36,6 +36,7 @@ describe('AuthService', () => {
     name: 'Admin User',
     email: 'admin@example.com',
     passwordHash: adminHash,
+    avatarUrl: null,
     role: 'ADMIN' as const,
     isActive: true,
     createdAt: new Date('2026-10-15T00:00:00Z'),
@@ -137,6 +138,7 @@ describe('AuthService', () => {
         id: adminRow().id,
         name: 'Admin User',
         email: 'admin@example.com',
+        avatarUrl: null,
         role: 'ADMIN',
       });
       expect(JSON.stringify(result)).not.toContain('passwordHash');
@@ -326,6 +328,7 @@ describe('AuthService', () => {
             id: '22222222-2222-4222-8222-222222222222',
             name: data.name,
             email: data.email,
+            avatarUrl: null,
             role: data.role,
           }),
       );
@@ -340,6 +343,7 @@ describe('AuthService', () => {
         id: '22222222-2222-4222-8222-222222222222',
         name: 'New Staff',
         email: 'staff@example.com',
+        avatarUrl: null,
         role: 'STAFF',
       });
       expect(result.accessToken).toBe('signed-access-token');

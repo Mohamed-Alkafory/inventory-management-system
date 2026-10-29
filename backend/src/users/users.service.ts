@@ -10,6 +10,11 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { Prisma } from '../generated/prisma/client.js';
 import { UserRole } from '../generated/prisma/enums.js';
 import { AuditService } from '../audit/audit.service.js';
+import {
+  ImageStorageService,
+  MAX_AVATAR_SIZE_BYTES,
+  type UploadedImageFile,
+} from '../storage/image-storage.service.js';
 import { CreateUserDto } from './dto/create-user.dto.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
 import { ListUsersQueryDto } from './dto/list-users.query.dto.js';
@@ -19,6 +24,7 @@ const USER_SELECT = {
   id: true,
   name: true,
   email: true,
+  avatarUrl: true,
   role: true,
   isActive: true,
   createdAt: true,
@@ -30,6 +36,7 @@ export interface UserResponse {
   id: string;
   name: string;
   email: string;
+  avatarUrl: string | null;
   role: UserRole;
   isActive: boolean;
   createdAt: Date;
@@ -51,6 +58,7 @@ export class UsersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly images: ImageStorageService,
   ) {}
 
   async create(createUserDto: CreateUserDto): Promise<UserResponse> {
@@ -201,6 +209,88 @@ export class UsersService {
       );
 
       return updated;
+    });
+  }
+
+  /**
+   * Replaces the authenticated user's avatar. The new file is written first;
+   * if the database update fails it is removed again so no orphan is left
+   * behind. The previous local file is deleted only after the DB update.
+   */
+  async updateAvatar(
+    userId: string,
+    file: UploadedImageFile | undefined,
+  ): Promise<UserResponse> {
+    const existing = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: USER_SELECT,
+    });
+
+    if (!existing) {
+      throw new NotFoundException(`User ${userId} not found`);
+    }
+
+    const avatarUrl = await this.images.save(
+      file,
+      'avatars',
+      MAX_AVATAR_SIZE_BYTES,
+    );
+
+    let updated: UserResponse;
+    try {
+      updated = await this.prisma.user.update({
+        where: { id: userId },
+        data: { avatarUrl },
+        select: USER_SELECT,
+      });
+    } catch (error) {
+      await this.images.delete(avatarUrl);
+      throw error;
+    }
+
+    await this.images.delete(existing.avatarUrl);
+
+    await this.audit.log({
+      userId,
+      action: 'user.avatar_updated',
+      entityType: 'user',
+      entityId: userId,
+      oldValues: existing,
+      newValues: updated,
+    });
+
+    return updated;
+  }
+
+  /**
+   * Clears the authenticated user's avatar. The local file is removed only
+   * after the database update succeeds; external URLs are never touched.
+   */
+  async removeAvatar(userId: string): Promise<void> {
+    const existing = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: USER_SELECT,
+    });
+
+    if (!existing) {
+      throw new NotFoundException(`User ${userId} not found`);
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data: { avatarUrl: null },
+      select: USER_SELECT,
+    });
+
+    await this.images.delete(existing.avatarUrl);
+
+    await this.audit.log({
+      userId,
+      action: 'user.avatar_deleted',
+      entityType: 'user',
+      entityId: userId,
+      oldValues: existing,
+      newValues: updated,
     });
   }
 

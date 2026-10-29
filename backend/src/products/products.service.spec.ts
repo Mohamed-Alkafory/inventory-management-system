@@ -8,9 +8,9 @@ import { type ListProductsQueryDto } from './dto/list-products.query.dto.js';
 import { type UpdateProductDto } from './dto/update-product.dto.js';
 import { ProductsService } from './products.service.js';
 import {
-  ProductImageService,
+  ImageStorageService,
   type UploadedImageFile,
-} from './product-image.service.js';
+} from '../storage/image-storage.service.js';
 
 const CATEGORY_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const SUPPLIER_ID = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
@@ -27,7 +27,7 @@ describe('ProductsService', () => {
   const categoryFindUnique = vi.fn();
   const supplierFindUnique = vi.fn();
   const imageSave = vi.fn();
-  const imageRemove = vi.fn();
+  const imageDelete = vi.fn();
 
   const productRow = (overrides: Record<string, unknown> = {}) => {
     const row: Record<string, unknown> = {
@@ -63,9 +63,9 @@ describe('ProductsService', () => {
     categoryFindUnique.mockReset();
     supplierFindUnique.mockReset();
     imageSave.mockReset();
-    imageRemove.mockReset();
+    imageDelete.mockReset();
     imageSave.mockResolvedValue('/uploads/products/new-image.png');
-    imageRemove.mockResolvedValue(undefined);
+    imageDelete.mockResolvedValue(undefined);
     // FK lookups "succeed" unless a test says otherwise.
     categoryFindUnique.mockResolvedValue({ id: CATEGORY_ID });
     supplierFindUnique.mockResolvedValue({ id: SUPPLIER_ID });
@@ -79,8 +79,8 @@ describe('ProductsService', () => {
         ProductsService,
         { provide: AuditService, useValue: { log } },
         {
-          provide: ProductImageService,
-          useValue: { save: imageSave, remove: imageRemove },
+          provide: ImageStorageService,
+          useValue: { save: imageSave, delete: imageDelete },
         },
         {
           provide: PrismaService,
@@ -622,13 +622,13 @@ describe('ProductsService', () => {
       const result = await service.uploadImage(id, file, 'admin-id');
 
       expect(result.imageUrl).toBe('/uploads/products/new-image.png');
-      expect(imageSave).toHaveBeenCalledWith(file);
+      expect(imageSave).toHaveBeenCalledWith(file, 'products');
       expect(productUpdate).toHaveBeenCalledWith({
         where: { id },
         data: { imageUrl: '/uploads/products/new-image.png' },
         select: expect.anything(),
       });
-      expect(imageRemove).toHaveBeenCalledWith('/uploads/products/old.png');
+      expect(imageDelete).toHaveBeenCalledWith('/uploads/products/old.png');
       expect(log).toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'product.image_updated',
@@ -646,8 +646,8 @@ describe('ProductsService', () => {
         'db down',
       );
 
-      expect(imageRemove).toHaveBeenCalledTimes(1);
-      expect(imageRemove).toHaveBeenCalledWith('/uploads/products/new-image.png');
+      expect(imageDelete).toHaveBeenCalledTimes(1);
+      expect(imageDelete).toHaveBeenCalledWith('/uploads/products/new-image.png');
     });
 
     it('throws 404 when the product does not exist', async () => {
@@ -686,7 +686,7 @@ describe('ProductsService', () => {
         data: { imageUrl: null },
         select: expect.anything(),
       });
-      expect(imageRemove).toHaveBeenCalledWith('/uploads/products/old.png');
+      expect(imageDelete).toHaveBeenCalledWith('/uploads/products/old.png');
       expect(log).toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'product.image_deleted',

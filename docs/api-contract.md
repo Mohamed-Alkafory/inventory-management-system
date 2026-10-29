@@ -125,7 +125,7 @@ Legend: 🔓 public · Role: `any` / `admin` · Paginated unless marked "no pagi
 | PATCH   | `/auth/me`              | any  | `{ name?, password?{ current, next } }` | `User`                                      | 400, 401, 422 |
 | POST    | `/auth/change-password` | any  | `{ currentPassword, newPassword }`      | `204` (empty)                               | 400, 401, 422 |
 
-`User` shape: `{ id, name, email, role, isActive, createdAt, updatedAt }` — `passwordHash` is **never** returned by any endpoint.
+`User` shape: `{ id, name, email, avatarUrl, role, isActive, createdAt, updatedAt }` — `passwordHash` is **never** returned by any endpoint. `avatarUrl` is either `null` or a relative `/uploads/avatars/<uuid>.<jpg|png|webp>` path.
 
 - `GET /auth/me` returns the **full** public profile of the authenticated user; a missing/deactivated account answers 401.
 - `PATCH /auth/me` only accepts `name` and the nested `password: { current, next }` — `role`, `email` and `isActive` stay ADMIN-managed (`/users`), so sending them is 400.
@@ -143,6 +143,14 @@ Legend: 🔓 public · Role: `any` / `admin` · Paginated unless marked "no pagi
 | POST   | `/users`     | admin | `{ name, email, password, role }`          | `User` (201)                       | 400, 401, 403, 409      |
 | PATCH  | `/users/:id` | admin | `{ name?, email?, role?, isActive? }`      | `User`                             | 400, 403, 404, 409, 422 |
 | DELETE | `/users/:id` | admin | —                                          | `204` (soft delete, see decisions) | 401, 403, 404, 422      |
+| POST   | `/users/me/avatar`   | any   | `multipart/form-data` with one binary field, `image` (JPEG, PNG or WebP, max 1 MB) | `User` (200) with the new `avatarUrl` | 400 (missing/unsupported image), 401, 413 (too large) |
+| DELETE | `/users/me/avatar`   | any   | —                                          | `204` (avatar cleared)             | 401                     |
+
+Avatar endpoints always act on the **authenticated user** (the id comes from the JWT, there is no id in the URL), so even an ADMIN cannot change another user's avatar through them.
+
+- `POST /users/me/avatar` saves a new file, updates `avatarUrl`, then deletes the previous local file. If the database update fails, the new file is deleted so no orphan is left behind.
+- `DELETE /users/me/avatar` clears `avatarUrl` and deletes the local file. External `https://...` avatar URLs are never deleted from disk.
+- Uploads are **public** (no JWT required) and served outside the `/api/v1` prefix at `/uploads/avatars/<uuid>.<ext>`; the real type is detected from magic bytes, never from the client filename or MIME type.
 
 Error cases: `422` when deactivating the last active ADMIN, or self-deactivation `/self-role-change`.
 

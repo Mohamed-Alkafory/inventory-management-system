@@ -31,7 +31,7 @@ import {
 import {
   MAX_IMAGE_SIZE_BYTES,
   type UploadedImageFile,
-} from './product-image.service.js';
+} from '../storage/image-storage.service.js';
 import { CreateProductDto } from './dto/create-product.dto.js';
 import { ListProductsQueryDto } from './dto/list-products.query.dto.js';
 import { UpdateProductDto } from './dto/update-product.dto.js';
