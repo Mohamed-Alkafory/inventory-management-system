@@ -99,8 +99,34 @@ model User {
   notificationPreferences NotificationPreference[]
   auditLogs               AuditLog[]
   refreshTokens           RefreshToken[]
+  assignedContactMessages ContactMessage[]         @relation("ContactMessageAssignee")
 
   @@map("users")
+}
+
+enum ContactStatus {
+  NEW
+  IN_PROGRESS
+  RESOLVED
+}
+
+model ContactMessage {
+  id           String        @id @default(uuid()) @db.Uuid
+  name         String        @db.VarChar(100)
+  email        String        @db.VarChar(255)
+  subject      String        @db.VarChar(200)
+  message      String        @db.Text
+  status       ContactStatus @default(NEW)
+  assignedToId String?       @map("assigned_to_id") @db.Uuid
+  internalNote String?       @map("internal_note") @db.Text
+  createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  assignedTo User? @relation("ContactMessageAssignee", fields: [assignedToId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([status, createdAt])
+  @@index([assignedToId])
+  @@map("contact_messages")
 }
 
 enum OrderStatus {

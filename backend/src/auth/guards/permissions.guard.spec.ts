@@ -169,7 +169,7 @@ describe('PermissionsGuard', () => {
     ).toThrow(ForbiddenException);
   });
 
-  it('maps CUSTOMER to own-order access and SUPPORT to read-only catalog/order access', () => {
+  it('maps CUSTOMER to own-order access and SUPPORT to read-only catalog/order and inbox access', () => {
     expect(ROLE_PERMISSIONS['CUSTOMER']).toEqual([
       'orders.create_own',
       'orders.read_own',
@@ -179,15 +179,19 @@ describe('PermissionsGuard', () => {
       'products.read',
       'categories.read',
       'orders.read_all',
+      'contact.read',
+      'contact.manage',
     ]);
 
     // SUPPORT may read every order but can never confirm/cancel one.
     expect(ROLE_PERMISSIONS['SUPPORT']).not.toContain('orders.update_status');
     expect(ROLE_PERMISSIONS['SUPPORT']).not.toContain('orders.create');
-    // STAFF keeps the till permissions and gets no customer-owned routes.
+    // STAFF keeps the till permissions and gets no customer-owned or inbox routes.
     expect(ROLE_PERMISSIONS['STAFF']).not.toContain('orders.create_own');
     expect(ROLE_PERMISSIONS['STAFF']).not.toContain('orders.read_own');
     expect(ROLE_PERMISSIONS['STAFF']).not.toContain('orders.cancel_own');
+    expect(ROLE_PERMISSIONS['STAFF']).not.toContain('contact.read');
+    expect(ROLE_PERMISSIONS['STAFF']).not.toContain('contact.manage');
 
     expect(() =>
       guard.canActivate(
