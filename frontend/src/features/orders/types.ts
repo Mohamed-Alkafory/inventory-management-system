@@ -32,6 +32,8 @@ export interface StatusEvent {
 
 export interface OrderDetails extends OrderSummary {
   customerEmail: string;
+  customerPhone: string;
+  notes: string;
   createdBy: string;
   items: OrderItem[];
   subtotal: number;

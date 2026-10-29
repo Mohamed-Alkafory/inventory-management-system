@@ -61,11 +61,36 @@ function build(row: (typeof SEED)[number], idx: number): OrderDetails {
   }
   return {
     id: idx + 1, number, customerName, customerEmail, createdById, createdBy, status, createdAt: iso(0),
+    customerPhone: `+20 10${idx % 10} ${String(300 + idx * 17).padStart(3, "0")} ${String(1000 + idx * 113)}`,
+    notes: idx % 3 === 0 ? "Please call before delivery" : "",
     items, subtotal, shipping, tax, discount: 0, total: r2(subtotal + shipping + tax), history,
   };
 }
 
 let db: OrderDetails[] = SEED.map(build);
+
+/** Used by the "create order" mock so a new order shows up in the list and its details page. */
+export function addMockOrder(input: {
+  customerName: string;
+  customerPhone: string;
+  notes: string;
+  items: Array<{ name: string; sku: string; quantity: number; unitPrice: number }>;
+}): { id: number; number: string } {
+  const id = Math.max(0, ...db.map((o) => Number(o.id) || 0)) + 1;
+  const number = `ORD-${1000 + id}`;
+  const at = new Date().toISOString();
+  const items = input.items.map((i) => ({ productId: null, ...i }));
+  const subtotal = r2(items.reduce((s, i) => s + i.quantity * i.unitPrice, 0));
+  db = [
+    ...db,
+    {
+      id, number, customerName: input.customerName, customerEmail: "", customerPhone: input.customerPhone, notes: input.notes,
+      createdById: "1", createdBy: "Demo Admin", status: "pending", createdAt: at, items, subtotal, shipping: 0, tax: 0, discount: 0, total: subtotal,
+      history: [{ status: "pending", at, by: "Demo Admin", note: "Order placed" }],
+    },
+  ];
+  return { id, number };
+}
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const LATENCY = 350;

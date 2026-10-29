@@ -12,17 +12,20 @@ export class ApiError extends Error {
   fieldErrors: Record<string, string>;
   /** The message the server sent, or null when it sent none. */
   serverMessage: string | null;
+  /** The parsed response body, when the caller needs structured error details (e.g. stock failures). */
+  body: unknown;
 
   constructor(
     status: number,
     message: string,
-    opts: { fieldErrors?: Record<string, string>; serverMessage?: string | null } = {},
+    opts: { fieldErrors?: Record<string, string>; serverMessage?: string | null; body?: unknown } = {},
   ) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.fieldErrors = opts.fieldErrors ?? {};
     this.serverMessage = opts.serverMessage ?? null;
+    this.body = opts.body;
   }
 }
 
@@ -143,6 +146,7 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
     throw new ApiError(res.status, helpful ?? `Request failed (${res.status})`, {
       fieldErrors: extractFieldErrors(body),
       serverMessage,
+      body,
     });
   }
   return body as T;

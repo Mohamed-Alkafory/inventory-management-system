@@ -46,5 +46,5 @@ categories/suppliers screens.
 
 - [Vite docs](https://vite.dev) · [React docs](https://react.dev)
 - [Tailwind CSS v4 docs](https://tailwindcss.com/docs)
-- CI runs `npm ci` → `npm run lint` → `npm run build` here
+- CI runs `npm ci` · `npm run lint` · `npm run build` here
   (`.github/workflows/ci.yml`).

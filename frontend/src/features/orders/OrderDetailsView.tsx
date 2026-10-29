@@ -165,11 +165,18 @@ export default function OrderDetailsView({ id }: { id: string }) {
                 <dt className="text-[11px] font-semibold text-[#6B7280]">Customer</dt>
                 <dd className="mt-0.5 font-semibold text-[#111827]">{order.customerName || "—"}</dd>
                 {order.customerEmail && <dd className="text-[#6B7280]">{order.customerEmail}</dd>}
+                {order.customerPhone && <dd className="text-[#6B7280]">{order.customerPhone}</dd>}
               </div>
               <div>
                 <dt className="text-[11px] font-semibold text-[#6B7280]">Placed on</dt>
                 <dd className="mt-0.5 text-[#111827]">{formatDateTime(order.createdAt)}</dd>
               </div>
+              {order.notes && (
+                <div>
+                  <dt className="text-[11px] font-semibold text-[#6B7280]">Notes</dt>
+                  <dd className="mt-0.5 whitespace-pre-line text-[#111827]">{order.notes}</dd>
+                </div>
+              )}
               <div>
                 <dt className="text-[11px] font-semibold text-[#6B7280]">Created by</dt>
                 <dd className="mt-0.5 text-[#111827]">{order.createdBy || "—"}</dd>

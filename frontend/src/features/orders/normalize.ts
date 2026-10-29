@@ -95,6 +95,8 @@ export function normalizeDetails(raw: unknown): OrderDetails {
     ...base,
     total: hasTotal ?? subtotal + shipping + tax - discount,
     customerEmail: str(customer.email) ?? str(r.customerEmail) ?? str(r.customer_email) ?? "",
+    customerPhone: str(customer.phone) ?? str(r.customerPhone) ?? str(r.customer_phone) ?? str(r.phone) ?? "",
+    notes: str(r.notes) ?? str(r.note) ?? "",
     createdBy: person(r.createdBy, r.created_by, r.creator, r.creatorName) ?? "",
     items,
     subtotal,

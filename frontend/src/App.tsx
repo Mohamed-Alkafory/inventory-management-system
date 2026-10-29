@@ -9,6 +9,7 @@ import Users from "./admin/pages/Users/Users";
 import Audit from "./admin/pages/Audit/Audit";
 import PurchaseOrders from "./admin/pages/PurchaseOrders/PurchaseOrders";
 import PurchaseOrderDetails from "./admin/pages/PurchaseOrders/PurchaseOrderDetails";
+import NewOrder from "./admin/pages/Orders/NewOrder";
 import Header from "./components/header/Header";
 import ToastProvider from "./components/ui/toast/ToastProvider";
 import AuthProvider from "./context/auth/AuthProvider";
@@ -67,6 +68,7 @@ export default function App() {
                     <Route path="/favorites" element={<Favorites />} />
                     <Route path="/profile" element={<Profile />} />
                     <Route path="/orders" element={<MyOrders />} />
+                    <Route path="/orders/new" element={<NewOrder />} />
                     <Route path="/orders/:id" element={<OrderDetails />} />
 
                     {/* ADMIN only — STAFF is sent to /forbidden */}
