@@ -38,7 +38,8 @@
 - Access tokens are short-lived (15 min); refresh via `POST /auth/refresh`.
 - Tokens are **not** stored in cookies by the API; the frontend holds them and attaches the header.
 - Public (no auth) endpoints: `POST /auth/login`, `POST /auth/register` (if enabled),
-  `POST /auth/refresh`, `GET /health`.
+  `POST /auth/refresh`, `GET /health`, `GET /catalog/products`,
+  `GET /catalog/products/:id`, `GET /catalog/categories`.
 
 ### Roles
 
@@ -350,6 +351,29 @@ All routes are **ADMIN-only** and authenticated; they answer `200` with `Content
 - **Stock movements** columns: `Created At, SKU, Product, Type, Change, Quantity After, Reason, Order Number, Purchase Order Number, Created By`; filters match `GET /stock/movements`.
 - Empty results still return the header row (valid CSV). Underlying data is queried directly by the reports service — there is no separate JSON "reports API" yet (AD-012).
 
+### 3.14 Public catalog
+
+Anonymous visitors browse only active products in active categories. These routes never require a token and never expose internal product data (AD-018).
+
+| Method | Path                         | Role | Query                                                                                              | Response                          | Errors |
+| ------ | ---------------------------- | ---- | -------------------------------------------------------------------------------------------------- | --------------------------------- | ------ |
+| GET 🔓 | `/catalog/products`          | —    | `?page&limit(max 50)&search(name)&categoryId&sort(name,price,newest)&order(asc,desc)`               | paginated `CatalogProduct[]`      | 400, 429 |
+| GET 🔓 | `/catalog/products/:id`      | —    | —                                                                                                  | `CatalogProduct`                  | 400 (invalid id), 404, 429 |
+| GET 🔓 | `/catalog/categories`        | —    | `?page&limit(max 50)`                                                                              | paginated `CatalogCategory[]`     | 400, 429 |
+
+`CatalogProduct`: `{ id, sku, name, description, price, imageUrl, category: { id, name }, inStock, maxOrderable }`.
+
+- `price` is a JSON **number** on this customer-facing endpoint (the same serialization as `GET /products`).
+- `inStock` is `quantity > 0`; `maxOrderable` is `min(quantity, 20)`, or `0` when out of stock. The exact quantity, `minStock`, `costPrice`, `barcode`, supplier, `isActive` and timestamps are never returned.
+- `imageUrl` is `null`, an external `https://...` URL or a relative `/uploads/products/...` path.
+- `sku` is included because it is already customer-visible in the customer-safe order items (`GET /orders/mine`) and the storefront cart.
+- Only `isActive = true` products **and** `isActive = true` categories are visible. Unknown, inactive and inactive-category products all answer the same `404` so hidden rows cannot be probed.
+- `search` matches the product **name** only. `sort=newest` maps to `createdAt`; `order` defaults to `desc` for `newest` and `asc` for `name`/`price`. Every sort has an ascending `id` tie-break for deterministic pagination.
+- Both list endpoints use the §1 envelope with `limit` capped at **50** (instead of the private API's 100).
+- Rate limiting is stricter than the private API: **30 requests per minute per client per route** (global private default is 100/minute).
+
+`CatalogCategory`: `{ id, name, description }`. Only active categories are listed; `isActive`, timestamps and product counters are internal and omitted.
+
 ---
 
 ## 4. Statuses & transitions (reference)
@@ -366,7 +390,7 @@ Manual endpoints only perform `DRAFT → ORDERED` and the two cancels (`PATCH /p
 
 - Any response not shown here (extra fields) must be ignored by the frontend, not depended on.
 - New fields may be added to responses without a major version bump; breaking changes go to `/api/v2`.
-- Rate limiting: not in v1; treat 429 as retryable `INTERNAL_ERROR` placeholder shape.
+- Rate limiting: the global private default is 100 requests/minute; sensitive routes are stricter (registration, customer order creation, public catalog — see the endpoint sections). Treat `429` as retryable.
 - The frontend may generate mock data against this file directly; every page should be achievable with no backend running.
 
 ---

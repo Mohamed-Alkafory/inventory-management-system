@@ -5,6 +5,7 @@ import { envValidation } from './env.validation.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { ProductsModule } from './products/products.module.js';
 import { CategoriesModule } from './categories/categories.module.js';
+import { CatalogModule } from './catalog/catalog.module.js';
 import { SuppliersModule } from './suppliers/suppliers.module.js';
 import { StockModule } from './stock/stock.module.js';
 import { OrdersModule } from './orders/orders.module.js';
@@ -32,6 +33,7 @@ import { UsersModule } from './users/users.module.js';
     PrismaModule,
     ProductsModule,
     CategoriesModule,
+    CatalogModule,
     SuppliersModule,
     StockModule,
     OrdersModule,

@@ -185,7 +185,7 @@ Authenticated users can upload/replace their own avatar through `POST /users/me/
 - **Source of truth:** `backend/src/auth/permissions.ts` defines `Permission` and `ROLE_PERMISSIONS`. `ADMIN` holds every permission; `STAFF` holds the operational subset below. Any role missing from the map (including an unexpected database value) holds no permissions.
 - **Evaluation:** the role comes from the database user loaded by `JwtAuthGuard`, never from the token claim. `@RequirePermission` requires **all** listed permissions. Method metadata overrides class metadata via `getAllAndOverride`.
 - **Own-account routes** are `@AnyAuthenticated()`: `GET/PATCH/DELETE /auth/me`, `POST /auth/change-password`, `POST /auth/logout`, `POST/DELETE /users/me/avatar`, and all `/notifications` routes (ownership is enforced in the service).
-- **Public routes:** `POST /auth/login`, `POST /auth/register`, `POST /auth/refresh`, `GET /health`.
+- **Public routes:** `POST /auth/login`, `POST /auth/register`, `POST /auth/refresh`, `GET /health`, and the read-only `GET /catalog/products`, `GET /catalog/products/:id`, `GET /catalog/categories` (AD-018).
 
 | Permission | ADMIN | STAFF | Routes |
 | --- | --- | --- | --- |
@@ -247,3 +247,17 @@ Customers can now place and manage their own orders without touching the staff t
 - **Response allow-list:** customer responses are built by an explicit serializer, not by spreading a Prisma row: `{ id, orderNumber, status, totalAmount, items: [{ productName, sku, quantity, unitPrice, lineTotal }], recipientName, recipientPhone, shippingAddress, shippingCity, paymentMethod, createdAt, cancelledAt }`. `createdById`, `customerId`, notes, `createdBy`, stock movements and audit data are never exposed.
 - **Abuse limits:** `POST /orders/mine` accepts 1–30 distinct products, 1–50 per line, active products only, and is throttled to 10 requests per minute per client. Unknown body properties (including `price`, `status`, `customerId`, `createdById`) are rejected with `400` by the global ValidationPipe.
 - **Known follow-up:** the frontend checkout still posts to `POST /orders`; it must be moved to `POST /orders/mine` in a frontend issue (not changed here).
+
+## AD-018 — Public, safe storefront catalog
+
+**Status:** Accepted — **Date:** 2026-10-30
+
+Anonymous visitors can browse products and categories through `GET /catalog/products`, `GET /catalog/products/:id` and `GET /catalog/categories`. No schema change is needed, and the authenticated `/products` and `/categories` endpoints are unchanged.
+
+- **Public only for reading:** the three catalog handlers use `@Public()`; the global `JwtAuthGuard` skips them while `ThrottlerGuard` still runs. Every other route keeps its deny-by-default permission metadata (AD-015).
+- **Explicit allow-list:** products are read with a dedicated Prisma `select` (including only `category { id, name }`) and serialized field by field. The public product shape is `{ id, sku, name, description, price, imageUrl, category: { id, name }, inStock, maxOrderable }`. `costPrice`, `minStock`, exact `quantity`, `barcode`, `supplier`, `isActive`, `categoryId` and all timestamps are never selected into the response.
+- **SKU decision:** `sku` **is** returned because it is already customer-visible in the customer-safe own-order items (`GET /orders/mine`) and in the storefront cart/product UI. It contains no cost, stock, supplier or internal-state information. The other internal identifiers remain hidden.
+- **Availability:** only `isActive = true` products whose category is also `isActive = true` are listed or resolvable. Unknown ids, inactive products and products in inactive categories all answer `404` with the same message, so a hidden product cannot be discovered through status codes. Inactive categories are absent from the category list.
+- **Stock disclosure:** the exact quantity is replaced by `inStock` (`quantity > 0`) and `maxOrderable` (`min(quantity, MAX_ORDERABLE_CAP)`), with `MAX_ORDERABLE_CAP = 20` in one named constant. Out-of-stock products report `maxOrderable = 0`.
+- **Query contract:** `page`/`limit` (limit max **50**), name-only `search`, `categoryId`, `sort` in `{name, price, newest}` and `order` in `{asc, desc}` are validated by DTOs. `newest` maps to `createdAt`, and every sort has an ascending `id` secondary sort for deterministic pagination. `order` defaults to `desc` for `newest` and `asc` for `name`/`price`.
+- **Abuse limit:** all three public routes are throttled to **30 requests per minute per client per route**, stricter than the global private-API default of 100/minute. `429` is returned by the installed `@nestjs/throttler` guard; the limit lives in one exported constant used by every catalog handler.
