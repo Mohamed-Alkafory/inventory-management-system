@@ -13,6 +13,7 @@ import { OrdersController } from './orders.controller.js';
 import { OrdersService } from './orders.service.js';
 import { CreateOrderDto } from './dto/create-order.dto.js';
 import { CreateOwnOrderDto } from './dto/create-own-order.dto.js';
+import { CreateOrderNoteDto } from './dto/create-order-note.dto.js';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto.js';
 import { PERMISSIONS_KEY } from '../auth/decorators/require-permission.decorator.js';
 
@@ -86,6 +87,9 @@ describe('OrdersController', () => {
   const findOne = vi.fn();
   const update = vi.fn();
   const cancelMine = vi.fn();
+  const cancelPending = vi.fn();
+  const createNote = vi.fn();
+  const findNotes = vi.fn();
 
   beforeEach(async () => {
     create.mockReset().mockResolvedValue(sampleCreated);
@@ -111,6 +115,18 @@ describe('OrdersController', () => {
     cancelMine
       .mockReset()
       .mockResolvedValue({ ...sampleCustomerOrder, status: 'CANCELLED' });
+    cancelPending
+      .mockReset()
+      .mockResolvedValue({ ...sampleCreated, status: 'CANCELLED' });
+    createNote.mockReset().mockResolvedValue({
+      id: '33333333-3333-4333-8333-333333333333',
+      orderId: ORDER_ID,
+      authorId: 'staff-id',
+      note: 'Internal follow-up',
+      author: { id: 'staff-id', name: 'Staff' },
+      createdAt: new Date('2026-10-30T12:00:00Z'),
+    });
+    findNotes.mockReset().mockResolvedValue([]);
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [OrdersController],
@@ -127,6 +143,9 @@ describe('OrdersController', () => {
             findOne,
             update,
             cancelMine,
+            cancelPending,
+            createNote,
+            findNotes,
           },
         },
       ],
@@ -459,9 +478,12 @@ describe('OrdersController', () => {
   });
 
   describe('GET /orders', () => {
-    it('calls ordersService.findAll and returns list with metadata', async () => {
-      const res = await controller.findAll({ page: 1, limit: 20 });
-      expect(findAll).toHaveBeenCalledWith({ page: 1, limit: 20 });
+    it('calls ordersService.findAll with the caller role and returns metadata', async () => {
+      const res = await controller.findAll(
+        { page: 1, limit: 20 },
+        ADMIN,
+      );
+      expect(findAll).toHaveBeenCalledWith({ page: 1, limit: 20 }, 'ADMIN');
       expect(res.data).toHaveLength(1);
       expect(res.meta.total).toBe(1);
     });
@@ -475,9 +497,9 @@ describe('OrdersController', () => {
   });
 
   describe('GET /orders/:id', () => {
-    it('calls ordersService.findOne and returns order details', async () => {
-      const res = await controller.findOne(ORDER_ID);
-      expect(findOne).toHaveBeenCalledWith(ORDER_ID);
+    it('calls ordersService.findOne with the viewer identity', async () => {
+      const res = await controller.findOne(ORDER_ID, STAFF);
+      expect(findOne).toHaveBeenCalledWith(ORDER_ID, 'staff-id', 'STAFF');
       expect(res.id).toBe(ORDER_ID);
       expect(res.createdBy.email).toBe('admin@example.com');
     });
@@ -487,6 +509,77 @@ describe('OrdersController', () => {
       expect(reflector.get<string[]>(PERMISSIONS_KEY, handler)).toEqual([
         'orders.read_all',
       ]);
+    });
+  });
+
+  describe('POST /orders/:id/cancel', () => {
+    it('forwards the id and caller to the pending-only cancel service', async () => {
+      const res = await controller.cancelPending(ORDER_ID, STAFF);
+      expect(cancelPending).toHaveBeenCalledWith(
+        ORDER_ID,
+        'staff-id',
+        'STAFF',
+      );
+      expect(res.status).toBe('CANCELLED');
+    });
+
+    it('requires orders.cancel_pending and defaults to POST 201', () => {
+      const handler = OrdersController.prototype.cancelPending;
+      expect(reflector.get<string[]>(PERMISSIONS_KEY, handler)).toEqual([
+        'orders.cancel_pending',
+      ]);
+      expect(Reflect.getMetadata('__httpCode__', handler)).toBeUndefined();
+    });
+  });
+
+  describe('internal order notes', () => {
+    it('creates a note with the author from the token', async () => {
+      const dto = { note: 'Internal follow-up' } as CreateOrderNoteDto;
+      const res = await controller.createNote(ORDER_ID, dto, STAFF);
+
+      expect(createNote).toHaveBeenCalledWith(ORDER_ID, dto, 'staff-id');
+      expect(res.note).toBe('Internal follow-up');
+    });
+
+    it('lists notes for an order', async () => {
+      await expect(controller.findNotes(ORDER_ID)).resolves.toEqual([]);
+      expect(findNotes).toHaveBeenCalledWith(ORDER_ID);
+    });
+
+    it.each([
+      ['createNote', 'orders.notes.write'],
+      ['findNotes', 'orders.notes.read'],
+    ] as const)('%s requires %s', (method, permission) => {
+      const handler = (
+        OrdersController.prototype as unknown as Record<string, unknown>
+      )[method] as () => void;
+      expect(reflector.get<string[]>(PERMISSIONS_KEY, handler)).toEqual([
+        permission,
+      ]);
+    });
+
+    const pipe = new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    });
+    const validateNote = (value: unknown) =>
+      pipe.transform(value, { type: 'body', metatype: CreateOrderNoteDto });
+
+    it('trims a valid note', async () => {
+      await expect(
+        validateNote({ note: '  Call the customer  ' }),
+      ).resolves.toEqual({ note: 'Call the customer' });
+    });
+
+    it.each([
+      ['blank note', { note: '   ' }],
+      ['note over 2000 characters', { note: 'n'.repeat(2001) }],
+      ['unknown field', { note: 'ok', authorId: 'someone' }],
+    ])('rejects %s with 400', async (_label, payload) => {
+      await expect(validateNote(payload)).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
     });
   });
 

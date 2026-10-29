@@ -100,6 +100,7 @@ model User {
   auditLogs               AuditLog[]
   refreshTokens           RefreshToken[]
   assignedContactMessages ContactMessage[]         @relation("ContactMessageAssignee")
+  orderNotes              OrderNote[]
 
   @@map("users")
 }
@@ -162,6 +163,7 @@ model Order {
   customer       User?           @relation("OrderCustomer", fields: [customerId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   orderItems     OrderItem[]
   stockMovements StockMovement[]
+  internalNotes  OrderNote[]
 
   @@index([status, createdAt])
   @@index([createdById])
@@ -185,6 +187,20 @@ model OrderItem {
   @@unique([orderId, productId])
   @@index([productId])
   @@map("order_items")
+}
+
+model OrderNote {
+  id        String   @id @default(uuid()) @db.Uuid
+  orderId   String   @map("order_id") @db.Uuid
+  authorId  String   @map("author_id") @db.Uuid
+  note      String   @db.Text
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  order  Order @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  author User  @relation(fields: [authorId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([orderId, createdAt])
+  @@map("order_notes")
 }
 
 enum StockMovementType {

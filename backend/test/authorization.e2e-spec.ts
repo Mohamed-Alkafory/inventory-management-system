@@ -165,6 +165,18 @@ describe('Authorization (e2e)', () => {
         'patch',
         '/api/v1/orders/22222222-2222-4222-8222-222222222222/status',
       ],
+      [
+        'post',
+        '/api/v1/orders/22222222-2222-4222-8222-222222222222/cancel',
+      ],
+      [
+        'post',
+        '/api/v1/orders/22222222-2222-4222-8222-222222222222/notes',
+      ],
+      [
+        'get',
+        '/api/v1/orders/22222222-2222-4222-8222-222222222222/notes',
+      ],
     ];
 
     it.each(protectedRoutes)(
@@ -246,7 +258,7 @@ describe('Authorization (e2e)', () => {
     });
   });
 
-  describe('SUPPORT can read every order but cannot confirm or cancel', () => {
+  describe('SUPPORT can read every order and cancel PENDING ones only', () => {
     it('lists all orders (200)', async () => {
       const res = await request(app.getHttpServer())
         .get('/api/v1/orders')
@@ -270,6 +282,19 @@ describe('Authorization (e2e)', () => {
       ],
       ['patch', '/api/v1/orders/22222222-2222-4222-8222-222222222222'],
       ['post', '/api/v1/orders'],
+      ['post', '/api/v1/stock/adjustments'],
+      ['get', '/api/v1/stock/movements'],
+      ['get', '/api/v1/users'],
+      ['post', '/api/v1/users'],
+      ['get', '/api/v1/audit-logs'],
+      ['get', '/api/v1/dashboard/summary'],
+      ['get', '/api/v1/reports/inventory.csv'],
+      ['get', '/api/v1/reports/sales.csv'],
+      ['post', '/api/v1/purchase-orders'],
+      [
+        'post',
+        '/api/v1/purchase-orders/22222222-2222-4222-8222-222222222222/receive',
+      ],
     ] as const)('%s %s is forbidden', async (method, path) => {
       await request(app.getHttpServer())
         [method](path)

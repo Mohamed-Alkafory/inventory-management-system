@@ -54,6 +54,9 @@ describe('OrdersService', () => {
   const notifyOrderCreated = vi.fn();
   const notifyOrderCancelled = vi.fn();
   const notifyLowStockIfDepleted = vi.fn();
+  const auditLog = vi.fn();
+  const orderNoteCreate = vi.fn();
+  const orderNoteFindMany = vi.fn();
 
   const tx = {
     product: { findMany: txProductFindMany },
@@ -140,6 +143,9 @@ describe('OrdersService', () => {
     notifyOrderCreated.mockReset().mockResolvedValue(undefined);
     notifyOrderCancelled.mockReset().mockResolvedValue(undefined);
     notifyLowStockIfDepleted.mockReset().mockResolvedValue(undefined);
+    auditLog.mockReset().mockResolvedValue(undefined);
+    orderNoteCreate.mockReset();
+    orderNoteFindMany.mockReset().mockResolvedValue([]);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -155,10 +161,14 @@ describe('OrdersService', () => {
               findFirst: vi.fn(),
               update: vi.fn(),
             },
+            orderNote: {
+              create: orderNoteCreate,
+              findMany: orderNoteFindMany,
+            },
           },
         },
         { provide: StockService, useValue: { applyStockChange } },
-        { provide: AuditService, useValue: { log: vi.fn() } },
+        { provide: AuditService, useValue: { log: auditLog } },
         {
           provide: NotificationsService,
           useValue: {
@@ -1069,6 +1079,54 @@ describe('OrdersService', () => {
         }),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
+
+    it('omits phone and shipping address for SUPPORT list rows only', async () => {
+      const prisma = (
+        service as unknown as {
+          prisma: {
+            order: {
+              count: ReturnType<typeof vi.fn>;
+              findMany: ReturnType<typeof vi.fn>;
+            };
+          };
+        }
+      ).prisma;
+      prisma.order.count.mockResolvedValue(1);
+      prisma.order.findMany.mockResolvedValue([
+        {
+          id: ORDER_ID,
+          orderNumber: 'ORD-0001',
+          status: 'PENDING',
+          customerName: 'Jane Doe',
+          customerPhone: '+201005551234',
+          notes: null,
+          totalAmount: new Prisma.Decimal('14.48'),
+          customerId: 'aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa',
+          recipientName: 'Jane Doe',
+          recipientPhone: '+201005551234',
+          shippingAddress: '12 Nile Street',
+          shippingCity: 'Cairo',
+          paymentMethod: 'COD',
+          createdById: USER_ID,
+          cancelledAt: null,
+          createdAt: new Date('2026-10-23T12:00:00Z'),
+          updatedAt: new Date('2026-10-23T12:00:00Z'),
+        },
+      ]);
+
+      const support = await service.findAll({}, 'SUPPORT');
+      expect(support.data[0]).not.toHaveProperty('customerPhone');
+      expect(support.data[0]).not.toHaveProperty('recipientPhone');
+      expect(support.data[0]).not.toHaveProperty('shippingAddress');
+      // Non-PII fields stay available for support triage.
+      expect(support.data[0].customerName).toBe('Jane Doe');
+      expect(support.data[0].shippingCity).toBe('Cairo');
+
+      const admin = await service.findAll({}, 'ADMIN');
+      expect(admin.data[0].customerPhone).toBe('+201005551234');
+      expect(admin.data[0].recipientPhone).toBe('+201005551234');
+      expect(admin.data[0].shippingAddress).toBe('12 Nile Street');
+    });
   });
 
   describe('findOne', () => {
@@ -1124,6 +1182,289 @@ describe('OrdersService', () => {
       await expect(
         service.findOne('00000000-0000-4000-8000-000000000000'),
       ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it.each(['SUPPORT', 'STAFF'] as const)(
+      'audits a %s detail view with viewer/order identity only',
+      async (role) => {
+        const prisma = (
+          service as unknown as {
+            prisma: { order: { findUnique: ReturnType<typeof vi.fn> } };
+          }
+        ).prisma;
+        prisma.order.findUnique.mockResolvedValue({
+          id: ORDER_ID,
+          orderNumber: 'ORD-0001',
+          status: 'PENDING',
+          customerName: 'Jane Doe',
+          customerPhone: '+201005551234',
+          notes: null,
+          totalAmount: new Prisma.Decimal('14.48'),
+          customerId: 'aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa',
+          recipientName: 'Jane Doe',
+          recipientPhone: '+201005551234',
+          shippingAddress: '12 Nile Street',
+          shippingCity: 'Cairo',
+          paymentMethod: 'COD',
+          createdById: USER_ID,
+          cancelledAt: null,
+          createdAt: new Date('2026-10-23T12:00:00Z'),
+          updatedAt: new Date('2026-10-23T12:00:00Z'),
+          orderItems: [],
+          createdBy: {
+            id: USER_ID,
+            name: 'Admin',
+            email: 'admin@example.com',
+          },
+          stockMovements: [],
+        });
+
+        await service.findOne(ORDER_ID, 'viewer-id', role);
+
+        expect(auditLog).toHaveBeenCalledTimes(1);
+        expect(auditLog).toHaveBeenCalledWith({
+          userId: 'viewer-id',
+          action: 'order.viewed',
+          entityType: 'order',
+          entityId: ORDER_ID,
+          newValues: { viewerId: 'viewer-id', viewerRole: role },
+        });
+        // PII never enters the audit payload.
+        const payload = JSON.stringify(auditLog.mock.calls[0][0]);
+        expect(payload).not.toContain('+201005551234');
+        expect(payload).not.toContain('12 Nile Street');
+      },
+    );
+
+    it.each(['ADMIN', undefined] as const)(
+      'does not audit a detail view by %s',
+      async (role) => {
+        const prisma = (
+          service as unknown as {
+            prisma: { order: { findUnique: ReturnType<typeof vi.fn> } };
+          }
+        ).prisma;
+        prisma.order.findUnique.mockResolvedValue({
+          id: ORDER_ID,
+          orderNumber: 'ORD-0001',
+          status: 'PENDING',
+          customerName: 'Walk-in',
+          customerPhone: null,
+          notes: null,
+          totalAmount: new Prisma.Decimal('14.48'),
+          createdById: USER_ID,
+          cancelledAt: null,
+          createdAt: new Date('2026-10-23T12:00:00Z'),
+          updatedAt: new Date('2026-10-23T12:00:00Z'),
+          orderItems: [],
+          createdBy: { id: USER_ID, name: 'Admin', email: 'admin@example.com' },
+          stockMovements: [],
+        });
+
+        await service.findOne(ORDER_ID, 'viewer-id', role);
+
+        expect(auditLog).not.toHaveBeenCalled();
+      },
+    );
+  });
+
+  describe('internal order notes', () => {
+    const note = {
+      id: '33333333-3333-4333-8333-333333333333',
+      orderId: ORDER_ID,
+      authorId: USER_ID,
+      note: 'Customer called about delivery',
+      author: { id: USER_ID, name: 'Support Agent' },
+      createdAt: new Date('2026-10-30T12:00:00Z'),
+    };
+
+    it('creates a note for an existing order with the caller as author', async () => {
+      const prisma = (
+        service as unknown as {
+          prisma: {
+            order: { findUnique: ReturnType<typeof vi.fn> };
+          };
+        }
+      ).prisma;
+      prisma.order.findUnique.mockResolvedValue({ id: ORDER_ID });
+      orderNoteCreate.mockResolvedValue(note);
+
+      const res = await service.createNote(
+        ORDER_ID,
+        { note: 'Customer called about delivery' },
+        USER_ID,
+      );
+
+      expect(orderNoteCreate).toHaveBeenCalledWith({
+        data: {
+          orderId: ORDER_ID,
+          authorId: USER_ID,
+          note: 'Customer called about delivery',
+        },
+        select: expect.anything(),
+      });
+      expect(res).toEqual(note);
+    });
+
+    it('answers 404 when the order does not exist (nothing written)', async () => {
+      const prisma = (
+        service as unknown as {
+          prisma: {
+            order: { findUnique: ReturnType<typeof vi.fn> };
+          };
+        }
+      ).prisma;
+      prisma.order.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.createNote(ORDER_ID, { note: 'internal' }, USER_ID),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(orderNoteCreate).not.toHaveBeenCalled();
+    });
+
+    it('lists notes oldest first', async () => {
+      const prisma = (
+        service as unknown as {
+          prisma: {
+            order: { findUnique: ReturnType<typeof vi.fn> };
+          };
+        }
+      ).prisma;
+      prisma.order.findUnique.mockResolvedValue({ id: ORDER_ID });
+      orderNoteFindMany.mockResolvedValue([note]);
+
+      const res = await service.findNotes(ORDER_ID);
+
+      expect(orderNoteFindMany).toHaveBeenCalledWith({
+        where: { orderId: ORDER_ID },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        select: expect.anything(),
+      });
+      expect(res).toEqual([note]);
+    });
+
+    it('answers 404 listing notes for a missing order', async () => {
+      const prisma = (
+        service as unknown as {
+          prisma: {
+            order: { findUnique: ReturnType<typeof vi.fn> };
+          };
+        }
+      ).prisma;
+      prisma.order.findUnique.mockResolvedValue(null);
+
+      await expect(service.findNotes(ORDER_ID)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      expect(orderNoteFindMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('cancelPending - SUPPORT may only cancel PENDING orders', () => {
+    const updatedRow = (status: OrderStatus, cancelledAt: Date | null) => ({
+      id: ORDER_ID,
+      orderNumber: 'ORD-0001',
+      status,
+      customerName: 'Jane Doe',
+      customerPhone: '+201005551234',
+      notes: null,
+      totalAmount: new Prisma.Decimal('14.48'),
+      customerId: 'aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa',
+      recipientName: 'Jane Doe',
+      recipientPhone: '+201005551234',
+      shippingAddress: '12 Nile Street',
+      shippingCity: 'Cairo',
+      paymentMethod: 'COD',
+      createdById: USER_ID,
+      cancelledAt,
+      createdAt: new Date('2026-10-23T12:00:00Z'),
+      updatedAt: new Date('2026-10-23T13:00:00Z'),
+    });
+    const line = {
+      id: '11111111-1111-4111-8111-111111111111',
+      orderId: ORDER_ID,
+      productId: PRODUCT_A,
+      productName: 'Ballpoint Pen',
+      sku: 'OFF-PEN-002',
+      quantity: 2,
+      unitPrice: new Prisma.Decimal('1.99'),
+      lineTotal: new Prisma.Decimal('3.98'),
+    };
+
+    it('cancels a PENDING order once, restoring stock with a RETURN movement', async () => {
+      const cancelledAt = new Date('2026-10-23T13:00:00Z');
+      txOrderFindUnique
+        .mockResolvedValueOnce({
+          id: ORDER_ID,
+          orderNumber: 'ORD-0001',
+          status: OrderStatus.PENDING,
+          cancelledAt: null,
+        })
+        .mockResolvedValueOnce(updatedRow(OrderStatus.CANCELLED, cancelledAt));
+      txOrderItemFindMany
+        .mockResolvedValueOnce([{ productId: PRODUCT_A, quantity: 2 }])
+        .mockResolvedValueOnce([line]);
+
+      const res = await service.cancelPending(ORDER_ID, USER_ID, 'SUPPORT');
+
+      expect(txOrderUpdateMany).toHaveBeenCalledWith({
+        where: { id: ORDER_ID, status: OrderStatus.PENDING },
+        data: {
+          status: OrderStatus.CANCELLED,
+          cancelledAt: expect.any(Date),
+        },
+      });
+      expect(applyStockChange).toHaveBeenCalledTimes(1);
+      expect(applyStockChange).toHaveBeenCalledWith(
+        tx,
+        PRODUCT_A,
+        2,
+        StockMovementType.RETURN,
+        'Cancelled order ORD-0001',
+        USER_ID,
+        'SUPPORT',
+        { orderId: ORDER_ID, allowInactive: true },
+      );
+      expect(auditLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: USER_ID,
+          action: 'order.cancelled',
+          entityType: 'order',
+          entityId: ORDER_ID,
+        }),
+        tx,
+      );
+      expect(res.status).toBe(OrderStatus.CANCELLED);
+      expect(notifyOrderCancelled).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([OrderStatus.CONFIRMED, OrderStatus.CANCELLED])(
+      'rejects a %s order with 409 before any write (double cancel safe)',
+      async (status) => {
+        txOrderFindUnique.mockResolvedValueOnce({
+          id: ORDER_ID,
+          orderNumber: 'ORD-0001',
+          status,
+          cancelledAt: null,
+        });
+
+        await expect(
+          service.cancelPending(ORDER_ID, USER_ID, 'SUPPORT'),
+        ).rejects.toBeInstanceOf(ConflictException);
+
+        expect(txOrderUpdateMany).not.toHaveBeenCalled();
+        expect(applyStockChange).not.toHaveBeenCalled();
+        expect(notifyOrderCancelled).not.toHaveBeenCalled();
+      },
+    );
+
+    it('answers 404 for a missing order', async () => {
+      txOrderFindUnique.mockResolvedValueOnce(null);
+
+      await expect(
+        service.cancelPending(ORDER_ID, USER_ID, 'SUPPORT'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(txOrderUpdateMany).not.toHaveBeenCalled();
     });
   });
 
