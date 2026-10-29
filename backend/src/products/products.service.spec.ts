@@ -7,6 +7,10 @@ import { type CreateProductDto } from './dto/create-product.dto.js';
 import { type ListProductsQueryDto } from './dto/list-products.query.dto.js';
 import { type UpdateProductDto } from './dto/update-product.dto.js';
 import { ProductsService } from './products.service.js';
+import {
+  ImageStorageService,
+  type UploadedImageFile,
+} from '../storage/image-storage.service.js';
 
 const CATEGORY_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const SUPPLIER_ID = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
@@ -22,6 +26,8 @@ describe('ProductsService', () => {
   const $queryRaw = vi.fn();
   const categoryFindUnique = vi.fn();
   const supplierFindUnique = vi.fn();
+  const imageSave = vi.fn();
+  const imageDelete = vi.fn();
 
   const productRow = (overrides: Record<string, unknown> = {}) => {
     const row: Record<string, unknown> = {
@@ -56,6 +62,10 @@ describe('ProductsService', () => {
     $queryRaw.mockReset();
     categoryFindUnique.mockReset();
     supplierFindUnique.mockReset();
+    imageSave.mockReset();
+    imageDelete.mockReset();
+    imageSave.mockResolvedValue('/uploads/products/new-image.png');
+    imageDelete.mockResolvedValue(undefined);
     // FK lookups "succeed" unless a test says otherwise.
     categoryFindUnique.mockResolvedValue({ id: CATEGORY_ID });
     supplierFindUnique.mockResolvedValue({ id: SUPPLIER_ID });
@@ -68,6 +78,10 @@ describe('ProductsService', () => {
       providers: [
         ProductsService,
         { provide: AuditService, useValue: { log } },
+        {
+          provide: ImageStorageService,
+          useValue: { save: imageSave, delete: imageDelete },
+        },
         {
           provide: PrismaService,
           useValue: {
@@ -581,6 +595,110 @@ describe('ProductsService', () => {
       productFindUnique.mockResolvedValue(null);
 
       await expect(service.remove('missing-id')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      expect(productUpdate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('image upload', () => {
+    const id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const file: UploadedImageFile = {
+      buffer: Buffer.from('image'),
+      size: 5,
+      mimetype: 'image/png',
+      originalname: 'client-name.png',
+    };
+
+    it('stores the new URL, removes the previous local file and audits it', async () => {
+      const oldRow = productRow({
+        imageUrl: '/uploads/products/old.png',
+      });
+      productFindUnique.mockResolvedValue(oldRow);
+      productUpdate.mockResolvedValue(
+        productRow({ imageUrl: '/uploads/products/new-image.png' }),
+      );
+
+      const result = await service.uploadImage(id, file, 'admin-id');
+
+      expect(result.imageUrl).toBe('/uploads/products/new-image.png');
+      expect(imageSave).toHaveBeenCalledWith(file, 'products');
+      expect(productUpdate).toHaveBeenCalledWith({
+        where: { id },
+        data: { imageUrl: '/uploads/products/new-image.png' },
+        select: expect.anything(),
+      });
+      expect(imageDelete).toHaveBeenCalledWith('/uploads/products/old.png');
+      expect(log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'product.image_updated',
+          entityId: id,
+          oldValues: oldRow,
+        }),
+      );
+    });
+
+    it('deletes the newly written file when the DB update fails', async () => {
+      productFindUnique.mockResolvedValue(productRow());
+      productUpdate.mockRejectedValue(new Error('db down'));
+
+      await expect(service.uploadImage(id, file, 'admin-id')).rejects.toThrow(
+        'db down',
+      );
+
+      expect(imageDelete).toHaveBeenCalledTimes(1);
+      expect(imageDelete).toHaveBeenCalledWith('/uploads/products/new-image.png');
+    });
+
+    it('throws 404 when the product does not exist', async () => {
+      productFindUnique.mockResolvedValue(null);
+
+      await expect(service.uploadImage(id, file, 'admin-id')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      expect(imageSave).not.toHaveBeenCalled();
+    });
+
+    it('works for inactive products, matching the existing update behaviour', async () => {
+      productFindUnique.mockResolvedValue(productRow({ isActive: false }));
+      productUpdate.mockResolvedValue(
+        productRow({ isActive: false, imageUrl: '/uploads/products/new-image.png' }),
+      );
+
+      await expect(
+        service.uploadImage(id, file, 'admin-id'),
+      ).resolves.toMatchObject({ isActive: false });
+    });
+  });
+
+  describe('image deletion', () => {
+    const id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+
+    it('clears imageUrl and removes the old local file', async () => {
+      const oldRow = productRow({ imageUrl: '/uploads/products/old.png' });
+      productFindUnique.mockResolvedValue(oldRow);
+      productUpdate.mockResolvedValue(productRow({ imageUrl: null }));
+
+      await expect(service.removeImage(id, 'admin-id')).resolves.toBeUndefined();
+
+      expect(productUpdate).toHaveBeenCalledWith({
+        where: { id },
+        data: { imageUrl: null },
+        select: expect.anything(),
+      });
+      expect(imageDelete).toHaveBeenCalledWith('/uploads/products/old.png');
+      expect(log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'product.image_deleted',
+          entityId: id,
+        }),
+      );
+    });
+
+    it('throws 404 when the product does not exist', async () => {
+      productFindUnique.mockResolvedValue(null);
+
+      await expect(service.removeImage(id)).rejects.toBeInstanceOf(
         NotFoundException,
       );
       expect(productUpdate).not.toHaveBeenCalled();

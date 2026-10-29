@@ -30,6 +30,7 @@ function defaultMessage(status: number): string {
   if (status === 403) return "You don't have permission to do that.";
   if (status === 404) return "We couldn't find what you were looking for.";
   if (status === 409) return "This conflicts with existing data.";
+  if (status === 413) return "The file is too large.";
   if (status === 422) return "Some of the submitted values are not valid.";
   if (status === 429) return "Too many requests. Please slow down and try again.";
   if (status >= 500) return "The server ran into a problem. Please try again shortly.";

@@ -10,19 +10,28 @@ import {
   Patch,
   Post,
   Query,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
   ApiOperation,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
 
 import {
   ProductsService,
   type ProductListResponse,
   type ProductResponse,
 } from './products.service.js';
+import {
+  MAX_IMAGE_SIZE_BYTES,
+  type UploadedImageFile,
+} from '../storage/image-storage.service.js';
 import { CreateProductDto } from './dto/create-product.dto.js';
 import { ListProductsQueryDto } from './dto/list-products.query.dto.js';
 import { UpdateProductDto } from './dto/update-product.dto.js';
@@ -154,6 +163,90 @@ export class ProductsController {
     @CurrentUser() user: AuthenticatedUser,
   ): Promise<ProductResponse> {
     return this.productsService.update(id, dto, user.sub);
+  }
+
+  @Roles('ADMIN')
+  @Post(':id/image')
+  @HttpCode(HttpStatus.OK)
+  @UseInterceptors(
+    // Memory storage (multer's default) lets the service inspect magic bytes
+    // before anything is written to disk.
+    FileInterceptor('image', { limits: { fileSize: MAX_IMAGE_SIZE_BYTES } }),
+  )
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    description: 'Product image file (max 2 MB; JPEG, PNG or WebP)',
+    schema: {
+      type: 'object',
+      required: ['image'],
+      properties: {
+        image: { type: 'string', format: 'binary' },
+      },
+    },
+  })
+  @ApiOperation({
+    summary: 'Upload or replace a product image (ADMIN only)',
+    description:
+      'Multipart field `image`; the stored `imageUrl` is a relative `/uploads/products/...` path. The previous local file is deleted.',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Product with the new imageUrl',
+  })
+  @ApiResponse({
+    status: HttpStatus.BAD_REQUEST,
+    description: 'Missing file or unsupported image type',
+  })
+  @ApiResponse({
+    status: HttpStatus.UNAUTHORIZED,
+    description: 'Missing or invalid token',
+  })
+  @ApiResponse({
+    status: HttpStatus.FORBIDDEN,
+    description: 'STAFF cannot manage product images',
+  })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    description: 'Product does not exist',
+  })
+  @ApiResponse({
+    status: HttpStatus.PAYLOAD_TOO_LARGE,
+    description: 'Image is larger than 2 MB',
+  })
+  uploadImage(
+    @Param('id', ParseUUIDPipe) id: string,
+    @UploadedFile() image: UploadedImageFile | undefined,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<ProductResponse> {
+    return this.productsService.uploadImage(id, image, user.sub);
+  }
+
+  @Roles('ADMIN')
+  @Delete(':id/image')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary: 'Delete a product image (ADMIN only)',
+    description:
+      'Clears `imageUrl` and removes the local file. External image URLs are never deleted from disk.',
+  })
+  @ApiResponse({ status: HttpStatus.NO_CONTENT, description: 'Image removed' })
+  @ApiResponse({
+    status: HttpStatus.UNAUTHORIZED,
+    description: 'Missing or invalid token',
+  })
+  @ApiResponse({
+    status: HttpStatus.FORBIDDEN,
+    description: 'STAFF cannot manage product images',
+  })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    description: 'Product does not exist',
+  })
+  removeImage(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<void> {
+    return this.productsService.removeImage(id, user.sub);
   }
 
   @Roles('ADMIN')

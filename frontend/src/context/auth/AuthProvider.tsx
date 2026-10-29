@@ -5,7 +5,7 @@ import { onSessionExpired } from "../../api/authEvents";
 import { queryClient } from "../../api/queryClient";
 import { tokenStorage } from "../../api/tokenStorage";
 import { ToastContext } from "../../components/ui/toast/toast-context";
-import type { AuthSession, LoginPayload, RegisterPayload, Role, User } from "../../types/auth";
+import type { AuthSession, LoginPayload, RegisterPayload, Role, UpdateProfilePayload, User } from "../../types/auth";
 import { AuthContext } from "./auth-context";
 import type { AuthContextValue } from "./auth-context";
 
@@ -77,6 +77,41 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
     [startSession],
   );
 
+  /** PATCH /auth/me — persists the fresh user into the session. */
+  const updateProfile = useCallback(async (payload: UpdateProfilePayload) => {
+    const fresh = await authApi.updateProfile(payload);
+    tokenStorage.setUser(fresh);
+    setUser(fresh);
+    return fresh;
+  }, []);
+
+  /** POST /users/me/avatar — the response is the updated current user. */
+  const uploadAvatar = useCallback(async (file: File) => {
+    const fresh = await authApi.uploadAvatar(file);
+    tokenStorage.setUser(fresh);
+    setUser(fresh);
+    return fresh;
+  }, []);
+
+  /** DELETE /users/me/avatar — 204, so clear the avatar locally. */
+  const removeAvatar = useCallback(async () => {
+    await authApi.removeAvatar();
+    const stored = tokenStorage.getSession()?.user;
+    if (stored) tokenStorage.setUser({ ...stored, avatarUrl: null });
+    setUser((prev) => (prev ? { ...prev, avatarUrl: null } : prev));
+  }, []);
+
+  /** DELETE /auth/me — deactivates the account, then signs out locally. */
+  const deleteAccount = useCallback(async () => {
+    try {
+      await authApi.deleteAccount();
+    } finally {
+      tokenStorage.clear();
+      queryClient.clear();
+      setUser(null);
+    }
+  }, []);
+
   const logout = useCallback(async () => {
     try {
       await authApi.logout(); // best effort — we sign out locally either way
@@ -96,10 +131,14 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
       login,
       register,
       loginWithGoogle,
+      updateProfile,
+      uploadAvatar,
+      removeAvatar,
+      deleteAccount,
       logout,
       hasRole: (...roles: Role[]) => (user ? roles.includes(user.role) : false),
     }),
-    [user, login, register, loginWithGoogle, logout],
+    [user, login, register, loginWithGoogle, updateProfile, uploadAvatar, removeAvatar, deleteAccount, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

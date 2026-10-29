@@ -4,13 +4,15 @@ import { Button, Skeleton, SkeletonText, StatusBadge } from "../ui";
 import { Card, CardBody } from "../ui/Card";
 import { cn } from "../../lib/cn";
 import { formatPrice } from "../../lib/format";
+import { resolveImageUrl } from "../../lib/imageUrl";
 import type { InventoryProduct } from "../../types/inventory";
 
 /** Product picture; falls back to an icon when there is no image or it fails to load. */
 export function ProductThumb({ product, className }: { product: InventoryProduct; className?: string }) {
   const [failed, setFailed] = useState(false);
+  const src = resolveImageUrl(product.imageUrl);
 
-  if (!product.imageUrl || failed) {
+  if (!src || failed) {
     return (
       <div
         className={cn("flex items-center justify-center bg-slate-100 text-slate-400", className)}
@@ -22,11 +24,11 @@ export function ProductThumb({ product, className }: { product: InventoryProduct
   }
   return (
     <img
-      src={product.imageUrl}
+      src={src}
       alt=""
       loading="lazy"
       onError={() => setFailed(true)}
-      className={cn("bg-slate-100 object-cover", className)}
+      className={cn("block bg-slate-100 object-cover", className)}
     />
   );
 }
@@ -62,13 +64,14 @@ export function ProductCard({
   return (
     <Card className="flex h-full flex-col overflow-hidden" aria-busy={disabled || undefined}>
       {/* Picture + status; the whole picture area opens the product page. */}
-      <div className="relative aspect-[4/3]">
+      {/* overflow-hidden keeps every card the same 4:3 size, whatever the photo's ratio. */}
+      <div className="relative aspect-[4/3] overflow-hidden">
         <button
           type="button"
           aria-label={`View ${product.name}`}
           disabled={disabled}
           onClick={() => onOpen(product)}
-          className="block h-full w-full focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary-500"
+          className="absolute inset-0 block h-full w-full focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary-500"
         >
           <ProductThumb product={product} className="h-full w-full" />
         </button>

@@ -5,6 +5,10 @@ export type User = {
   name: string;
   email: string;
   role: Role;
+  /** Backend-relative `/uploads/avatars/...` path, an external URL, or null. */
+  avatarUrl?: string | null;
+  /** Present when the backend echoes it (GET /auth/me). Optional elsewhere. */
+  createdAt?: string;
 };
 
 export type LoginPayload = {
@@ -16,6 +20,16 @@ export type RegisterPayload = {
   name: string;
   email: string;
   password: string;
+};
+
+export type UpdateProfilePayload = {
+  /** New display name (min 2, max 100). */
+  name?: string;
+  /** To change the password the current one must be proven. */
+  password?: {
+    current: string;
+    next: string;
+  };
 };
 
 export type AuthTokens = {

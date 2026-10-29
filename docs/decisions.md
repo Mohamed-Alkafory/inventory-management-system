@@ -149,3 +149,27 @@ The dependency "Reports API" did not exist, so this issue defines the report sur
 - **Whole result, no pagination:** a report must be complete; `page`/`limit` are rejected as unknown query params (400) rather than silently ignored.
 - **CSV contract:** UTF-8, RFC-4180 (CRLF, doubled quotes, quoted commas/newlines), a header row always present (also for zero rows), and text starting with `= + - @` prefixed with `'` against formula injection. Filenames are `attachment` with a report-specific, date-stamped name.
 - `low_stock` is expressed with a Prisma field reference (`quantity: { lte: prisma.product.fields.minStock }`), not raw SQL.
+
+## AD-013 — Product images are uploaded files, publicly served (issue: product image upload)
+
+**Status:** Accepted — **Date:** 2026-10-28
+
+Product images can be uploaded through `POST /products/:id/image` (ADMIN only, multipart field `image`) and removed through `DELETE /products/:id/image` (ADMIN only, `204`).
+
+- **Validation:** real content is checked with magic bytes (`file-type`), not the client MIME type or extension. Only JPEG, PNG and WebP are accepted; the maximum size is **2 MB**. Rejected files answer `400` (type/missing file) or `413` (size).
+- **Storage:** local disk under `UPLOADS_DIR` (default `./uploads`), in `uploads/products/`. Filenames are generated UUIDs with the detected extension; the client filename is never used. The database stores only the relative public path, `/uploads/products/<uuid>.<ext>`.
+- **Compatibility:** `Product.imageUrl` remains an optional string. Existing external `https://...` URLs keep working and are never deleted from disk; replacement/deletion only removes files under `/uploads/products/`.
+- **Public access:** uploaded files are served statically at `/uploads` (outside `/api/v1`) without a JWT, so catalogue images work on the public storefront. Helmet's `crossOriginResourcePolicy` is set to `cross-origin` for that reason; all other Helmet defaults remain.
+- **Consistency:** missing products answer `404`; inactive (soft-deleted) products follow the existing update behaviour and still resolve by id. A failed database update removes the just-written file (no orphans). The audit vocabulary gains `product.image_updated` and `product.image_deleted` (no file contents).
+
+## AD-014 — User avatars are public files with a 1 MB limit (issue: profile avatar upload)
+
+**Status:** Accepted — **Date:** 2026-10-29
+
+Authenticated users can upload/replace their own avatar through `POST /users/me/avatar` (multipart field `image`) and remove it through `DELETE /users/me/avatar` (`204`).
+
+- **Current user only:** the id always comes from the JWT, never from a path or body parameter. Admins therefore cannot change another user's avatar through these routes.
+- **Validation:** real content is checked with magic bytes, not the client MIME type or filename. JPEG, PNG and WebP are accepted; the maximum size is **1 MB** (rejected with `413`), and `400` covers missing/unsupported files.
+- **Storage:** files are stored by the shared `ImageStorageService` under `UPLOADS_DIR/avatars/` (`UPLOADS_DIR` defaults to `./uploads`) with generated UUID names. `User.avatarUrl` stores only the relative public path or `null`. The same service handles product images, so storage can move to an external object store before deployment without changing either feature.
+- **Public access:** avatars are served statically at `/uploads` (outside `/api/v1`) without a JWT, because an `<img>` tag cannot send an `Authorization` header. The files are intentionally public; only the upload/delete operations are authenticated.
+- **Consistency:** replacement deletes the previous local file after the DB update, and a failed DB update removes the newly written file. External avatar URLs are never deleted from disk. The audit vocabulary gains `user.avatar_updated` and `user.avatar_deleted` (no file contents).

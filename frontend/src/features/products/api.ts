@@ -26,3 +26,16 @@ export const updateProduct = (id: Id, values: ProductFormValues) =>
 
 /** Soft delete: the server deactivates the product instead of removing the row. */
 export const deleteProduct = (id: Id) => request<void>(`/products/${id}`, { method: "DELETE" });
+
+/**
+ * Uploads/replaces the product picture. `request` deliberately leaves the
+ * Content-Type unset for FormData so the browser adds the multipart boundary.
+ */
+export function uploadProductImage(id: Id, file: File) {
+  const body = new FormData();
+  body.append("image", file);
+  return request<Product>(`/products/${id}/image`, { method: "POST", body });
+}
+
+/** Clears the product picture (the backend also deletes the local file). */
+export const deleteProductImage = (id: Id) => request<void>(`/products/${id}/image`, { method: "DELETE" });

@@ -9,6 +9,12 @@ export const AUTH_ENDPOINTS = {
   refresh: "/auth/refresh",
   logout: "/auth/logout",
   me: "/auth/me",
+  /** PATCH /auth/me — update own name and/or password. */
+  updateMe: "/auth/me",
+  /** DELETE /auth/me — deactivate the account (irreversible from the profile page). */
+  deleteMe: "/auth/me",
+  /** POST/DELETE /users/me/avatar — the signed-in user's profile photo. */
+  avatar: "/users/me/avatar",
 } as const;
 
 /*

@@ -9,6 +9,8 @@ export interface OrderSummary {
   createdAt: string; // ISO date-time
   total: number;
   status: OrderStatus;
+  /** Present when the server echoes it — lets pages show "my orders". */
+  createdById?: string;
   /** Optional: when the server says which actions are allowed, we trust it over our own rules. */
   allowedActions?: OrderAction[];
 }
@@ -48,6 +50,8 @@ export interface OrderListParams {
   to: string;
   page: number; // 1-based
   pageSize: number;
+  /** Filter to the orders a user created (real API: createdById, mock: matches the seeded ids). */
+  createdById?: string;
 }
 
 export interface Paged<T> {

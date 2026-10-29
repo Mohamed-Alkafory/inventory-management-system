@@ -9,6 +9,10 @@ import { UsersService, type UserResponse } from './users.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { Prisma } from '../generated/prisma/client.js';
 import { AuditService } from '../audit/audit.service.js';
+import {
+  ImageStorageService,
+  MAX_AVATAR_SIZE_BYTES,
+} from '../storage/image-storage.service.js';
 
 describe('UsersService', () => {
   let service: UsersService;
@@ -19,6 +23,9 @@ describe('UsersService', () => {
   const userCreate = vi.fn();
   const userUpdate = vi.fn();
   const $transactionWithOptions = vi.fn();
+  const imageSave = vi.fn();
+  const imageDelete = vi.fn();
+  const auditLog = vi.fn();
 
   const ADMIN_ID = '11111111-1111-4111-8111-111111111111';
   const STAFF_ID = '22222222-2222-4222-8222-222222222222';
@@ -40,6 +47,9 @@ describe('UsersService', () => {
     userCreate.mockReset();
     userUpdate.mockReset();
     $transactionWithOptions.mockReset();
+    imageSave.mockReset();
+    imageDelete.mockReset();
+    auditLog.mockReset();
     userFindMany.mockResolvedValue([]);
     userCount.mockResolvedValue(0);
     userUpdate.mockResolvedValue(adminRow());
@@ -62,7 +72,11 @@ describe('UsersService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         UsersService,
-        { provide: AuditService, useValue: { log: vi.fn() } },
+        { provide: AuditService, useValue: { log: auditLog } },
+        {
+          provide: ImageStorageService,
+          useValue: { save: imageSave, delete: imageDelete },
+        },
         {
           provide: PrismaService,
           useValue: {
@@ -316,6 +330,100 @@ describe('UsersService', () => {
         service.update('missing-id', { name: 'X' }, ADMIN_ID),
       ).rejects.toBeInstanceOf(NotFoundException);
     });
+  });
+
+  describe('avatar', () => {
+    const file = {
+      buffer: Buffer.from('image'),
+      size: 5,
+      originalname: 'me.png',
+      mimetype: 'image/png',
+    };
+
+    it('saves into avatars/, updates the current user and removes the old file', async () => {
+      userFindUnique.mockResolvedValue({
+        ...adminRow(),
+        avatarUrl: '/uploads/avatars/old.png',
+      });
+      imageSave.mockResolvedValue('/uploads/avatars/new.png');
+      userUpdate.mockResolvedValue({
+        ...adminRow(),
+        avatarUrl: '/uploads/avatars/new.png',
+      });
+
+      const result = await service.updateAvatar(STAFF_ID, file);
+
+      expect(imageSave).toHaveBeenCalledWith(
+        file,
+        'avatars',
+        MAX_AVATAR_SIZE_BYTES,
+      );
+      expect(userFindUnique).toHaveBeenCalledWith({
+        where: { id: STAFF_ID },
+        select: expect.anything(),
+      });
+      expect(userUpdate).toHaveBeenCalledWith({
+        where: { id: STAFF_ID },
+        data: { avatarUrl: '/uploads/avatars/new.png' },
+        select: expect.anything(),
+      });
+      expect(imageDelete).toHaveBeenCalledWith('/uploads/avatars/old.png');
+      expect(result.avatarUrl).toBe('/uploads/avatars/new.png');
+      expect(result).not.toHaveProperty('passwordHash');
+      expect(JSON.stringify(result)).not.toContain('passwordHash');
+    });
+
+    it('deletes the newly written file when the database update fails', async () => {
+      userFindUnique.mockResolvedValue({
+        ...adminRow(),
+        avatarUrl: '/uploads/avatars/old.png',
+      });
+      imageSave.mockResolvedValue('/uploads/avatars/new.png');
+      const boom = new Error('db down');
+      userUpdate.mockRejectedValue(boom);
+
+      await expect(service.updateAvatar(STAFF_ID, file)).rejects.toBe(boom);
+
+      expect(imageDelete).toHaveBeenCalledTimes(1);
+      expect(imageDelete).toHaveBeenCalledWith('/uploads/avatars/new.png');
+      expect(imagesDeleteOfOldFile()).toBe(false);
+    });
+
+    it('clears avatarUrl and deletes the local file', async () => {
+      userFindUnique.mockResolvedValue({
+        ...adminRow(),
+        avatarUrl: '/uploads/avatars/old.png',
+      });
+      userUpdate.mockResolvedValue({ ...adminRow(), avatarUrl: null });
+
+      await expect(service.removeAvatar(STAFF_ID)).resolves.toBeUndefined();
+
+      expect(userUpdate).toHaveBeenCalledWith({
+        where: { id: STAFF_ID },
+        data: { avatarUrl: null },
+        select: expect.anything(),
+      });
+      expect(imageDelete).toHaveBeenCalledWith('/uploads/avatars/old.png');
+    });
+
+    it('throws 404 for a missing user', async () => {
+      userFindUnique.mockResolvedValue(null);
+
+      await expect(service.updateAvatar(STAFF_ID, file)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      await expect(service.removeAvatar(STAFF_ID)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      expect(imageSave).not.toHaveBeenCalled();
+      expect(userUpdate).not.toHaveBeenCalled();
+    });
+
+    function imagesDeleteOfOldFile(): boolean {
+      return imageDelete.mock.calls.some(
+        ([url]) => url === '/uploads/avatars/old.png',
+      );
+    }
   });
 
   describe('deactivate', () => {

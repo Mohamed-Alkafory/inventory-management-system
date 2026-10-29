@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Minus, Plus, Trash2 } from "lucide-react";
 import { formatMoney } from "../format";
 import { findFailure, lineIssue, lineTotal, orderTotal } from "./lines";
@@ -10,7 +10,11 @@ const stepBtn =
 /** Lets the user clear the field and type a new number; only whole numbers ≥ 1 are committed. */
 function QuantityInput({ value, label, invalid, onChange }: { value: number; label: string; invalid: boolean; onChange: (n: number) => void }) {
   const [text, setText] = useState(String(value));
-  useEffect(() => setText((t) => (Number(t) === value ? t : String(value))), [value]);
+  const [prevValue, setPrevValue] = useState(value);
+  if (value !== prevValue) {
+    setPrevValue(value);
+    setText((t) => (Number(t) === value ? t : String(value)));
+  }
   return (
     <input
       type="number"

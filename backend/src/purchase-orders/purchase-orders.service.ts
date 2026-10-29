@@ -43,6 +43,8 @@ export interface PurchaseOrderItemResponse {
   quantityOrdered: number;
   quantityReceived: number;
   unitCost: number;
+  /** Included so the UI can show product name/sku without extra requests. */
+  product: { id: string; name: string; sku: string };
 }
 
 /** Detail responses (GET :id, create, transitions, receive) carry items + supplier. */
@@ -78,6 +80,7 @@ const PO_ITEM_SELECT = {
   quantityOrdered: true,
   quantityReceived: true,
   unitCost: true,
+  product: { select: { id: true, name: true, sku: true } },
 } satisfies Prisma.PurchaseOrderItemSelect;
 
 const PO_DETAIL_SELECT = {

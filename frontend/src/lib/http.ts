@@ -1,3 +1,6 @@
+import { emitSessionExpired } from "../api/authEvents";
+import { AUTH_ENDPOINTS } from "../api/endpoints";
+import { refreshAccessToken } from "../api/sessionRefresh";
 import { tokenStorage } from "../api/tokenStorage";
 import { API_URL } from "./env";
 
@@ -9,17 +12,20 @@ export class ApiError extends Error {
   fieldErrors: Record<string, string>;
   /** The message the server sent, or null when it sent none. */
   serverMessage: string | null;
+  /** The parsed response body, when the caller needs structured error details (e.g. stock failures). */
+  body: unknown;
 
   constructor(
     status: number,
     message: string,
-    opts: { fieldErrors?: Record<string, string>; serverMessage?: string | null } = {},
+    opts: { fieldErrors?: Record<string, string>; serverMessage?: string | null; body?: unknown } = {},
   ) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.fieldErrors = opts.fieldErrors ?? {};
     this.serverMessage = opts.serverMessage ?? null;
+    this.body = opts.body;
   }
 }
 
@@ -68,21 +74,58 @@ export function extractFieldErrors(body: unknown): Record<string, string> {
   return out;
 }
 
-export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const token = tokenStorage.getAccessToken();
-  const headers = new Headers(init.headers);
-  if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
-  if (token && !headers.has("Authorization")) headers.set("Authorization", `Bearer ${token}`);
+/** Login / register / Google / refresh / logout failures must never trigger a refresh attempt. */
+const AUTH_PATHS: string[] = [
+  AUTH_ENDPOINTS.login,
+  AUTH_ENDPOINTS.register,
+  AUTH_ENDPOINTS.google,
+  AUTH_ENDPOINTS.refresh,
+  AUTH_ENDPOINTS.logout,
+];
+const isAuthPath = (path: string) => AUTH_PATHS.some((p) => path.startsWith(p));
 
-  let res: Response;
+async function send(path: string, init: RequestInit, overrideToken?: string): Promise<Response> {
+  const token = overrideToken ?? tokenStorage.getAccessToken();
+  const headers = new Headers(init.headers);
+  // FormData bodies must keep the browser-generated multipart boundary, so the
+  // JSON Content-Type is only set for non-FormData requests.
+  const isFormData = typeof FormData !== "undefined" && init.body instanceof FormData;
+  if (!isFormData && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  // On a post-refresh retry the fresh token must win over any stale header.
+  if (overrideToken) headers.set("Authorization", `Bearer ${overrideToken}`);
+  else if (token && !headers.has("Authorization")) headers.set("Authorization", `Bearer ${token}`);
+
   try {
-    res = await fetch(`${BASE}${path}`, {
+    return await fetch(`${BASE}${path}`, {
       ...init,
       credentials: "include",
       headers,
     });
   } catch {
     throw new ApiError(0, "Can’t reach the server. Check your connection and try again.");
+  }
+}
+
+export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const hadSession = Boolean(tokenStorage.getAccessToken());
+  let res = await send(path, init);
+
+  // Expired access token: refresh once (shared with the axios client, so a
+  // rotating refresh token is never presented twice) and replay the request.
+  if (res.status === 401 && !isAuthPath(path)) {
+    if (tokenStorage.getRefreshToken()) {
+      try {
+        const token = await refreshAccessToken();
+        res = await send(path, init, token);
+      } catch {
+        // Refresh failed — fall through to sign the user out.
+      }
+    }
+
+    if (res.status === 401 && hadSession) {
+      tokenStorage.clear();
+      emitSessionExpired();
+    }
   }
 
   const raw = await res.text();
@@ -103,6 +146,7 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
     throw new ApiError(res.status, helpful ?? `Request failed (${res.status})`, {
       fieldErrors: extractFieldErrors(body),
       serverMessage,
+      body,
     });
   }
   return body as T;

@@ -5,12 +5,14 @@ import { Button, EmptyState } from "../../components/ui";
 import { Card, CardBody, CardHeader } from "../../components/ui/Card";
 import { useCart } from "../../context/cart/useCart";
 import { formatPrice } from "../../lib/format";
+import { resolveImageUrl } from "../../lib/imageUrl";
 
 /** Item row picture; falls back to an icon when there is none. */
 function LineThumb({ imageUrl, name }: { imageUrl?: string; name: string }) {
   const [failed, setFailed] = useState(false);
+  const src = resolveImageUrl(imageUrl);
 
-  if (!imageUrl || failed) {
+  if (!src || failed) {
     return (
       <div className="flex size-16 shrink-0 items-center justify-center rounded-control bg-slate-100 text-slate-400" aria-hidden="true">
         <Package className="size-6" />
@@ -19,7 +21,7 @@ function LineThumb({ imageUrl, name }: { imageUrl?: string; name: string }) {
   }
   return (
     <img
-      src={imageUrl}
+      src={src}
       alt={name}
       onError={() => setFailed(true)}
       className="size-16 shrink-0 rounded-control bg-slate-100 object-cover"
