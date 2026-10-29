@@ -7,7 +7,7 @@ import { AllExceptionsFilter } from './common/all-exceptions.filter.js';
 import { ConfigService } from '@nestjs/config';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
-import { resolveUploadsDir } from './products/product-image.service.js';
+import { resolveUploadsDir } from './storage/image-storage.service.js';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);

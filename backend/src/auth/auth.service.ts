@@ -37,6 +37,7 @@ const PUBLIC_USER_SELECT = {
   id: true,
   name: true,
   email: true,
+  avatarUrl: true,
   role: true,
   isActive: true,
   createdAt: true,
@@ -52,6 +53,7 @@ export interface SessionUser {
   id: string;
   name: string;
   email: string;
+  avatarUrl: string | null;
   role: string;
 }
 
@@ -110,7 +112,13 @@ export class AuthService {
         passwordHash,
         role: 'STAFF',
       },
-      select: { id: true, name: true, email: true, role: true },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        avatarUrl: true,
+        role: true,
+      },
     });
 
     return this.buildSession(user);
@@ -356,6 +364,7 @@ export class AuthService {
         id: user.id,
         name: user.name,
         email: user.email,
+        avatarUrl: user.avatarUrl,
         role: user.role,
       },
     };

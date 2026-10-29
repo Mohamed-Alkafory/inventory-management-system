@@ -9,20 +9,106 @@ import {
   Patch,
   Post,
   Query,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
 
 import { Roles } from '../auth/decorators/roles.decorator.js';
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
-import { UsersService } from './users.service.js';
+import { UsersService, type UserResponse } from './users.service.js';
+import {
+  MAX_AVATAR_SIZE_BYTES,
+  type UploadedImageFile,
+} from '../storage/image-storage.service.js';
 import { CreateUserDto } from './dto/create-user.dto.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
 import { ListUsersQueryDto } from './dto/list-users.query.dto.js';
 
 /** Users management is ADMIN-only (AD-006; enforced by the global RolesGuard). */
+@ApiTags('users')
+@ApiBearerAuth()
 @Roles('ADMIN')
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
+
+  /**
+   * Upload or replace the CURRENT user's avatar. There is deliberately no id
+   * parameter, so an admin can never change someone else's avatar here.
+   */
+  @Post('me/avatar')
+  @Roles('ADMIN', 'STAFF')
+  @HttpCode(HttpStatus.OK)
+  @UseInterceptors(
+    // Memory storage lets the service inspect magic bytes before writing.
+    FileInterceptor('image', {
+      limits: { fileSize: MAX_AVATAR_SIZE_BYTES },
+    }),
+  )
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    description: 'Avatar image file (max 1 MB; JPEG, PNG or WebP)',
+    schema: {
+      type: 'object',
+      required: ['image'],
+      properties: {
+        image: { type: 'string', format: 'binary' },
+      },
+    },
+  })
+  @ApiOperation({
+    summary: 'Upload or replace the current user avatar',
+    description:
+      'Multipart field `image`; the stored `avatarUrl` is a relative `/uploads/avatars/...` path. The previous local file is deleted.',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Current user with the new avatarUrl',
+  })
+  @ApiResponse({
+    status: HttpStatus.BAD_REQUEST,
+    description: 'Missing file or unsupported image type',
+  })
+  @ApiResponse({
+    status: HttpStatus.UNAUTHORIZED,
+    description: 'Missing or invalid token',
+  })
+  @ApiResponse({
+    status: HttpStatus.PAYLOAD_TOO_LARGE,
+    description: 'Image is larger than 1 MB',
+  })
+  uploadAvatar(
+    @UploadedFile() image: UploadedImageFile | undefined,
+    @CurrentUser() user: { sub: string },
+  ): Promise<UserResponse> {
+    return this.usersService.updateAvatar(user.sub, image);
+  }
+
+  @Delete('me/avatar')
+  @Roles('ADMIN', 'STAFF')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary: 'Delete the current user avatar',
+    description:
+      'Clears `avatarUrl` and removes the local file. External avatar URLs are never deleted from disk.',
+  })
+  @ApiResponse({ status: HttpStatus.NO_CONTENT, description: 'Avatar removed' })
+  @ApiResponse({
+    status: HttpStatus.UNAUTHORIZED,
+    description: 'Missing or invalid token',
+  })
+  removeAvatar(@CurrentUser() user: { sub: string }): Promise<void> {
+    return this.usersService.removeAvatar(user.sub);
+  }
 
   @Get()
   findAll(@Query() query: ListUsersQueryDto) {

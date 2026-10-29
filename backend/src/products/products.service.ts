@@ -10,9 +10,9 @@ import {
   type ProductSortableField,
 } from './dto/list-products.query.dto.js';
 import {
-  ProductImageService,
+  ImageStorageService,
   type UploadedImageFile,
-} from './product-image.service.js';
+} from '../storage/image-storage.service.js';
 
 /**
  * Contract §3.4 `Product` shape. `price`/`costPrice` are Decimal(12,2) in the
@@ -104,7 +104,7 @@ export class ProductsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
-    private readonly images: ProductImageService,
+    private readonly images: ImageStorageService,
   ) {}
 
   /**
@@ -409,7 +409,7 @@ export class ProductsService {
       throw new NotFoundException(`Product ${id} not found`);
     }
 
-    const imageUrl = await this.images.save(file);
+    const imageUrl = await this.images.save(file, 'products');
 
     let product: Prisma.ProductGetPayload<{ select: typeof PRODUCT_SELECT }>;
     try {
@@ -419,11 +419,11 @@ export class ProductsService {
         select: PRODUCT_SELECT,
       });
     } catch (error) {
-      await this.images.remove(imageUrl);
+      await this.images.delete(imageUrl);
       throw error;
     }
 
-    await this.images.remove(existing.imageUrl);
+    await this.images.delete(existing.imageUrl);
 
     await this.audit.log({
       userId,
@@ -457,7 +457,7 @@ export class ProductsService {
       select: PRODUCT_SELECT,
     });
 
-    await this.images.remove(existing.imageUrl);
+    await this.images.delete(existing.imageUrl);
 
     await this.audit.log({
       userId,
