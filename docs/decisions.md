@@ -209,6 +209,8 @@ Authenticated users can upload/replace their own avatar through `POST /users/me/
 | `dashboard.read` | yes | no | all `/dashboard/*` |
 | `reports.read` | yes | no | all `/reports/*` |
 | `audit.read` | yes | no | `GET /audit-logs` |
+| `contact.read` | yes | no | `GET /contact-messages`, `GET /contact-messages/:id` (SUPPORT and ADMIN; added by AD-019) |
+| `contact.manage` | yes | no | `PATCH /contact-messages/:id` (SUPPORT and ADMIN; added by AD-019) |
 | `auth.admin_only` | yes | no | `GET /auth/admin-only` |
 
 This preserves the existing role split (AD-006, AD-008, AD-009) while making the 403 boundary explicit and testable. `costPrice` remains ADMIN-only in product responses (AD-004) independently of `products.read`.
@@ -261,3 +263,16 @@ Anonymous visitors can browse products and categories through `GET /catalog/prod
 - **Stock disclosure:** the exact quantity is replaced by `inStock` (`quantity > 0`) and `maxOrderable` (`min(quantity, MAX_ORDERABLE_CAP)`), with `MAX_ORDERABLE_CAP = 20` in one named constant. Out-of-stock products report `maxOrderable = 0`.
 - **Query contract:** `page`/`limit` (limit max **50**), name-only `search`, `categoryId`, `sort` in `{name, price, newest}` and `order` in `{asc, desc}` are validated by DTOs. `newest` maps to `createdAt`, and every sort has an ascending `id` secondary sort for deterministic pagination. `order` defaults to `desc` for `newest` and `asc` for `name`/`price`.
 - **Abuse limit:** all three public routes are throttled to **30 requests per minute per client per route**, stricter than the global private-API default of 100/minute. `429` is returned by the installed `@nestjs/throttler` guard; the limit lives in one exported constant used by every catalog handler.
+
+## AD-019 — Public contact form with a private SUPPORT/ADMIN inbox
+
+**Status:** Accepted — **Date:** 2026-10-30
+
+The contact form is split into one anonymous write route and a permission-gated inbox. The database change is one additive migration (`20261030010000_add_contact_messages`): a `ContactStatus` enum (`NEW`, `IN_PROGRESS`, `RESOLVED`) and a `contact_messages` table with the `(status, created_at)` and `assigned_to_id` indexes; the assignee FK is `ON DELETE SET NULL`, so deleting a user never removes the message or its history.
+
+- **Permissions:** `contact.read` (list/detail) and `contact.manage` (triage) are new entries in the AD-015 map. SUPPORT and ADMIN hold both; STAFF and CUSTOMER hold neither, so every inbox route answers `403` for them. ADMIN remains a superset of every permission.
+- **Public write only:** `POST /contact` is the only public contact route (`@Public()`). There is deliberately no public read, status check, assignee or internal-note endpoint — a submitter learns only `{ received: true }`, never a message id. The body is trimmed and limited to name 100, email 255 (valid address), subject 200 and message 5000; unknown fields (including triage fields) are rejected with `400`.
+- **Spam controls:** an optional `honeypot` string is accepted. When non-empty the request still answers `201 { received: true }` but nothing is written, so a bot cannot distinguish the trap from success. The route is throttled to **5 submissions per hour per client**, much stricter than the global private default (100/minute); the constants live in the controller.
+- **Assignee rules:** `assignedToId` may be `null` to unassign. A non-null id must resolve to an **active SUPPORT or ADMIN** user. Unknown, inactive and wrong-role ids all answer `404` and leave the row unchanged, so the API does not reveal whether an account exists.
+- **Audit:** every actual status change writes `contact_message.status_changed` inside the same transaction as the update, with `userId` = the acting SUPPORT/ADMIN user, `oldValues: { status }`, `newValues: { status, changedBy }`. Note/assignee-only edits are not status changes and do not create an entry.
+- **Pagination:** `GET /contact-messages` is newest first (`createdAt desc`, `id asc` tie-break) and supports exact `status`/`assignedToId` filters plus case-insensitive `search` over name, email and subject. It returns the internal note and assignee snapshot because it is private; the public route has no equivalent.

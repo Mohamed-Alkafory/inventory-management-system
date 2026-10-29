@@ -38,14 +38,14 @@
 - Access tokens are short-lived (15 min); refresh via `POST /auth/refresh`.
 - Tokens are **not** stored in cookies by the API; the frontend holds them and attaches the header.
 - Public (no auth) endpoints: `POST /auth/login`, `POST /auth/register` (if enabled),
-  `POST /auth/refresh`, `GET /health`, `GET /catalog/products`,
+  `POST /auth/refresh`, `GET /health`, `POST /contact`, `GET /catalog/products`,
   `GET /catalog/products/:id`, `GET /catalog/categories`.
 
 ### Roles
 
 - Four roles (Prisma `UserRole`): `ADMIN`, `STAFF`, `SUPPORT`, `CUSTOMER`.
 - `ADMIN` includes everything the other roles can do. `STAFF` keeps the operational subset from AD-015.
-- `SUPPORT` is read-only: `products.read`, `categories.read` and `orders.read_all` (read every order, but never confirm, cancel or create one) plus the own-account routes.
+- `SUPPORT` is read-only for shop data: `products.read`, `categories.read` and `orders.read_all` (read every order, but never confirm, cancel or create one), plus the support inbox permissions `contact.read` and `contact.manage`, and the own-account routes.
 - `CUSTOMER` can operate on its **own** orders only: `orders.create_own`, `orders.read_own` and `orders.cancel_own` (`POST/GET /orders/mine`, `GET /orders/mine/:id`, `POST /orders/mine/:id/cancel`) plus the own-account routes. Every staff order surface answers `403`.
 - Public `POST /auth/register` always creates a `CUSTOMER`; the body has no `role` field and a client-supplied `role` is rejected with `400`. An admin with `users.manage` creates all roles, including `STAFF`, `SUPPORT`, `ADMIN` and `CUSTOMER`, through `/users`.
 - "Role required" column below: `any` = any authenticated user; `admin` = the `users.manage` permission (ADMIN only).
@@ -373,6 +373,27 @@ Anonymous visitors browse only active products in active categories. These route
 - Rate limiting is stricter than the private API: **30 requests per minute per client per route** (global private default is 100/minute).
 
 `CatalogCategory`: `{ id, name, description }`. Only active categories are listed; `isActive`, timestamps and product counters are internal and omitted.
+
+### 3.15 Contact messages
+
+A public contact form feeds a private support inbox. `SUPPORT` and `ADMIN` hold `contact.read` and `contact.manage`; `STAFF` and `CUSTOMER` receive `403`. The internal note and assignee are **never** exposed by a public route (AD-019).
+
+| Method  | Path                     | Role           | Request body / query                                                        | Response                    | Errors                                  |
+| ------- | ------------------------ | -------------- | --------------------------------------------------------------------------- | --------------------------- | --------------------------------------- |
+| POST 🔓 | `/contact`               | —              | `{ name(max 100), email(valid, max 255), subject(max 200), message(max 5000), honeypot? }` | `{ received: true }` (201)  | 400, 429                                |
+| GET     | `/contact-messages`      | SUPPORT, ADMIN | `?page&limit&status&assignedToId&search(name,email,subject)`                | paginated `ContactMessage[]` | 400, 401, 403                          |
+| GET     | `/contact-messages/:id`  | SUPPORT, ADMIN | —                                                                           | `ContactMessage`            | 400 (invalid id), 401, 403, 404         |
+| PATCH   | `/contact-messages/:id`  | SUPPORT, ADMIN | `{ status?, assignedToId?, internalNote? }`                                 | `ContactMessage`            | 400, 401, 403, 404                      |
+
+`ContactMessage`: `{ id, name, email, subject, message, status, assignedToId, assignedTo, internalNote, createdAt, updatedAt }`.
+
+- `status` is the `ContactStatus` enum: `NEW` (default), `IN_PROGRESS`, `RESOLVED`.
+- `assignedTo` is `{ id, name, email, role } | null`; `assignedToId` may be set to `null` to unassign. The assignee must be an **active SUPPORT or ADMIN** user — unknown, inactive or other-role ids answer `404` (the message is left unchanged).
+- Every change of `status` writes an audit entry (`action: contact_message.status_changed`, `entityType: contact_message`) with the actor in `userId` and the previous/new status plus `changedBy` in `oldValues`/`newValues` (§3.11).
+- `internalNote` (max 5000) is private triage text and can be cleared with `null`.
+- The list is newest first with an `id` ascending tie-break. `search` is case-insensitive over name, email and subject; `status` and `assignedToId` are exact filters.
+- `POST /contact` trims every text field. `honeypot` is optional and ignored by real clients; when non-empty the API still answers `201 { received: true }` but stores nothing. Submissions are throttled to **5 requests per hour per client** (`429` beyond that), and the 201 body never contains a message id, assignee or internal note.
+- All four fields are required and the global `ValidationPipe` rejects unknown properties (including `status`, `assignedToId` and `internalNote`) with `400`.
 
 ---
 
