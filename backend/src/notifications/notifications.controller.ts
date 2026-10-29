@@ -44,7 +44,7 @@ export class NotificationsController {
   @ApiOperation({
     summary: 'List the current user’s notifications',
     description:
-      'Own notifications only (contract §3.9). Filters: `type`, `unread` (boolean — `false` lists read rows). Pagination + whitelisted sort.',
+      'Own notifications only (contract §3.9); every authenticated role, including CUSTOMER, can use this route. Customers receive `ORDER_CONFIRMED`/`ORDER_CANCELLED` status alerts for their own orders with `entityType: "order"` and the order id. Filters: `type`, `unread` (boolean — `false` lists read rows). Pagination + whitelisted sort.',
   })
   @ApiResponse({
     status: HttpStatus.OK,
@@ -99,7 +99,8 @@ export class NotificationsController {
   @Patch(':id/read')
   @ApiOperation({
     summary: 'Mark one notification as read',
-    description: 'Another user’s notification (or a missing one) answers 404.',
+    description:
+      'Ownership is forced server-side. Another user’s notification (or a missing one) answers 404.',
   })
   @ApiResponse({
     status: HttpStatus.OK,
@@ -125,7 +126,7 @@ export class NotificationsController {
   @ApiOperation({
     summary: 'Notification preferences of the current user',
     description:
-      'Full type list; missing rows report the default `enabled: true` (issue #31 decision — preferences implemented, not dropped; see docs/decisions.md AD-007).',
+      'Full type list; missing rows report the default `enabled: true` (issue #31 decision — preferences implemented, not dropped; see docs/decisions.md AD-007/AD-021). Types that do not fan out to the caller’s role are still listed and can be toggled harmlessly.',
   })
   @ApiResponse({
     status: HttpStatus.OK,

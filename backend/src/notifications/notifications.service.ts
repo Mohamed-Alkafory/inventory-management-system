@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 
 import { PrismaService } from '../prisma/prisma.service.js';
-import { NotificationType } from '../generated/prisma/enums.js';
+import { NotificationType, UserRole } from '../generated/prisma/enums.js';
 import type { Prisma } from '../generated/prisma/client.js';
 import { type ListNotificationsQueryDto } from './dto/list-notifications.query.dto.js';
 import type { UpdatePreferencesDto } from './dto/update-preferences.dto.js';
@@ -49,7 +49,16 @@ const NOTIFICATION_SELECT = {
 
 const ALL_TYPES = Object.values(NotificationType) as NotificationType[];
 
-const ADMIN_ROLE = 'ADMIN';
+/**
+ * Who should receive an event. A role target fans out to every active user
+ * with one of those roles; a user target addresses exactly one active user.
+ * Both are filtered through NotificationPreference before rows are written.
+ */
+export type NotificationTarget =
+  | { roles: readonly UserRole[] }
+  | { userId: string };
+
+const ADMIN_TARGET: NotificationTarget = { roles: [UserRole.ADMIN] };
 
 /** Product snapshot the fan-out needs to decide/serialize an alert. */
 interface LowStockCandidate {
@@ -208,7 +217,7 @@ export class NotificationsService {
       if (product.quantity > product.minStock) {
         return;
       }
-      await this.fanOutToAdmins({
+      await this.fanOut(ADMIN_TARGET, {
         type: NotificationType.LOW_STOCK,
         title: 'Low stock alert',
         message: `${product.name} is low on stock (${product.quantity} left, minimum ${product.minStock}).`,
@@ -221,14 +230,21 @@ export class NotificationsService {
     }
   }
 
-  /** ORDER_CREATED — fired after an order commits (issue #28). */
-  async notifyOrderCreated(order: {
-    id: string;
-    orderNumber: string;
-    totalAmount: number;
-  }): Promise<void> {
+  /**
+   * ORDER_CREATED — fired after an order commits (issue #28). Staff-created
+   * orders keep the ADMIN-only default; a customer-created order passes the
+   * STAFF + ADMIN target so the shop floor sees it too.
+   */
+  async notifyOrderCreated(
+    order: {
+      id: string;
+      orderNumber: string;
+      totalAmount: number;
+    },
+    target: NotificationTarget = ADMIN_TARGET,
+  ): Promise<void> {
     try {
-      await this.fanOutToAdmins({
+      await this.fanOut(target, {
         type: NotificationType.ORDER_CREATED,
         title: 'New order',
         message: `Order ${order.orderNumber} was created (total ${order.totalAmount}).`,
@@ -240,20 +256,74 @@ export class NotificationsService {
     }
   }
 
-  /** ORDER_CANCELLED — fired after a cancellation commits (issue #29). */
+  /**
+   * ORDER_CONFIRMED — a customer-safe status event. Only an order with a
+   * `customerId` has a recipient; staff-created walk-in orders notify nobody.
+   * The message carries the order number and status only.
+   */
+  async notifyOrderConfirmed(order: {
+    id: string;
+    orderNumber: string;
+    customerId?: string | null;
+  }): Promise<void> {
+    if (!order.customerId) {
+      return;
+    }
+
+    try {
+      await this.fanOut(
+        { userId: order.customerId },
+        {
+          type: NotificationType.ORDER_CONFIRMED,
+          title: 'Order confirmed',
+          message: `Order ${order.orderNumber} is now CONFIRMED.`,
+          entityType: 'order',
+          entityId: order.id,
+        },
+      );
+    } catch {
+      // best-effort
+    }
+  }
+
+  /**
+   * ORDER_CANCELLED — fired after a cancellation commits (issue #29). The
+   * existing ADMIN alert is unchanged; an owned order additionally notifies
+   * its customer with order-number/status-only content.
+   */
   async notifyOrderCancelled(order: {
     id: string;
     orderNumber: string;
     totalAmount: number;
+    customerId?: string | null;
   }): Promise<void> {
     try {
-      await this.fanOutToAdmins({
+      await this.fanOut(ADMIN_TARGET, {
         type: NotificationType.ORDER_CANCELLED,
         title: 'Order cancelled',
         message: `Order ${order.orderNumber} was cancelled — stock restored.`,
         entityType: 'order',
         entityId: order.id,
       });
+    } catch {
+      // best-effort
+    }
+
+    if (!order.customerId) {
+      return;
+    }
+
+    try {
+      await this.fanOut(
+        { userId: order.customerId },
+        {
+          type: NotificationType.ORDER_CANCELLED,
+          title: 'Order cancelled',
+          message: `Order ${order.orderNumber} is now CANCELLED.`,
+          entityType: 'order',
+          entityId: order.id,
+        },
+      );
     } catch {
       // best-effort
     }
@@ -265,7 +335,7 @@ export class NotificationsService {
     orderNumber: string;
   }): Promise<void> {
     try {
-      await this.fanOutToAdmins({
+      await this.fanOut(ADMIN_TARGET, {
         type: NotificationType.PURCHASE_ORDER_RECEIVED,
         title: 'Purchase order received',
         message: `Purchase order ${purchaseOrder.orderNumber} was received into stock.`,
@@ -278,19 +348,53 @@ export class NotificationsService {
   }
 
   /**
-   * Fan-out to every active ADMIN user. Explicit `enabled: false`
-   * preferences remove a user from the target list; `dedupePerUser` skips
-   * users who already hold an unread row for the same entity (LOW_STOCK).
+   * CONTACT_MESSAGE_RECEIVED — a new public contact submission alerts the
+   * support inbox owners. The order-style deep link points at the private
+   * message detail (SUPPORT/ADMIN only).
    */
-  private async fanOutToAdmins(
+  async notifyContactMessageReceived(message: {
+    id: string;
+    subject: string;
+  }): Promise<void> {
+    try {
+      await this.fanOut(
+        { roles: [UserRole.SUPPORT] },
+        {
+          type: NotificationType.CONTACT_MESSAGE_RECEIVED,
+          title: 'New contact message',
+          message: `New contact message: ${message.subject}`,
+          entityType: 'contact_message',
+          entityId: message.id,
+        },
+      );
+    } catch {
+      // best-effort
+    }
+  }
+
+  /**
+   * Fan-out to a generalized target: every active user with one of the
+   * requested roles, or one specific active user. Explicit `enabled: false`
+   * preferences remove a user from the list; `dedupePerUser` skips users who
+   * already hold an unread row for the same entity (LOW_STOCK).
+   */
+  private async fanOut(
+    target: NotificationTarget,
     input: NotificationInput & { dedupePerUser?: boolean },
   ): Promise<void> {
     try {
-      const admins = await this.prisma.user.findMany({
-        where: { role: ADMIN_ROLE, isActive: true },
+      if ('roles' in target && target.roles.length === 0) {
+        return;
+      }
+
+      const recipients = await this.prisma.user.findMany({
+        where:
+          'userId' in target
+            ? { id: target.userId, isActive: true }
+            : { role: { in: [...target.roles] }, isActive: true },
         select: { id: true },
       });
-      let targets = admins.map((admin) => admin.id);
+      let targets = [...new Set(recipients.map((recipient) => recipient.id))];
       if (targets.length === 0) {
         return;
       }

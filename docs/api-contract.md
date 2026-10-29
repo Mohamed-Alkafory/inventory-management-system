@@ -250,7 +250,7 @@ Soft delete (AD-001): rows are never removed, so linked `products` and `purchase
 - `Order` (staff) shape: `{ id, orderNumber, status, customerName, customerPhone, notes, totalAmount, customerId, recipientName, recipientPhone, shippingAddress, shippingCity, paymentMethod, createdById, cancelledAt, createdAt, updatedAt, items?: OrderItem[] }`.
 - `paymentMethod` is the `PaymentMethod` enum (`COD` only today) and defaults to `COD`.
 - **Customer-safe `Order` shape** (all `/orders/mine` routes): `{ id, orderNumber, status, totalAmount, items: Array<{ productName, sku, quantity, unitPrice, lineTotal }>, recipientName, recipientPhone, shippingAddress, shippingCity, paymentMethod, createdAt, cancelledAt }`. It never contains `createdById`, `customerId`, `notes`, `createdBy`, stock movements, audit data, item/product ids or any other internal field.
-- `POST /orders/mine` accepts 1–30 **distinct** products with `quantity` 1–50 and only active products. The body can never carry `price`, `status`, `customerId` or `createdById` (unknown properties are rejected with `400`). `customerId` and `createdById` are taken from the token, `recipientName`/`recipientPhone` are copied into `customerName`/`customerPhone`, and totals/stock/audit/notifications reuse the same Serializable creation transaction as the staff till. Throttled to 10 requests per minute (`429` beyond that).
+- `POST /orders/mine` accepts 1–30 **distinct** products with `quantity` 1–50 and only active products. The body can never carry `price`, `status`, `customerId` or `createdById` (unknown properties are rejected with `400`). `customerId` and `createdById` are taken from the token, `recipientName`/`recipientPhone` are copied into `customerName`/`customerPhone`, and totals/stock/audit/notifications reuse the same Serializable creation transaction as the staff till. After the commit, a customer order sends `ORDER_CREATED` to every active STAFF and ADMIN user (staff-created orders keep the ADMIN-only target). Throttled to 10 requests per minute (`429` beyond that).
 - `GET /orders/mine` is paginated (default 20, max 100), newest first, optional `status`, and only returns rows whose `customerId` equals the caller. `GET /orders/mine/:id` answers `404` both for an unknown id and for another customer's order (never `403`). `POST /orders/mine/:id/cancel` only succeeds while the order is `PENDING` and owned; it reuses the staff cancel transaction (stock restored with `RETURN` movements, `cancelledAt` stamped) and a second cancel answers `409` without restoring stock again.
 - `GET /orders`: `page` defaults to 1, `limit` defaults to 20 (max 100); default sort is
   `createdAt DESC` with `id ASC` as the deterministic tie-breaker. `status` accepts
@@ -277,6 +277,7 @@ Soft delete (AD-001): rows are never removed, so linked `products` and `purchase
   The permission cannot be used to confirm an order.
 - `OrderItem` shape: `{ id, orderId, productId, productName, sku, quantity, unitPrice, lineTotal }` — snapshots, client must not expect them to track later product edits.
 - `totalAmount` is always computed server-side from the item snapshots' `unitPrice`; client-sent prices are ignored.
+- **Customer status notifications:** confirming an order with a `customerId` sends one `ORDER_CONFIRMED` to that customer; cancelling it sends one `ORDER_CANCELLED` to the customer **in addition to** the unchanged ADMIN alert. A staff-created order without a `customerId` notifies no customer. Customer messages contain only the order number and new status (`CONFIRMED`/`CANCELLED`), and carry `entityType: "order"` + `entityId` so `/orders/mine/:id` can link to the caller's own order — never internal notes, staff names, other customers' data or stock details. Failures are swallowed (AD-021).
 - **Stock is deducted at `PENDING` creation** and fully restored on cancel (see decisions §2).
 - A readable sequential `orderNumber` (`ORD-0001`) is generated server-side from the row count; rows are never removed, so the sequence only grows.
 - `POST /orders` runs in **ONE Serializable transaction**: order + item snapshots + one `SALE` movement per line (via the shared stock logic). Any failure rolls everything back — no partial order remains. Conflicting concurrent attempts are retried once, so stock can never drop below zero and the orderNumber cannot collide.
@@ -314,7 +315,22 @@ Soft delete (AD-001): rows are never removed, so linked `products` and `purchase
 
 `Notification` shape: `{ id, userId, type, title, message, entityType, entityId, data, isRead, readAt, createdAt }`.
 Users only ever see their **own** notifications (404 for others'). Delivery: polling `unread-count` (60s) initially; upgrade path noted in §4 of the roadmap.
-Notes (issue #31 supersessions): the list filter is `unread` (boolean) — `isRead` is no longer exposed; the standalone `/notification-preferences` routes and `DELETE /notifications/:id` are replaced by `/notifications/preferences` under the notifications path (and deletion is not implemented); a missing LOW_STOCK alert is never created while an unread one for the same product exists; notification creation is best-effort and can never fail a stock/order/PO operation (AD-007).
+
+Notification types and recipients (AD-021):
+
+| Type | Recipient(s) |
+| ---- | ------------ |
+| `LOW_STOCK` | active ADMIN users (one unread alert per product/recipient) |
+| `ORDER_CREATED` | active ADMIN for a staff order; active STAFF + ADMIN for `POST /orders/mine` |
+| `ORDER_CONFIRMED` | the owning CUSTOMER only (walk-in orders with no `customerId` skip it) |
+| `ORDER_CANCELLED` | active ADMIN (unchanged) + the owning CUSTOMER when present |
+| `PURCHASE_ORDER_RECEIVED` | active ADMIN users |
+| `CONTACT_MESSAGE_RECEIVED` | active SUPPORT users |
+| `SYSTEM` | reserved for manually created system notices; no automatic fan-out |
+
+Recipients are resolved server-side from roles or one specific user id, and every event still creates one row per active recipient and honours `NotificationPreference` opt-outs. Customer routes (`/orders/mine`, including the status events above) and all `/notifications` routes are available to any authenticated role, but the service forces `userId = caller` on reads and updates. Customer A therefore cannot list, read or mark customer B's notifications. `GET/PUT /notifications/preferences` always returns every enum value, even types that never fan out to the caller's role; those preferences are harmless and switching them does not break the inbox.
+
+Notes (issue #31 supersessions): the list filter is `unread` (boolean) — `isRead` is no longer exposed; the standalone `/notification-preferences` routes and `DELETE /notifications/:id` are replaced by `/notifications/preferences` under the notifications path (and deletion is not implemented); a missing LOW_STOCK alert is never created while an unread one for the same product exists; notification creation is best-effort and can never fail a stock/order/PO/contact operation (AD-007/AD-021).
 
 ### 3.10 Dashboard
 
@@ -411,7 +427,7 @@ A public contact form feeds a private support inbox. `SUPPORT` and `ADMIN` hold 
 - Every change of `status` writes an audit entry (`action: contact_message.status_changed`, `entityType: contact_message`) with the actor in `userId` and the previous/new status plus `changedBy` in `oldValues`/`newValues` (§3.11).
 - `internalNote` (max 5000) is private triage text and can be cleared with `null`.
 - The list is newest first with an `id` ascending tie-break. `search` is case-insensitive over name, email and subject; `status` and `assignedToId` are exact filters.
-- `POST /contact` trims every text field. `honeypot` is optional and ignored by real clients; when non-empty the API still answers `201 { received: true }` but stores nothing. Submissions are throttled to **5 requests per hour per client** (`429` beyond that), and the 201 body never contains a message id, assignee or internal note.
+- `POST /contact` trims every text field. `honeypot` is optional and ignored by real clients; when non-empty the API still answers `201 { received: true }` but stores nothing. A real submission sends a best-effort `CONTACT_MESSAGE_RECEIVED` notification to every active SUPPORT user (never ADMIN/STAFF/CUSTOMER) with `entityType: "contact_message"` and the message id. Submissions are throttled to **5 requests per hour per client** (`429` beyond that), and the 201 body never contains a message id, assignee or internal note.
 - All four fields are required and the global `ValidationPipe` rejects unknown properties (including `status`, `assignedToId` and `internalNote`) with `400`.
 
 ---

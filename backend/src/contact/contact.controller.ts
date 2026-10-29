@@ -32,7 +32,7 @@ export class ContactController {
   @ApiOperation({
     summary: 'Send a contact message (public)',
     description:
-      'No authentication required. Name (max 100), email (valid, max 255), subject (max 200) and message (max 5000) are trimmed and validated; the body may not carry any other field. The optional `honeypot` field is a spam trap: when non-empty the request still answers 201 but nothing is stored. Throttled to 5 requests per hour per client. The response is only `{ received: true }` — no message id, assignee or internal note.',
+      'No authentication required. Name (max 100), email (valid, max 255), subject (max 200) and message (max 5000) are trimmed and validated; the body may not carry any other field. The optional `honeypot` field is a spam trap: when non-empty the request still answers 201 but nothing is stored. A real submission sends a best-effort `CONTACT_MESSAGE_RECEIVED` notification to active SUPPORT users after insert. Throttled to 5 requests per hour per client. The response is only `{ received: true }` — no message id, assignee or internal note.',
   })
   @ApiResponse({
     status: HttpStatus.CREATED,

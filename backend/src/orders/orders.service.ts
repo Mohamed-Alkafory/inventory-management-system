@@ -11,6 +11,7 @@ import { Prisma, OrderStatus } from '../generated/prisma/client.js';
 import {
   PaymentMethod,
   StockMovementType,
+  UserRole,
 } from '../generated/prisma/enums.js';
 import {
   StockService,
@@ -334,12 +335,21 @@ export class OrdersService {
       ),
     );
 
-    // Committed — best-effort events (never throw, issue #31).
-    await this.notifications.notifyOrderCreated({
+    // Committed — best-effort events (never throw, issue #31). A customer
+    // order also alerts the shop floor; staff-created orders keep the
+    // existing ADMIN-only target.
+    const createdEvent = {
       id: result.id,
       orderNumber: result.orderNumber,
       totalAmount: result.totalAmount,
-    });
+    };
+    if (input.customerId) {
+      await this.notifications.notifyOrderCreated(createdEvent, {
+        roles: [UserRole.STAFF, UserRole.ADMIN],
+      });
+    } else {
+      await this.notifications.notifyOrderCreated(createdEvent);
+    }
     for (const change of soldProducts) {
       await this.notifications.notifyLowStockIfDepleted(change.product);
     }
@@ -502,12 +512,20 @@ export class OrdersService {
       ),
     );
 
-    // Committed — best-effort event (never throws, issue #31).
+    // Committed — best-effort event (never throws, issue #31). The customer
+    // is included only when the order is owned by one.
     if (dto.newStatus === OrderStatus.CANCELLED) {
       await this.notifications.notifyOrderCancelled({
         id: result.id,
         orderNumber: result.orderNumber,
         totalAmount: result.totalAmount,
+        ...(result.customerId ? { customerId: result.customerId } : {}),
+      });
+    } else if (dto.newStatus === OrderStatus.CONFIRMED) {
+      await this.notifications.notifyOrderConfirmed({
+        id: result.id,
+        orderNumber: result.orderNumber,
+        ...(result.customerId ? { customerId: result.customerId } : {}),
       });
     }
 
@@ -545,6 +563,7 @@ export class OrdersService {
       id: result.id,
       orderNumber: result.orderNumber,
       totalAmount: result.totalAmount,
+      ...(result.customerId ? { customerId: result.customerId } : {}),
     });
 
     return serializeCustomerOrder({
@@ -584,6 +603,7 @@ export class OrdersService {
       id: result.id,
       orderNumber: result.orderNumber,
       totalAmount: result.totalAmount,
+      ...(result.customerId ? { customerId: result.customerId } : {}),
     });
 
     return result;

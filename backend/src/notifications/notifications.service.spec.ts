@@ -2,7 +2,10 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 
 import { PrismaService } from '../prisma/prisma.service.js';
-import { NotificationType } from '../generated/prisma/client.js';
+import {
+  NotificationType,
+  UserRole,
+} from '../generated/prisma/client.js';
 import { type ListNotificationsQueryDto } from './dto/list-notifications.query.dto.js';
 import { type UpdatePreferencesDto } from './dto/update-preferences.dto.js';
 import { NotificationsService } from './notifications.service.js';
@@ -11,6 +14,10 @@ const USER_ID = 'uuuuuuuu-uuuu-4uuu-8uuu-uuuuuuuuuuuu';
 const OTHER_USER_ID = 'xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx';
 const ADMIN_1 = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const ADMIN_2 = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+const CUSTOMER_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+const STAFF_ID = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+const SUPPORT_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+const CONTACT_MESSAGE_ID = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
 const PRODUCT_ID = 'pppppppp-pppp-4ppp-8ppp-pppppppppppp';
 const ORDER_ID = 'oooooooo-oooo-4ooo-8ooo-oooooooooooo';
 const PURCHASE_ORDER_ID = 'qqqqqqqq-qqqq-4qqq-8qqq-qqqqqqqqqqqq';
@@ -226,8 +233,10 @@ describe('NotificationsService', () => {
       expect(result).toEqual([
         { type: NotificationType.LOW_STOCK, enabled: true },
         { type: NotificationType.ORDER_CREATED, enabled: true },
+        { type: NotificationType.ORDER_CONFIRMED, enabled: true },
         { type: NotificationType.ORDER_CANCELLED, enabled: true },
         { type: NotificationType.PURCHASE_ORDER_RECEIVED, enabled: true },
+        { type: NotificationType.CONTACT_MESSAGE_RECEIVED, enabled: true },
         { type: NotificationType.SYSTEM, enabled: false },
       ]);
     });
@@ -256,8 +265,10 @@ describe('NotificationsService', () => {
       expect(result).toEqual([
         { type: NotificationType.LOW_STOCK, enabled: false },
         { type: NotificationType.ORDER_CREATED, enabled: true },
+        { type: NotificationType.ORDER_CONFIRMED, enabled: true },
         { type: NotificationType.ORDER_CANCELLED, enabled: true },
         { type: NotificationType.PURCHASE_ORDER_RECEIVED, enabled: true },
+        { type: NotificationType.CONTACT_MESSAGE_RECEIVED, enabled: true },
         { type: NotificationType.SYSTEM, enabled: true },
       ]);
     });
@@ -287,7 +298,7 @@ describe('NotificationsService', () => {
       });
 
       expect(userFindMany).toHaveBeenCalledWith({
-        where: { role: 'ADMIN', isActive: true },
+        where: { role: { in: ['ADMIN'] }, isActive: true },
         select: { id: true },
       });
       expect(notificationCreateMany).toHaveBeenCalledWith({
@@ -433,6 +444,206 @@ describe('NotificationsService', () => {
             type: NotificationType.PURCHASE_ORDER_RECEIVED,
             entityType: 'purchase-order',
             entityId: PURCHASE_ORDER_ID,
+          }),
+        ],
+      });
+    });
+
+    it('ORDER_CREATED can target STAFF and ADMIN for a customer order', async () => {
+      userFindMany.mockResolvedValue([
+        { id: STAFF_ID },
+        { id: ADMIN_1 },
+      ]);
+
+      await service.notifyOrderCreated(
+        {
+          id: ORDER_ID,
+          orderNumber: 'ORD-0001',
+          totalAmount: 14.48,
+        },
+        { roles: [UserRole.STAFF, UserRole.ADMIN] },
+      );
+
+      expect(userFindMany).toHaveBeenCalledWith({
+        where: {
+          role: { in: [UserRole.STAFF, UserRole.ADMIN] },
+          isActive: true,
+        },
+        select: { id: true },
+      });
+      expect(notificationCreateMany).toHaveBeenCalledWith({
+        data: [
+          expect.objectContaining({
+            userId: STAFF_ID,
+            type: NotificationType.ORDER_CREATED,
+          }),
+          expect.objectContaining({
+            userId: ADMIN_1,
+            type: NotificationType.ORDER_CREATED,
+          }),
+        ],
+      });
+    });
+
+    it('ORDER_CONFIRMED notifies only the owning active customer with safe content', async () => {
+      userFindMany.mockResolvedValue([{ id: CUSTOMER_ID }]);
+
+      await service.notifyOrderConfirmed({
+        id: ORDER_ID,
+        orderNumber: 'ORD-0001',
+        customerId: CUSTOMER_ID,
+      });
+
+      expect(userFindMany).toHaveBeenCalledWith({
+        where: { id: CUSTOMER_ID, isActive: true },
+        select: { id: true },
+      });
+      expect(notificationCreateMany).toHaveBeenCalledWith({
+        data: [
+          {
+            userId: CUSTOMER_ID,
+            type: NotificationType.ORDER_CONFIRMED,
+            title: 'Order confirmed',
+            message: 'Order ORD-0001 is now CONFIRMED.',
+            entityType: 'order',
+            entityId: ORDER_ID,
+          },
+        ],
+      });
+    });
+
+    it('ORDER_CONFIRMED skips a staff-created order without a customer', async () => {
+      await service.notifyOrderConfirmed({
+        id: ORDER_ID,
+        orderNumber: 'ORD-0001',
+        customerId: null,
+      });
+
+      expect(userFindMany).not.toHaveBeenCalled();
+      expect(notificationCreateMany).not.toHaveBeenCalled();
+    });
+
+    it('ORDER_CANCELLED keeps the ADMIN alert and adds exactly one customer row', async () => {
+      userFindMany
+        .mockResolvedValueOnce([{ id: ADMIN_1 }])
+        .mockResolvedValueOnce([{ id: CUSTOMER_ID }]);
+
+      await service.notifyOrderCancelled({
+        id: ORDER_ID,
+        orderNumber: 'ORD-0001',
+        totalAmount: 14.48,
+        customerId: CUSTOMER_ID,
+      });
+
+      expect(userFindMany).toHaveBeenNthCalledWith(1, {
+        where: { role: { in: [UserRole.ADMIN] }, isActive: true },
+        select: { id: true },
+      });
+      expect(userFindMany).toHaveBeenNthCalledWith(2, {
+        where: { id: CUSTOMER_ID, isActive: true },
+        select: { id: true },
+      });
+      expect(notificationCreateMany).toHaveBeenCalledTimes(2);
+      expect(notificationCreateMany).toHaveBeenNthCalledWith(1, {
+        data: [
+          expect.objectContaining({
+            userId: ADMIN_1,
+            type: NotificationType.ORDER_CANCELLED,
+            message: 'Order ORD-0001 was cancelled — stock restored.',
+          }),
+        ],
+      });
+      expect(notificationCreateMany).toHaveBeenNthCalledWith(2, {
+        data: [
+          {
+            userId: CUSTOMER_ID,
+            type: NotificationType.ORDER_CANCELLED,
+            title: 'Order cancelled',
+            message: 'Order ORD-0001 is now CANCELLED.',
+            entityType: 'order',
+            entityId: ORDER_ID,
+          },
+        ],
+      });
+    });
+
+    it('respects a customer preference for the status event', async () => {
+      userFindMany.mockResolvedValue([{ id: CUSTOMER_ID }]);
+      preferenceFindMany.mockResolvedValue([{ userId: CUSTOMER_ID }]);
+
+      await service.notifyOrderConfirmed({
+        id: ORDER_ID,
+        orderNumber: 'ORD-0001',
+        customerId: CUSTOMER_ID,
+      });
+
+      expect(preferenceFindMany).toHaveBeenCalledWith({
+        where: {
+          userId: { in: [CUSTOMER_ID] },
+          type: NotificationType.ORDER_CONFIRMED,
+          enabled: false,
+        },
+        select: { userId: true },
+      });
+      expect(notificationCreateMany).not.toHaveBeenCalled();
+    });
+
+    it('order notification failures never escape to the order operation', async () => {
+      userFindMany.mockRejectedValue(new Error('db down'));
+
+      await expect(
+        service.notifyOrderCreated({
+          id: ORDER_ID,
+          orderNumber: 'ORD-0001',
+          totalAmount: 14.48,
+        }),
+      ).resolves.toBeUndefined();
+      await expect(
+        service.notifyOrderConfirmed({
+          id: ORDER_ID,
+          orderNumber: 'ORD-0001',
+          customerId: CUSTOMER_ID,
+        }),
+      ).resolves.toBeUndefined();
+      await expect(
+        service.notifyOrderCancelled({
+          id: ORDER_ID,
+          orderNumber: 'ORD-0001',
+          totalAmount: 14.48,
+          customerId: CUSTOMER_ID,
+        }),
+      ).resolves.toBeUndefined();
+
+      userFindMany.mockResolvedValue([{ id: CUSTOMER_ID }]);
+      notificationCreateMany.mockRejectedValue(new Error('write failed'));
+      await expect(
+        service.notifyOrderConfirmed({
+          id: ORDER_ID,
+          orderNumber: 'ORD-0001',
+          customerId: CUSTOMER_ID,
+        }),
+      ).resolves.toBeUndefined();
+    });
+
+    it('CONTACT_MESSAGE_RECEIVED targets active SUPPORT users only', async () => {
+      userFindMany.mockResolvedValue([{ id: SUPPORT_ID }]);
+
+      await service.notifyContactMessageReceived({
+        id: CONTACT_MESSAGE_ID,
+        subject: 'Order question',
+      });
+
+      expect(userFindMany).toHaveBeenCalledWith({
+        where: { role: { in: [UserRole.SUPPORT] }, isActive: true },
+        select: { id: true },
+      });
+      expect(notificationCreateMany).toHaveBeenCalledWith({
+        data: [
+          expect.objectContaining({
+            userId: SUPPORT_ID,
+            type: NotificationType.CONTACT_MESSAGE_RECEIVED,
+            entityType: 'contact_message',
+            entityId: CONTACT_MESSAGE_ID,
           }),
         ],
       });
