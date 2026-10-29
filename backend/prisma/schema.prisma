@@ -77,6 +77,8 @@ model Supplier {
 enum UserRole {
   ADMIN
   STAFF
+  CUSTOMER
+  SUPPORT
 }
 
 model User {

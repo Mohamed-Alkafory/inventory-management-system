@@ -80,6 +80,8 @@ Two roles in v1: `ADMIN` and `STAFF` (no MANAGER/WATCHER). ADMIN is a superset o
 
 A finer-grained permission matrix is out of scope for v1; revisit if a third role is ever needed.
 
+**Amended by AD-016:** the role set is now `ADMIN`, `STAFF`, `SUPPORT` and `CUSTOMER`; the permission matrix in AD-015 still defines ADMIN/STAFF and AD-016 adds the new roles.
+
 ## AD-007 — Notifications are a best-effort, ADMIN-directed side effect (issue #31)
 
 **Status:** Accepted · **Date:** 2026-10-24
@@ -210,3 +212,23 @@ Authenticated users can upload/replace their own avatar through `POST /users/me/
 | `auth.admin_only` | yes | no | `GET /auth/admin-only` |
 
 This preserves the existing role split (AD-006, AD-008, AD-009) while making the 403 boundary explicit and testable. `costPrice` remains ADMIN-only in product responses (AD-004) independently of `products.read`.
+
+## AD-016 — CUSTOMER and SUPPORT roles
+
+**Status:** Accepted — **Date:** 2026-10-29
+
+The `UserRole` enum now has four values: `ADMIN`, `STAFF`, `SUPPORT` and `CUSTOMER` (additive migration `20261029010000_add_customer_support_roles`). ADMIN remains a superset of every other role; STAFF keeps the operational permissions from AD-015.
+
+- **CUSTOMER** has no business permissions (`ROLE_PERMISSIONS.CUSTOMER = []`). A customer can only use `@AnyAuthenticated()` own-account routes: `GET/PATCH/DELETE /auth/me`, `POST /auth/change-password`, `POST /auth/logout`, `POST/DELETE /users/me/avatar` and the `/notifications` routes (ownership is enforced in the service). Later issues extend this role.
+- **SUPPORT** is read-only today and holds exactly `products.read` and `categories.read` (plus the same own-account routes). It cannot adjust stock, manage orders, receive purchase orders, or see cost data.
+- **Registration:** public `POST /auth/register` always creates a `CUSTOMER`. The DTO has no `role` field, and the global `ValidationPipe` (`whitelist` + `forbidNonWhitelisted`) rejects a client-supplied `role` with `400`.
+- **User management:** only `users.manage` (ADMIN) can create or update users. `CreateUserDto.role` and `UpdateUserDto.role` use `@IsEnum(UserRole)`, so an unknown role is a `400`.
+- **Last-admin safety:** an operation that would leave zero active ADMINs is rejected with `409 CONFLICT` (`At least one active ADMIN must remain`). This covers admin-managed updates/deactivation and self-deactivation via `DELETE /auth/me`. The count and write share one transaction and the users API uses Serializable isolation with one `P2034` retry. Self-role-change and self-deactivation through `/users/:id` remain `422` when another active admin exists.
+- **Session invalidation:** changing a user's role, deactivating a user (by an admin or via `DELETE /auth/me`) and changing a password all revoke every active refresh token (`revokedAt`). Re-activating an account or renaming it does not.
+
+| Permission | ADMIN | STAFF | SUPPORT | CUSTOMER |
+| --- | --- | --- | --- | --- |
+| `products.read` | yes | yes | yes | no |
+| `categories.read` | yes | yes | yes | no |
+| all other permissions (AD-015) | yes | STAFF subset | no | no |
+| `@AnyAuthenticated()` own-account routes | yes | yes | yes | yes |

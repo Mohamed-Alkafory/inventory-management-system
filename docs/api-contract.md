@@ -42,10 +42,13 @@
 
 ### Roles
 
-- `ADMIN` and `STAFF` (Prisma `UserRole`).
-- `ADMIN` includes everything `STAFF` can do.
-- "Role required" column below: `any` = any authenticated user; `admin` = ADMIN only.
-- Authorization is **deny-by-default**: each handler must declare `@Public()`, `@AnyAuthenticated()`, or `@RequirePermission(...)`. A handler with none of these answers `403` with the standard `FORBIDDEN` envelope (`{ statusCode: 403, message: "Insufficient permissions", error: "FORBIDDEN", path, timestamp }`), even for an authenticated ADMIN. The full permission map lives in `docs/decisions.md` (AD-015).
+- Four roles (Prisma `UserRole`): `ADMIN`, `STAFF`, `SUPPORT`, `CUSTOMER`.
+- `ADMIN` includes everything the other roles can do. `STAFF` keeps the operational subset from AD-015.
+- `SUPPORT` is read-only today: `products.read` and `categories.read` only (plus own-account routes).
+- `CUSTOMER` has no business permissions today: only `@AnyAuthenticated()` own-account routes (profile, password, logout, avatar, notifications). Later issues extend it.
+- Public `POST /auth/register` always creates a `CUSTOMER`; the body has no `role` field and a client-supplied `role` is rejected with `400`. An admin with `users.manage` creates all roles, including `STAFF`, `SUPPORT`, `ADMIN` and `CUSTOMER`, through `/users`.
+- "Role required" column below: `any` = any authenticated user; `admin` = the `users.manage` permission (ADMIN only).
+- Authorization is **deny-by-default**: each handler must declare `@Public()`, `@AnyAuthenticated()`, or `@RequirePermission(...)`. A handler with none of these answers `403` with the standard `FORBIDDEN` envelope (`{ statusCode: 403, message: "Insufficient permissions", error: "FORBIDDEN", path, timestamp }`), even for an authenticated ADMIN. The full permission map lives in `docs/decisions.md` (AD-015, AD-016).
 
 ### Pagination
 
@@ -104,7 +107,7 @@ Error codes:
 | `UNAUTHORIZED`        | 401  | Missing/expired/invalid token                                           |
 | `FORBIDDEN`           | 403  | Authenticated but role insufficient                                     |
 | `NOT_FOUND`           | 404  | Resource does not exist                                                 |
-| `CONFLICT`            | 409  | Duplicate unique field (e.g. SKU, email)                                |
+| `CONFLICT`            | 409  | Duplicate unique field (e.g. SKU, email) or last-admin safety rule      |
 | `BUSINESS_RULE_ERROR` | 422  | Semantically invalid (e.g. stock below zero, invalid status transition) |
 | `INTERNAL_ERROR`      | 500  | Unexpected server failure                                               |
 | `SERVICE_UNAVAILABLE` | 503  | Database or dependency down                                             |
@@ -120,10 +123,12 @@ Legend: 🔓 public · Role: `any` / `admin` · Paginated unless marked "no pagi
 | Method  | Path                    | Role | Request body                            | Response                                    | Errors        |
 | ------- | ----------------------- | ---- | --------------------------------------- | ------------------------------------------- | ------------- |
 | POST 🔓 | `/auth/login`           | —    | `{ email, password }`                   | `{ user: User, accessToken, refreshToken }` | 400, 401      |
+| POST 🔓 | `/auth/register`        | —    | `{ name, email, password }`             | `{ user: User, accessToken, refreshToken }` (201); `user.role` is always `CUSTOMER` | 400, 409 |
 | POST 🔓 | `/auth/refresh`         | —    | `{ refreshToken }`                      | `{ accessToken, refreshToken }`             | 400, 401      |
 | POST    | `/auth/logout`          | any  | `{ refreshToken }`                      | `204` (empty)                               | 401           |
 | GET     | `/auth/me`              | any  | —                                       | `User` (no `passwordHash`)                  | 401           |
 | PATCH   | `/auth/me`              | any  | `{ name?, password?{ current, next } }` | `User`                                      | 400, 401, 422 |
+| DELETE  | `/auth/me`              | any  | —                                       | `204` (self-deactivation)                   | 401, 409      |
 | POST    | `/auth/change-password` | any  | `{ currentPassword, newPassword }`      | `204` (empty)                               | 400, 401, 422 |
 
 `User` shape: `{ id, name, email, avatarUrl, role, isActive, createdAt, updatedAt }` — `passwordHash` is **never** returned by any endpoint. `avatarUrl` is either `null` or a relative `/uploads/avatars/<uuid>.<jpg|png|webp>` path.
@@ -132,8 +137,9 @@ Legend: 🔓 public · Role: `any` / `admin` · Paginated unless marked "no pagi
 - `PATCH /auth/me` only accepts `name` and the nested `password: { current, next }` — `role`, `email` and `isActive` stay ADMIN-managed (`/users`), so sending them is 400.
 - Changing a password (either route) verifies `current`/`currentPassword` first: a mismatch is **422** (the request is authenticated, so this is not a 401). `next`/`newPassword` must be 8–72 bytes; it is bcrypt-hashed (rounds 10) and **every active refresh token of the user is revoked**, so other devices must log in again.
 - Password changes are audited as `user.password_changed` without any credential material (§3.11).
+- `DELETE /auth/me` soft-deactivates the current account and revokes every active refresh token. The last active ADMIN cannot self-deactivate: answers `409 CONFLICT` (`At least one active ADMIN must remain`).
 
-- Public self-registration (`POST /auth/register`) is intentionally not exposed; the system enforces a strict admin-managed user provisioning model via `POST /users` (ADMIN role only, contract §3.2).
+- Public self-registration (`POST /auth/register`) always creates a **CUSTOMER** account. It is the only role a public caller can obtain; privileged roles are provisioned by an ADMIN through `POST /users`.
 
 ### 3.2 Users
 
@@ -141,9 +147,9 @@ Legend: 🔓 public · Role: `any` / `admin` · Paginated unless marked "no pagi
 | ------ | ------------ | ----- | ------------------------------------------ | ---------------------------------- | ----------------------- |
 | GET    | `/users`     | admin | `?page&limit&search&role&sortBy&sortOrder` | paginated `User[]`                 | 401, 403                |
 | GET    | `/users/:id` | admin | —                                          | `User`                             | 401, 403, 404           |
-| POST   | `/users`     | admin | `{ name, email, password, role }`          | `User` (201)                       | 400, 401, 403, 409      |
+| POST   | `/users`     | admin | `{ name, email, password, role }` where `role` is `ADMIN`, `STAFF`, `SUPPORT` or `CUSTOMER` | `User` (201)                       | 400, 401, 403, 409      |
 | PATCH  | `/users/:id` | admin | `{ name?, email?, role?, isActive? }`      | `User`                             | 400, 403, 404, 409, 422 |
-| DELETE | `/users/:id` | admin | —                                          | `204` (soft delete, see decisions) | 401, 403, 404, 422      |
+| DELETE | `/users/:id` | admin | —                                          | `204` (soft delete, see decisions) | 401, 403, 404, 409, 422      |
 | POST   | `/users/me/avatar`   | any   | `multipart/form-data` with one binary field, `image` (JPEG, PNG or WebP, max 1 MB) | `User` (200) with the new `avatarUrl` | 400 (missing/unsupported image), 401, 413 (too large) |
 | DELETE | `/users/me/avatar`   | any   | —                                          | `204` (avatar cleared)             | 401                     |
 
@@ -153,7 +159,7 @@ Avatar endpoints always act on the **authenticated user** (the id comes from the
 - `DELETE /users/me/avatar` clears `avatarUrl` and deletes the local file. External `https://...` avatar URLs are never deleted from disk.
 - Uploads are **public** (no JWT required) and served outside the `/api/v1` prefix at `/uploads/avatars/<uuid>.<ext>`; the real type is detected from magic bytes, never from the client filename or MIME type.
 
-Error cases: `422` when deactivating the last active ADMIN, or self-deactivation `/self-role-change`.
+Errors: `400` for an invalid/unknown role, `409` when deactivating or demoting the last active ADMIN, `422` for self-deactivation / self-role-change. Changing a user's `role` revokes all of their active refresh tokens; deactivating an account revokes them too (as does a password change or self-deactivation).
 
 ### 3.3 Categories
 

@@ -1,8 +1,11 @@
 /**
  * Single source of truth for authorization (fail closed).
  *
- * `ADMIN` is a superset of `STAFF`; any role missing from `ROLE_PERMISSIONS`
- * (including an unexpected value from the database) receives no permissions.
+ * `ADMIN` is a superset of the other roles; `STAFF` is the operational subset;
+ * `SUPPORT` is read-only for products and categories; `CUSTOMER` has no
+ * permissions beyond the `@AnyAuthenticated()` own-account routes. Any role
+ * missing from `ROLE_PERMISSIONS` (including an unexpected value from the
+ * database) receives no permissions.
  */
 export const PERMISSIONS = [
   'products.read',
@@ -48,4 +51,6 @@ export const ROLE_PERMISSIONS: Readonly<
     'po.read',
     'po.receive',
   ],
+  SUPPORT: ['products.read', 'categories.read'],
+  CUSTOMER: [],
 };

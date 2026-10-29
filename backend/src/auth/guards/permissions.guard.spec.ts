@@ -169,6 +169,23 @@ describe('PermissionsGuard', () => {
     ).toThrow(ForbiddenException);
   });
 
+  it('maps CUSTOMER to no permissions and SUPPORT to read-only catalog access', () => {
+    expect(ROLE_PERMISSIONS['CUSTOMER']).toEqual([]);
+    expect(ROLE_PERMISSIONS['SUPPORT']).toEqual([
+      'products.read',
+      'categories.read',
+    ]);
+
+    expect(() =>
+      guard.canActivate(
+        contextFor(TestController.prototype.adminOnly, TestController, {
+          sub: 'customer-1',
+          role: 'CUSTOMER',
+        }),
+      ),
+    ).toThrow(ForbiddenException);
+  });
+
   it('lets method-level metadata override class-level metadata', () => {
     // STAFF lacks users.manage (class) but holds stock.read (method).
     expect(

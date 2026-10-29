@@ -12,6 +12,8 @@ import { PrismaClient } from '../src/generated/prisma/client.js';
  * Development-only credentials (change or remove for any shared environment):
  *   admin@example.com / Admin123! (ADMIN)
  *   staff@example.com / Staff123! (STAFF)
+ *   customer@example.com / Customer123! (CUSTOMER)
+ *   support@example.com / Support123! (SUPPORT)
  * Passwords are stored as bcrypt hashes, never plaintext.
  */
 
@@ -33,6 +35,8 @@ const SUPPLIER_GLOBAL_ID = '22222222-2222-4222-8222-222222222222';
 async function main(): Promise<void> {
   const adminPasswordHash = await bcrypt.hash('Admin123!', 10);
   const staffPasswordHash = await bcrypt.hash('Staff123!', 10);
+  const customerPasswordHash = await bcrypt.hash('Customer123!', 10);
+  const supportPasswordHash = await bcrypt.hash('Support123!', 10);
 
   const admin = await prisma.user.upsert({
     where: { email: 'admin@example.com' },
@@ -61,6 +65,36 @@ async function main(): Promise<void> {
       email: 'staff@example.com',
       passwordHash: staffPasswordHash,
       role: 'STAFF',
+    },
+  });
+
+  await prisma.user.upsert({
+    where: { email: 'customer@example.com' },
+    update: {
+      name: 'Customer User',
+      role: 'CUSTOMER',
+      passwordHash: customerPasswordHash,
+    },
+    create: {
+      name: 'Customer User',
+      email: 'customer@example.com',
+      passwordHash: customerPasswordHash,
+      role: 'CUSTOMER',
+    },
+  });
+
+  await prisma.user.upsert({
+    where: { email: 'support@example.com' },
+    update: {
+      name: 'Support User',
+      role: 'SUPPORT',
+      passwordHash: supportPasswordHash,
+    },
+    create: {
+      name: 'Support User',
+      email: 'support@example.com',
+      passwordHash: supportPasswordHash,
+      role: 'SUPPORT',
     },
   });
 
@@ -294,7 +328,7 @@ async function main(): Promise<void> {
   }
 
   console.log(
-    `Seed complete: 2 users, 4 categories, 2 suppliers, 6 products, 2 orders.`,
+    `Seed complete: 4 users, 4 categories, 2 suppliers, 6 products, 2 orders.`,
   );
 }
 
