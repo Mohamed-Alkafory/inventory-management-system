@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { Prisma } from '../generated/prisma/client.js';
 import { ContactStatus, UserRole } from '../generated/prisma/enums.js';
 import { AuditService } from '../audit/audit.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import { CreateContactMessageDto } from './dto/create-contact-message.dto.js';
 import { ListContactMessagesQueryDto } from './dto/list-contact-messages.query.dto.js';
 import { UpdateContactMessageDto } from './dto/update-contact-message.dto.js';
@@ -62,6 +63,7 @@ export class ContactService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   /**
@@ -74,13 +76,19 @@ export class ContactService {
       return { received: true };
     }
 
-    await this.prisma.contactMessage.create({
+    const message = await this.prisma.contactMessage.create({
       data: {
         name: dto.name,
         email: dto.email,
         subject: dto.subject,
         message: dto.message,
       },
+    });
+
+    // After the insert commits: best-effort, never fails the submission.
+    await this.notifications.notifyContactMessageReceived({
+      id: message.id,
+      subject: message.subject,
     });
 
     return { received: true };

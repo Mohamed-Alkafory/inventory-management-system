@@ -93,6 +93,8 @@ Stock/order/purchase-order flows call the notifications service **after their tr
 - **`entityType`/`entityId`** always point at the product/order/purchase-order so the frontend can deep-link.
 - Events wired today: `LOW_STOCK` (stock adjustments + order sales), `ORDER_CREATED`, `ORDER_CANCELLED`, and `PURCHASE_ORDER_RECEIVED` (issue #32).
 
+**Amended by AD-021:** recipients are no longer hard-coded to ADMIN. A target is now either a list of roles or one specific user id, and events additionally reach STAFF, SUPPORT and owning customers as listed there.
+
 ## AD-008 — Purchase-order permissions and the receive-only stock path (issue #32)
 
 **Status:** Accepted · **Date:** 2026-10-25
@@ -296,3 +298,18 @@ Support staff need to record context on an order and cancel an order on a custom
 - **PII minimization:** SUPPORT list rows omit `customerPhone`, the mirrored `recipientPhone` and `shippingAddress`; `shippingCity`, recipient name and order metadata stay available for triage. The detail view still returns the full order because support may need to resolve a delivery issue.
 - **Audit on detail views:** every SUPPORT or STAFF `GET /orders/:id` writes `order.viewed` with `entityType: order`, `entityId`, `userId` = viewer and `newValues: { viewerId, viewerRole }`. The entry contains no name, phone or address. List calls are not audited (they would create noise without adding PII access), and ADMIN detail views are not audited because ADMIN is trusted with the full dataset and already controls the audit log. Audit writes remain best-effort per AD-010.
 - **Explicit non-capabilities:** SUPPORT cannot adjust stock, read stock movements, see `costPrice`, create/manage users, read `/audit-logs`, dashboard or CSV reports, receive purchase orders, or confirm orders. No bulk personal-data export exists for SUPPORT; every report and export remains ADMIN-only (AD-012).
+
+## AD-021 — Customer order status and support contact notifications
+
+**Status:** Accepted — **Date:** 2026-10-30
+
+Customers need to know when their own order is confirmed or cancelled, and SUPPORT needs to know when a new contact message arrives. The database change is one additive hand-written migration (`20261030030000_add_notification_types`): `ALTER TYPE "NotificationType" ADD VALUE` for `ORDER_CONFIRMED` and `CONTACT_MESSAGE_RECEIVED`, positioned to match the Prisma schema. No table, column or existing row changes; existing ADMIN notifications keep their wording, type and timing.
+
+- **Generalized targets:** the notifications service accepts `{ roles: UserRole[] }` or `{ userId }` instead of the old hard-coded ADMIN role. It resolves the target with `User.isActive = true`, applies the same `NotificationPreference` opt-out and LOW_STOCK dedupe as before, and still writes one row per recipient via `createMany`. A role target can therefore fan out to more than one role (e.g. STAFF + ADMIN) without duplicating a user id.
+- **Order creation:** a staff-created order keeps the existing ADMIN-only `ORDER_CREATED` target. `POST /orders/mine` targets every active STAFF and ADMIN user; SUPPORT and other customers are never included.
+- **Order confirmation:** `PATCH /orders/:id/status` to `CONFIRMED` sends one `ORDER_CONFIRMED` to `Order.customerId` when it exists. Staff walk-in orders have no customer and notify nobody. There was no existing ADMIN confirmation alert to preserve.
+- **Order cancellation:** the existing ADMIN `ORDER_CANCELLED` alert is unchanged. All cancellation paths (`PATCH /orders/:id/status`, `POST /orders/mine/:id/cancel`, `POST /orders/:id/cancel`) additionally send one `ORDER_CANCELLED` to `Order.customerId` when it exists, regardless of who cancelled.
+- **Contact messages:** a real `POST /contact` insert (not a honeypot submission) sends `CONTACT_MESSAGE_RECEIVED` to every active SUPPORT user. ADMIN, STAFF and CUSTOMER do not receive the support-inbox alert.
+- **Customer-safe content:** customer-facing status notifications contain only the order number and the new status. They never include internal notes, other customers' data, staff names, product/stock details or totals. `entityType = "order"` and `entityId` point at the order; the customer UI links to the caller's own `/orders/mine/:id`, and ownership still scopes that route.
+- **Ownership and preferences:** all `/notifications` routes remain `@AnyAuthenticated()`, so CUSTOMER can use them, but the service always forces the caller's user id. A customer can never list, read or mark another customer's notification (missing and foreign ids both answer `404`). `GET/PUT /notifications/preferences` returns every enum value; types that do not apply to a role are inert and do not break the route.
+- **Best effort:** every new event goes through the same self-silencing fan-out as AD-007 and is called only after the main transaction commits, so a notification failure can never fail an order creation, confirmation, cancellation or contact submission.

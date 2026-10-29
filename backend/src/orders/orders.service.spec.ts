@@ -12,6 +12,7 @@ import {
   Prisma,
   OrderStatus,
   StockMovementType,
+  UserRole,
 } from '../generated/prisma/client.js';
 import { StockService } from '../stock/stock.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
@@ -23,6 +24,7 @@ const USER_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
 const PRODUCT_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const PRODUCT_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const ORDER_ID = '22222222-2222-4222-8222-222222222222';
+const CUSTOMER_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 
 const dto = (
   items: Array<{ productId: string; quantity: number }>,
@@ -52,6 +54,7 @@ describe('OrdersService', () => {
   const txOrderItemFindMany = vi.fn();
   const applyStockChange = vi.fn();
   const notifyOrderCreated = vi.fn();
+  const notifyOrderConfirmed = vi.fn();
   const notifyOrderCancelled = vi.fn();
   const notifyLowStockIfDepleted = vi.fn();
   const auditLog = vi.fn();
@@ -141,6 +144,7 @@ describe('OrdersService', () => {
     txOrderUpdateMany.mockReset().mockResolvedValue({ count: 1 });
     txOrderItemFindMany.mockReset().mockResolvedValue([]);
     notifyOrderCreated.mockReset().mockResolvedValue(undefined);
+    notifyOrderConfirmed.mockReset().mockResolvedValue(undefined);
     notifyOrderCancelled.mockReset().mockResolvedValue(undefined);
     notifyLowStockIfDepleted.mockReset().mockResolvedValue(undefined);
     auditLog.mockReset().mockResolvedValue(undefined);
@@ -173,6 +177,7 @@ describe('OrdersService', () => {
           provide: NotificationsService,
           useValue: {
             notifyOrderCreated,
+            notifyOrderConfirmed,
             notifyOrderCancelled,
             notifyLowStockIfDepleted,
           },
@@ -905,6 +910,7 @@ describe('OrdersService', () => {
       customerPhone: null,
       notes: null,
       totalAmount: new Prisma.Decimal('14.48'),
+      customerId: null,
       createdById: USER_ID,
       cancelledAt,
       createdAt: new Date('2026-10-23T12:00:00Z'),
@@ -1032,6 +1038,36 @@ describe('OrdersService', () => {
         id: ORDER_ID,
         orderNumber: 'ORD-0001',
         totalAmount: 14.48,
+      });
+    });
+
+    it('fires ORDER_CONFIRMED with the owning customer after a confirmation', async () => {
+      txOrderFindUnique
+        .mockReset()
+        .mockResolvedValueOnce({
+          id: ORDER_ID,
+          orderNumber: 'ORD-0001',
+          status: 'PENDING',
+          cancelledAt: null,
+        })
+        .mockResolvedValueOnce({
+          ...updatedOrderRow(OrderStatus.CONFIRMED, null),
+          customerId: CUSTOMER_ID,
+        });
+
+      await service.updateStatus(
+        ORDER_ID,
+        statusDto(OrderStatus.CONFIRMED),
+        USER_ID,
+        'ADMIN',
+      );
+
+      expect(notifyOrderCancelled).not.toHaveBeenCalled();
+      expect(notifyOrderConfirmed).toHaveBeenCalledTimes(1);
+      expect(notifyOrderConfirmed).toHaveBeenCalledWith({
+        id: ORDER_ID,
+        orderNumber: 'ORD-0001',
+        customerId: CUSTOMER_ID,
       });
     });
   });
@@ -1436,6 +1472,12 @@ describe('OrdersService', () => {
       );
       expect(res.status).toBe(OrderStatus.CANCELLED);
       expect(notifyOrderCancelled).toHaveBeenCalledTimes(1);
+      expect(notifyOrderCancelled).toHaveBeenCalledWith({
+        id: ORDER_ID,
+        orderNumber: 'ORD-0001',
+        totalAmount: 14.48,
+        customerId: 'aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa',
+      });
     });
 
     it.each([OrderStatus.CONFIRMED, OrderStatus.CANCELLED])(
@@ -1643,6 +1685,19 @@ describe('OrdersService', () => {
       expect(result).not.toHaveProperty('stockMovements');
     });
 
+    it('createMine alerts STAFF and ADMIN (never SUPPORT or customers)', async () => {
+      await service.createMine(ownDto(), CUSTOMER_A, 'CUSTOMER');
+
+      expect(notifyOrderCreated).toHaveBeenCalledWith(
+        {
+          id: ORDER_ID,
+          orderNumber: 'ORD-0001',
+          totalAmount: 3.98,
+        },
+        { roles: [UserRole.STAFF, UserRole.ADMIN] },
+      );
+    });
+
     it('createMine reuses the ONE Serializable transaction and SALE stock write', async () => {
       await service.createMine(ownDto(), CUSTOMER_A, 'CUSTOMER');
 
@@ -1803,6 +1858,12 @@ describe('OrdersService', () => {
       expect(res.cancelledAt).toEqual(updatedAt);
       expect(Object.keys(res).sort()).toEqual(CUSTOMER_KEYS);
       expect(notifyOrderCancelled).toHaveBeenCalledTimes(1);
+      expect(notifyOrderCancelled).toHaveBeenCalledWith({
+        id: ORDER_ID,
+        orderNumber: 'ORD-0001',
+        totalAmount: 3.98,
+        customerId: CUSTOMER_A,
+      });
     });
 
     it('cancelMine answers 409 on a double cancel and never restores stock twice', async () => {

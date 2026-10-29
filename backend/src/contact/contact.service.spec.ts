@@ -3,6 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 
 import { PrismaService } from '../prisma/prisma.service.js';
 import { AuditService } from '../audit/audit.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import { ContactStatus } from '../generated/prisma/enums.js';
 import { ContactService } from './contact.service.js';
 import { type ListContactMessagesQueryDto } from './dto/list-contact-messages.query.dto.js';
@@ -48,6 +49,7 @@ describe('ContactService', () => {
   const contactMessageUpdate = vi.fn();
   const userFindFirst = vi.fn();
   const auditLog = vi.fn();
+  const notifyContactMessageReceived = vi.fn();
 
   const tx = {
     contactMessage: {
@@ -78,6 +80,7 @@ describe('ContactService', () => {
       );
     userFindFirst.mockReset().mockResolvedValue({ id: SUPPORT_ID });
     auditLog.mockReset().mockResolvedValue(undefined);
+    notifyContactMessageReceived.mockReset().mockResolvedValue(undefined);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -95,6 +98,10 @@ describe('ContactService', () => {
           },
         },
         { provide: AuditService, useValue: { log: auditLog } },
+        {
+          provide: NotificationsService,
+          useValue: { notifyContactMessageReceived },
+        },
       ],
     }).compile();
 
@@ -113,6 +120,10 @@ describe('ContactService', () => {
           subject: 'Help',
           message: 'Please help me',
         },
+      });
+      expect(notifyContactMessageReceived).toHaveBeenCalledWith({
+        id: MESSAGE_ID,
+        subject: 'Help',
       });
     });
 

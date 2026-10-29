@@ -9,7 +9,11 @@ import { PrismaService } from '../src/prisma/prisma.service.js';
 import { PrismaExceptionFilter } from '../src/common/prisma-exception.filter.js';
 import { AllExceptionsFilter } from '../src/common/all-exceptions.filter.js';
 import { resetDb, disconnectDb } from './db-utils.js';
-import { ContactStatus, UserRole } from '../src/generated/prisma/client.js';
+import {
+  ContactStatus,
+  NotificationType,
+  UserRole,
+} from '../src/generated/prisma/client.js';
 
 /**
  * Contact inbox scenarios against the real test database: public submission
@@ -156,6 +160,17 @@ describe('Contact messages (e2e)', () => {
         status: ContactStatus.NEW,
         assignedToId: null,
         internalNote: null,
+      });
+
+      // Only active SUPPORT receives the new-message alert.
+      const notifications = await prisma.notification.findMany({
+        where: { type: NotificationType.CONTACT_MESSAGE_RECEIVED },
+      });
+      expect(notifications).toHaveLength(1);
+      expect(notifications[0]).toMatchObject({
+        userId: supportId,
+        entityType: 'contact_message',
+        entityId: saved?.id,
       });
     });
 
