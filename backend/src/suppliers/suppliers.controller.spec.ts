@@ -19,8 +19,8 @@ import {
 import { CreateSupplierDto } from './dto/create-supplier.dto.js';
 import { ListSuppliersQueryDto } from './dto/list-suppliers.query.dto.js';
 import { UpdateSupplierDto } from './dto/update-supplier.dto.js';
-import { RolesGuard } from '../auth/guards/roles.guard.js';
-import { ROLES_KEY } from '../auth/decorators/roles.decorator.js';
+import { PermissionsGuard } from '../auth/guards/permissions.guard.js';
+import { PERMISSIONS_KEY } from '../auth/decorators/require-permission.decorator.js';
 
 const STAFF_USER = { sub: 'staff-id', role: 'STAFF' } as const;
 const ADMIN_USER = { sub: 'admin-id', role: 'ADMIN' } as const;
@@ -181,20 +181,30 @@ describe('SuppliersController', () => {
     );
   });
 
-  it('requires ADMIN on POST, PATCH and DELETE (and allows any role on GET)', () => {
-    const rolesFor = (handler: (...args: never[]) => unknown) =>
-      reflector.get<string[]>(ROLES_KEY, handler) ?? [];
+  it('requires suppliers.write on POST, PATCH and DELETE (suppliers.read on GET)', () => {
+    const permissionsFor = (handler: (...args: never[]) => unknown) =>
+      reflector.get<string[]>(PERMISSIONS_KEY, handler) ?? [];
 
-    expect(rolesFor(SuppliersController.prototype.create)).toEqual(['ADMIN']);
-    expect(rolesFor(SuppliersController.prototype.update)).toEqual(['ADMIN']);
-    expect(rolesFor(SuppliersController.prototype.remove)).toEqual(['ADMIN']);
-    expect(rolesFor(SuppliersController.prototype.findAll)).toEqual([]);
-    expect(rolesFor(SuppliersController.prototype.findOne)).toEqual([]);
+    expect(permissionsFor(SuppliersController.prototype.create)).toEqual([
+      'suppliers.write',
+    ]);
+    expect(permissionsFor(SuppliersController.prototype.update)).toEqual([
+      'suppliers.write',
+    ]);
+    expect(permissionsFor(SuppliersController.prototype.remove)).toEqual([
+      'suppliers.write',
+    ]);
+    expect(permissionsFor(SuppliersController.prototype.findAll)).toEqual([
+      'suppliers.read',
+    ]);
+    expect(permissionsFor(SuppliersController.prototype.findOne)).toEqual([
+      'suppliers.read',
+    ]);
   });
 
   describe('authorization — STAFF can read but cannot write', () => {
-    // The global RolesGuard from app.module.ts runs against the real handlers.
-    let guard: RolesGuard;
+    // The global PermissionsGuard from app.module.ts runs against the real handlers.
+    let guard: PermissionsGuard;
     const contextFor = (
       handler: (...args: never[]) => unknown,
     ): ExecutionContext =>
@@ -206,9 +216,9 @@ describe('SuppliersController', () => {
 
     beforeEach(async () => {
       const module: TestingModule = await Test.createTestingModule({
-        providers: [RolesGuard, Reflector],
+        providers: [PermissionsGuard, Reflector],
       }).compile();
-      guard = module.get<RolesGuard>(RolesGuard);
+      guard = module.get<PermissionsGuard>(PermissionsGuard);
     });
 
     it('allows STAFF reads', () => {

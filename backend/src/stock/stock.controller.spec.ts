@@ -19,7 +19,7 @@ import {
 import { CreateAdjustmentDto } from './dto/create-adjustment.dto.js';
 import { ListMovementsQueryDto } from './dto/list-movements.query.dto.js';
 import { StockMovementType } from '../generated/prisma/enums.js';
-import { ROLES_KEY } from '../auth/decorators/roles.decorator.js';
+import { PERMISSIONS_KEY } from '../auth/decorators/require-permission.decorator.js';
 
 const ADMIN = { sub: 'admin-id', role: 'ADMIN' } as const;
 const STAFF = { sub: 'staff-id', role: 'STAFF' } as const;
@@ -141,14 +141,22 @@ describe('StockController / ProductMovementsController', () => {
     expect(findForProduct).toHaveBeenCalledWith(PRODUCT_ID, query);
   });
 
-  it('requires no @Roles anywhere in the stock module (STAFF may adjust)', () => {
-    const rolesFor = (handler: (...args: never[]) => unknown) =>
-      reflector.get<string[]>(ROLES_KEY, handler) ?? [];
+  it('requires stock.read for reads and stock.adjust for adjustments', () => {
+    const permissionsFor = (handler: (...args: never[]) => unknown) =>
+      reflector.get<string[]>(PERMISSIONS_KEY, handler) ?? [];
 
-    expect(rolesFor(StockController.prototype.findAll)).toEqual([]);
-    expect(rolesFor(StockController.prototype.adjust)).toEqual([]);
-    expect(rolesFor(StockController.prototype.lowStock)).toEqual([]);
-    expect(rolesFor(ProductMovementsController.prototype.findAll)).toEqual([]);
+    expect(permissionsFor(StockController.prototype.findAll)).toEqual([
+      'stock.read',
+    ]);
+    expect(permissionsFor(StockController.prototype.lowStock)).toEqual([
+      'stock.read',
+    ]);
+    expect(permissionsFor(StockController.prototype.adjust)).toEqual([
+      'stock.adjust',
+    ]);
+    expect(
+      permissionsFor(ProductMovementsController.prototype.findAll),
+    ).toEqual(['stock.read']);
   });
 
   it('uses the documented status codes', () => {

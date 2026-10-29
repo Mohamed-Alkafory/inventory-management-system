@@ -13,7 +13,7 @@ import { OrdersController } from './orders.controller.js';
 import { OrdersService } from './orders.service.js';
 import { CreateOrderDto } from './dto/create-order.dto.js';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto.js';
-import { ROLES_KEY } from '../auth/decorators/roles.decorator.js';
+import { PERMISSIONS_KEY } from '../auth/decorators/require-permission.decorator.js';
 
 const PRODUCT_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const PRODUCT_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
@@ -108,11 +108,12 @@ describe('OrdersController', () => {
     expect(create).toHaveBeenCalledWith(dto, 'staff-id', 'STAFF');
   });
 
-  it('uses the documented metadata — any role, POST default 201', () => {
+  it('uses the documented metadata — orders.create, POST default 201', () => {
     const handler = OrdersController.prototype.create;
 
-    expect(reflector.get<string[]>(ROLES_KEY, handler) ?? []).toEqual([]);
-    expect(reflector.get<string[]>(ROLES_KEY, handler)).toBeUndefined();
+    expect(reflector.get<string[]>(PERMISSIONS_KEY, handler)).toEqual([
+      'orders.create',
+    ]);
 
     // POST endpoints get 201 from NestJS defaults; no __httpCode__ is set.
     expect(Reflect.getMetadata('__httpCode__', handler)).toBeUndefined();
@@ -172,10 +173,12 @@ describe('OrdersController', () => {
       );
     });
 
-    it('uses the documented metadata — any role, PATCH default 200', () => {
+    it('uses the documented metadata — orders.update_status, PATCH default 200', () => {
       const handler = OrdersController.prototype.updateStatus;
 
-      expect(reflector.get<string[]>(ROLES_KEY, handler) ?? []).toEqual([]);
+      expect(reflector.get<string[]>(PERMISSIONS_KEY, handler)).toEqual([
+        'orders.update_status',
+      ]);
       expect(
         Reflect.getMetadata('__httpCode__', handler) ?? HttpStatus.OK,
       ).toBe(HttpStatus.OK);
@@ -415,9 +418,11 @@ describe('OrdersController', () => {
       expect(res.meta.total).toBe(1);
     });
 
-    it('has no role guard (any authenticated user can list)', () => {
+    it('requires orders.read_all to list', () => {
       const handler = OrdersController.prototype.findAll;
-      expect(reflector.get<string[]>(ROLES_KEY, handler)).toBeUndefined();
+      expect(reflector.get<string[]>(PERMISSIONS_KEY, handler)).toEqual([
+        'orders.read_all',
+      ]);
     });
   });
 
@@ -429,9 +434,11 @@ describe('OrdersController', () => {
       expect(res.createdBy.email).toBe('admin@example.com');
     });
 
-    it('has no role guard (any authenticated user can view)', () => {
+    it('requires orders.read_all to view details', () => {
       const handler = OrdersController.prototype.findOne;
-      expect(reflector.get<string[]>(ROLES_KEY, handler)).toBeUndefined();
+      expect(reflector.get<string[]>(PERMISSIONS_KEY, handler)).toEqual([
+        'orders.read_all',
+      ]);
     });
   });
 
@@ -443,9 +450,11 @@ describe('OrdersController', () => {
       expect(res).toBe(sampleCreated);
     });
 
-    it('has no role guard (any authenticated user can update metadata while PENDING)', () => {
+    it('requires orders.update to edit metadata while PENDING', () => {
       const handler = OrdersController.prototype.update;
-      expect(reflector.get<string[]>(ROLES_KEY, handler)).toBeUndefined();
+      expect(reflector.get<string[]>(PERMISSIONS_KEY, handler)).toEqual([
+        'orders.update',
+      ]);
     });
   });
 });

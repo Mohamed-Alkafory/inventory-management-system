@@ -27,7 +27,7 @@ import { UpdatePurchaseOrderStatusDto } from './dto/update-status.dto.js';
 import { ReceivePurchaseOrderDto } from './dto/receive-purchase-order.dto.js';
 import { ListPurchaseOrdersQueryDto } from './dto/list-purchase-orders.query.dto.js';
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
-import { Roles } from '../auth/decorators/roles.decorator.js';
+import { RequirePermission } from '../auth/decorators/require-permission.decorator.js';
 
 /** JWT claim of the signed-in user (resolved by the global JwtAuthGuard). */
 interface AuthenticatedUser {
@@ -46,6 +46,7 @@ export class PurchaseOrdersController {
    * and `supplierId` filters.
    */
   @Get()
+  @RequirePermission('po.read')
   @ApiOperation({
     summary: 'List purchase orders (STAFF and ADMIN)',
     description:
@@ -71,6 +72,7 @@ export class PurchaseOrdersController {
 
   /** GET /purchase-orders/:id — any authenticated role, detail + items. */
   @Get(':id')
+  @RequirePermission('po.read')
   @ApiOperation({
     summary: 'Get one purchase order with its items and supplier',
   })
@@ -103,7 +105,7 @@ export class PurchaseOrdersController {
    * transaction. No stock changes until receiving.
    */
   @Post()
-  @Roles('ADMIN')
+  @RequirePermission('po.create')
   @ApiOperation({
     summary: 'Create a purchase order (ADMIN)',
     description:
@@ -151,7 +153,7 @@ export class PurchaseOrdersController {
    * rejected transition (including touching terminal states) is 409.
    */
   @Patch(':id/status')
-  @Roles('ADMIN')
+  @RequirePermission('po.update_status')
   @ApiOperation({
     summary: 'Change purchase order status (ADMIN)',
     description:
@@ -197,6 +199,7 @@ export class PurchaseOrdersController {
    * transaction; a failure leaves no partial data.
    */
   @Post(':id/receive')
+  @RequirePermission('po.receive')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Receive purchase order lines into stock (STAFF and ADMIN)',

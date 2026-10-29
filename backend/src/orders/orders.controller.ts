@@ -28,6 +28,7 @@ import { UpdateOrderDto } from './dto/update-order.dto.js';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto.js';
 import { ListOrdersQueryDto } from './dto/list-orders.query.dto.js';
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
+import { RequirePermission } from '../auth/decorators/require-permission.decorator.js';
 
 /** JWT role claim resolved from the database by the global JwtAuthGuard. */
 interface AuthenticatedUser {
@@ -48,6 +49,7 @@ export class OrdersController {
    * rolls the whole order back. `createdById` comes from the token.
    */
   @Post()
+  @RequirePermission('orders.create')
   @ApiOperation({
     summary: 'Create an order (STAFF and ADMIN)',
     description:
@@ -93,6 +95,7 @@ export class OrdersController {
    * cancelling twice can never restore stock twice.
    */
   @Patch(':id/status')
+  @RequirePermission('orders.update_status')
   @ApiOperation({
     summary: 'Change order status (STAFF and ADMIN)',
     description:
@@ -131,6 +134,7 @@ export class OrdersController {
    * GET /orders — list orders with pagination and filters (contract §3.7).
    */
   @Get()
+  @RequirePermission('orders.read_all')
   @ApiOperation({
     summary: 'List orders (STAFF and ADMIN)',
     description:
@@ -157,6 +161,7 @@ export class OrdersController {
    * GET /orders/:id — order details with items snapshots, createdBy, and stock movements.
    */
   @Get(':id')
+  @RequirePermission('orders.read_all')
   @ApiOperation({
     summary: 'Get order by id (STAFF and ADMIN)',
     description:
@@ -188,6 +193,7 @@ export class OrdersController {
    * PATCH /orders/:id — edit order metadata while in PENDING status (contract §3.7).
    */
   @Patch(':id')
+  @RequirePermission('orders.update')
   @ApiOperation({
     summary: 'Update order metadata (STAFF and ADMIN)',
     description:

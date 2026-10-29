@@ -7,7 +7,7 @@ import type { SignOptions } from 'jsonwebtoken';
 const JWT_ACCESS_TTL = '15m';
 
 import { JwtAuthGuard } from './guards/jwt-auth.guard.js';
-import { RolesGuard } from './guards/roles.guard.js';
+import { PermissionsGuard } from './guards/permissions.guard.js';
 
 import { AuthController } from './auth.controller.js';
 import { AuthService } from './auth.service.js';
@@ -33,7 +33,7 @@ import { AuditModule } from '../audit/audit.module.js';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtAuthGuard, RolesGuard],
-  exports: [JwtAuthGuard, RolesGuard, JwtModule],
+  providers: [AuthService, JwtAuthGuard, PermissionsGuard],
+  exports: [JwtAuthGuard, PermissionsGuard, JwtModule],
 })
 export class AuthModule {}

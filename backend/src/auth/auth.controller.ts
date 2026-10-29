@@ -17,7 +17,8 @@ import { UpdateProfileDto } from './dto/update-profile.dto.js';
 import { ChangePasswordDto } from './dto/change-password.dto.js';
 
 import { CurrentUser } from './decorators/current-user.decorator.js';
-import { Roles } from './decorators/roles.decorator.js';
+import { AnyAuthenticated } from './decorators/any-authenticated.decorator.js';
+import { RequirePermission } from './decorators/require-permission.decorator.js';
 import { Public } from './decorators/public.decorator.js';
 
 /** JWT payload resolved by the global `JwtAuthGuard`. */
@@ -32,6 +33,7 @@ export class AuthController {
 
   /** Authenticated: the full public profile of the current user (#54). */
   @Get('me')
+  @AnyAuthenticated()
   getMe(@CurrentUser() user: AuthenticatedUser): Promise<AuthUserResponse> {
     return this.authService.me(user.sub);
   }
@@ -41,6 +43,7 @@ export class AuthController {
    * `email` and `isActive` are not editable here (ADMIN manages them).
    */
   @Patch('me')
+  @AnyAuthenticated()
   updateMe(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: UpdateProfileDto,
@@ -53,6 +56,7 @@ export class AuthController {
    * All active refresh tokens are revoked; answers 204.
    */
   @Post('change-password')
+  @AnyAuthenticated()
   @HttpCode(HttpStatus.NO_CONTENT)
   changePassword(
     @CurrentUser() user: AuthenticatedUser,
@@ -67,13 +71,14 @@ export class AuthController {
    * Reactivation stays ADMIN-only.
    */
   @Delete('me')
+  @AnyAuthenticated()
   @HttpCode(HttpStatus.NO_CONTENT)
   deactivateMe(@CurrentUser() user: AuthenticatedUser): Promise<void> {
     return this.authService.deactivate(user.sub);
   }
 
   @Get('admin-only')
-  @Roles('ADMIN')
+  @RequirePermission('auth.admin_only')
   adminOnly() {
     return { message: 'Welcome, Admin!' };
   }
@@ -102,6 +107,7 @@ export class AuthController {
   }
 
   @Post('logout')
+  @AnyAuthenticated()
   @HttpCode(HttpStatus.NO_CONTENT)
   logout(@Body() refreshTokenDto: RefreshTokenDto): Promise<void> {
     return this.authService.logout(refreshTokenDto);

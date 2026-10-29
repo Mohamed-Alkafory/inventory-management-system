@@ -45,6 +45,7 @@
 - `ADMIN` and `STAFF` (Prisma `UserRole`).
 - `ADMIN` includes everything `STAFF` can do.
 - "Role required" column below: `any` = any authenticated user; `admin` = ADMIN only.
+- Authorization is **deny-by-default**: each handler must declare `@Public()`, `@AnyAuthenticated()`, or `@RequirePermission(...)`. A handler with none of these answers `403` with the standard `FORBIDDEN` envelope (`{ statusCode: 403, message: "Insufficient permissions", error: "FORBIDDEN", path, timestamp }`), even for an authenticated ADMIN. The full permission map lives in `docs/decisions.md` (AD-015).
 
 ### Pagination
 

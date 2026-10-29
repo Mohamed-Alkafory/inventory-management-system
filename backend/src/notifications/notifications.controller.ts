@@ -25,6 +25,7 @@ import {
 import { ListNotificationsQueryDto } from './dto/list-notifications.query.dto.js';
 import { UpdatePreferencesDto } from './dto/update-preferences.dto.js';
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
+import { AnyAuthenticated } from '../auth/decorators/any-authenticated.decorator.js';
 
 /** JWT claim of the signed-in user — notifications are strictly personal. */
 interface AuthenticatedUser {
@@ -34,6 +35,7 @@ interface AuthenticatedUser {
 
 @ApiTags('notifications')
 @ApiBearerAuth()
+@AnyAuthenticated()
 @Controller('notifications')
 export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}

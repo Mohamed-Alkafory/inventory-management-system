@@ -7,7 +7,7 @@ import { DashboardService } from './dashboard.service.js';
 import { DateRangeQueryDto } from './dto/date-range.query.dto.js';
 import { TopProductsQueryDto } from './dto/top-products.query.dto.js';
 import { PaginationQueryDto } from '../common/dto/pagination.query.dto.js';
-import { ROLES_KEY } from '../auth/decorators/roles.decorator.js';
+import { PERMISSIONS_KEY } from '../auth/decorators/require-permission.decorator.js';
 
 const ADMIN = {
   sub: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
@@ -78,12 +78,12 @@ describe('DashboardController', () => {
     expect(lowStock).toHaveBeenCalledWith(query, 'ADMIN');
   });
 
-  it('is ADMIN-only on every dashboard route (#33 decision)', () => {
+  it('is ADMIN-only via dashboard.read on every dashboard route', () => {
     // The guard uses getAllAndOverride(handler, class): the class carries
-    // the ADMIN requirement and no handler overrides it.
-    expect(reflector.get<string[]>(ROLES_KEY, DashboardController)).toEqual([
-      'ADMIN',
-    ]);
+    // the permission requirement and no handler overrides it.
+    expect(
+      reflector.get<string[]>(PERMISSIONS_KEY, DashboardController),
+    ).toEqual(['dashboard.read']);
 
     const handlers = [
       DashboardController.prototype.summary,
@@ -94,7 +94,7 @@ describe('DashboardController', () => {
     ];
 
     for (const handler of handlers) {
-      expect(reflector.get<string[]>(ROLES_KEY, handler)).toBeUndefined();
+      expect(reflector.get<string[]>(PERMISSIONS_KEY, handler)).toBeUndefined();
     }
   });
 

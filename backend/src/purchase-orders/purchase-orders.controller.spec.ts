@@ -8,7 +8,7 @@ import { CreatePurchaseOrderDto } from './dto/create-purchase-order.dto.js';
 import { ReceivePurchaseOrderDto } from './dto/receive-purchase-order.dto.js';
 import { ListPurchaseOrdersQueryDto } from './dto/list-purchase-orders.query.dto.js';
 import { UpdatePurchaseOrderStatusDto } from './dto/update-status.dto.js';
-import { ROLES_KEY } from '../auth/decorators/roles.decorator.js';
+import { PERMISSIONS_KEY } from '../auth/decorators/require-permission.decorator.js';
 
 const PO_ID = '22222222-2222-4222-8222-222222222222';
 const PRODUCT_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -109,23 +109,26 @@ describe('PurchaseOrdersController', () => {
     expect(receive).toHaveBeenCalledWith(PO_ID, dto, STAFF.sub, STAFF.role);
   });
 
-  it('guards only creation and manual status changes with ADMIN', () => {
-    const adminOnly = [
-      PurchaseOrdersController.prototype.create,
-      PurchaseOrdersController.prototype.updateStatus,
-    ];
-    for (const handler of adminOnly) {
-      expect(reflector.get<string[]>(ROLES_KEY, handler)).toEqual(['ADMIN']);
-    }
+  it('guards creation and status changes with po.* permissions, reads and receive with their own', () => {
+    const permissionsFor = (handler: (...args: never[]) => unknown) =>
+      reflector.get<string[]>(PERMISSIONS_KEY, handler);
 
-    const anyRole = [
-      PurchaseOrdersController.prototype.findAll,
-      PurchaseOrdersController.prototype.findOne,
-      PurchaseOrdersController.prototype.receive,
-    ];
-    for (const handler of anyRole) {
-      expect(reflector.get<string[]>(ROLES_KEY, handler)).toBeUndefined();
-    }
+    expect(
+      permissionsFor(PurchaseOrdersController.prototype.create),
+    ).toEqual(['po.create']);
+    expect(
+      permissionsFor(PurchaseOrdersController.prototype.updateStatus),
+    ).toEqual(['po.update_status']);
+
+    expect(
+      permissionsFor(PurchaseOrdersController.prototype.findAll),
+    ).toEqual(['po.read']);
+    expect(
+      permissionsFor(PurchaseOrdersController.prototype.findOne),
+    ).toEqual(['po.read']);
+    expect(
+      permissionsFor(PurchaseOrdersController.prototype.receive),
+    ).toEqual(['po.receive']);
   });
 
   describe('input validation (400)', () => {

@@ -106,7 +106,7 @@ Stock/order/purchase-order flows call the notifications service **after their tr
 
 **Status:** Accepted · **Date:** 2026-10-25
 
-All `/dashboard/*` routes are **ADMIN-only** (`@Roles('ADMIN')`). The payloads expose revenue and cost-basis stock value, which AD-004 keeps off STAFF screens; a separate STAFF view is deliberately not provided in v1.
+All `/dashboard/*` routes are **ADMIN-only** (`@RequirePermission('dashboard.read')`; originally `@Roles('ADMIN')`, superseded by AD-015). The payloads expose revenue and cost-basis stock value, which AD-004 keeps off STAFF screens; a separate STAFF view is deliberately not provided in v1.
 
 - **Stock value basis:** `SUM(quantity * costPrice)` over **active** products, with a NULL `costPrice` counting as 0. The price-based alternative (`quantity * price`) would overstate inventory worth; cost matches what the shop actually invested. The docs and Swagger say so explicitly.
 - **Counts** (`totalProducts`, `totalStockUnits`, `lowStockCount`, `outOfStockCount`) cover active products only.
@@ -173,3 +173,40 @@ Authenticated users can upload/replace their own avatar through `POST /users/me/
 - **Storage:** files are stored by the shared `ImageStorageService` under `UPLOADS_DIR/avatars/` (`UPLOADS_DIR` defaults to `./uploads`) with generated UUID names. `User.avatarUrl` stores only the relative public path or `null`. The same service handles product images, so storage can move to an external object store before deployment without changing either feature.
 - **Public access:** avatars are served statically at `/uploads` (outside `/api/v1`) without a JWT, because an `<img>` tag cannot send an `Authorization` header. The files are intentionally public; only the upload/delete operations are authenticated.
 - **Consistency:** replacement deletes the previous local file after the DB update, and a failed DB update removes the newly written file. External avatar URLs are never deleted from disk. The audit vocabulary gains `user.avatar_updated` and `user.avatar_deleted` (no file contents).
+
+## AD-015 — Authorization is deny-by-default with a permission map
+
+**Status:** Accepted — **Date:** 2026-10-29
+
+`RolesGuard` is replaced by a global `PermissionsGuard` in the same position (`ThrottlerGuard` → `JwtAuthGuard` → `PermissionsGuard`). Every route must declare exactly one access mode: `@Public()`, `@AnyAuthenticated()`, or `@RequirePermission(...)`. A handler with no access metadata is rejected with `403 FORBIDDEN` in the standard error shape, so a forgotten decorator can no longer leave an endpoint open to every logged-in user.
+
+- **Source of truth:** `backend/src/auth/permissions.ts` defines `Permission` and `ROLE_PERMISSIONS`. `ADMIN` holds every permission; `STAFF` holds the operational subset below. Any role missing from the map (including an unexpected database value) holds no permissions.
+- **Evaluation:** the role comes from the database user loaded by `JwtAuthGuard`, never from the token claim. `@RequirePermission` requires **all** listed permissions. Method metadata overrides class metadata via `getAllAndOverride`.
+- **Own-account routes** are `@AnyAuthenticated()`: `GET/PATCH/DELETE /auth/me`, `POST /auth/change-password`, `POST /auth/logout`, `POST/DELETE /users/me/avatar`, and all `/notifications` routes (ownership is enforced in the service).
+- **Public routes:** `POST /auth/login`, `POST /auth/register`, `POST /auth/refresh`, `GET /health`.
+
+| Permission | ADMIN | STAFF | Routes |
+| --- | --- | --- | --- |
+| `products.read` | yes | yes | `GET /products`, `GET /products/:id` |
+| `products.write` | yes | no | `POST/PATCH/DELETE /products`, `POST/DELETE /products/:id/image` |
+| `categories.read` | yes | yes | `GET /categories`, `GET /categories/:id` |
+| `categories.write` | yes | no | `POST/PATCH/DELETE /categories` |
+| `suppliers.read` | yes | yes | `GET /suppliers`, `GET /suppliers/:id` |
+| `suppliers.write` | yes | no | `POST/PATCH/DELETE /suppliers` |
+| `orders.create` | yes | yes | `POST /orders` |
+| `orders.read_all` | yes | yes | `GET /orders`, `GET /orders/:id` |
+| `orders.update` | yes | yes | `PATCH /orders/:id` |
+| `orders.update_status` | yes | yes | `PATCH /orders/:id/status` |
+| `stock.read` | yes | yes | `GET /stock/movements`, `GET /stock/low-stock`, `GET /products/:id/movements` |
+| `stock.adjust` | yes | yes | `POST /stock/adjustments` |
+| `po.read` | yes | yes | `GET /purchase-orders`, `GET /purchase-orders/:id` |
+| `po.create` | yes | no | `POST /purchase-orders` |
+| `po.update_status` | yes | no | `PATCH /purchase-orders/:id/status` |
+| `po.receive` | yes | yes | `POST /purchase-orders/:id/receive` |
+| `users.manage` | yes | no | `GET/POST /users`, `GET/PATCH/DELETE /users/:id` |
+| `dashboard.read` | yes | no | all `/dashboard/*` |
+| `reports.read` | yes | no | all `/reports/*` |
+| `audit.read` | yes | no | `GET /audit-logs` |
+| `auth.admin_only` | yes | no | `GET /auth/admin-only` |
+
+This preserves the existing role split (AD-006, AD-008, AD-009) while making the 403 boundary explicit and testable. `costPrice` remains ADMIN-only in product responses (AD-004) independently of `products.read`.

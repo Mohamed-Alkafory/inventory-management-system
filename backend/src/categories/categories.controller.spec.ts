@@ -20,8 +20,8 @@ import {
 import { CreateCategoryDto } from './dto/create-category.dto.js';
 import { ListCategoriesQueryDto } from './dto/list-categories.query.dto.js';
 import { UpdateCategoryDto } from './dto/update-category.dto.js';
-import { RolesGuard } from '../auth/guards/roles.guard.js';
-import { ROLES_KEY } from '../auth/decorators/roles.decorator.js';
+import { PermissionsGuard } from '../auth/guards/permissions.guard.js';
+import { PERMISSIONS_KEY } from '../auth/decorators/require-permission.decorator.js';
 
 const STAFF_USER = { sub: 'staff-id', role: 'STAFF' } as const;
 const ADMIN_USER = { sub: 'admin-id', role: 'ADMIN' } as const;
@@ -197,20 +197,30 @@ describe('CategoriesController', () => {
     await expect(remove(CATEGORY_ID)).rejects.toBeInstanceOf(ConflictException);
   });
 
-  it('requires ADMIN on POST, PATCH and DELETE (and allows any role on GET)', () => {
-    const rolesFor = (handler: (...args: never[]) => unknown) =>
-      reflector.get<string[]>(ROLES_KEY, handler) ?? [];
+  it('requires categories.write on POST, PATCH and DELETE (categories.read on GET)', () => {
+    const permissionsFor = (handler: (...args: never[]) => unknown) =>
+      reflector.get<string[]>(PERMISSIONS_KEY, handler) ?? [];
 
-    expect(rolesFor(CategoriesController.prototype.create)).toEqual(['ADMIN']);
-    expect(rolesFor(CategoriesController.prototype.update)).toEqual(['ADMIN']);
-    expect(rolesFor(CategoriesController.prototype.remove)).toEqual(['ADMIN']);
-    expect(rolesFor(CategoriesController.prototype.findAll)).toEqual([]);
-    expect(rolesFor(CategoriesController.prototype.findOne)).toEqual([]);
+    expect(permissionsFor(CategoriesController.prototype.create)).toEqual([
+      'categories.write',
+    ]);
+    expect(permissionsFor(CategoriesController.prototype.update)).toEqual([
+      'categories.write',
+    ]);
+    expect(permissionsFor(CategoriesController.prototype.remove)).toEqual([
+      'categories.write',
+    ]);
+    expect(permissionsFor(CategoriesController.prototype.findAll)).toEqual([
+      'categories.read',
+    ]);
+    expect(permissionsFor(CategoriesController.prototype.findOne)).toEqual([
+      'categories.read',
+    ]);
   });
 
   describe('authorization — STAFF can read but cannot write', () => {
-    // The global RolesGuard from app.module.ts runs against the real handlers.
-    let guard: RolesGuard;
+    // The global PermissionsGuard from app.module.ts runs against the real handlers.
+    let guard: PermissionsGuard;
     const contextFor = (
       handler: (...args: never[]) => unknown,
     ): ExecutionContext =>
@@ -222,9 +232,9 @@ describe('CategoriesController', () => {
 
     beforeEach(async () => {
       const module: TestingModule = await Test.createTestingModule({
-        providers: [RolesGuard, Reflector],
+        providers: [PermissionsGuard, Reflector],
       }).compile();
-      guard = module.get<RolesGuard>(RolesGuard);
+      guard = module.get<PermissionsGuard>(PermissionsGuard);
     });
 
     it('allows STAFF reads', () => {

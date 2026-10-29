@@ -10,7 +10,8 @@ import { NotificationsController } from './notifications.controller.js';
 import { NotificationsService } from './notifications.service.js';
 import { ListNotificationsQueryDto } from './dto/list-notifications.query.dto.js';
 import { UpdatePreferencesDto } from './dto/update-preferences.dto.js';
-import { ROLES_KEY } from '../auth/decorators/roles.decorator.js';
+import { PERMISSIONS_KEY } from '../auth/decorators/require-permission.decorator.js';
+import { ANY_AUTHENTICATED_KEY } from '../auth/decorators/any-authenticated.decorator.js';
 import { NotificationType } from '../generated/prisma/enums.js';
 
 const USER = {
@@ -151,7 +152,11 @@ describe('NotificationsController', () => {
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
-  it('keeps every endpoint open to all roles (ownership is the boundary)', () => {
+  it('keeps every endpoint open to any authenticated user (ownership is the boundary)', () => {
+    expect(
+      reflector.get<boolean>(ANY_AUTHENTICATED_KEY, NotificationsController),
+    ).toBe(true);
+
     const handlers = [
       NotificationsController.prototype.findAll,
       NotificationsController.prototype.unreadCount,
@@ -162,8 +167,10 @@ describe('NotificationsController', () => {
     ];
 
     for (const handler of handlers) {
-      expect(reflector.get<string[]>(ROLES_KEY, handler) ?? []).toEqual([]);
-      expect(reflector.get<string[]>(ROLES_KEY, handler)).toBeUndefined();
+      expect(
+        reflector.get<boolean>(ANY_AUTHENTICATED_KEY, handler),
+      ).toBeUndefined();
+      expect(reflector.get<string[]>(PERMISSIONS_KEY, handler)).toBeUndefined();
       // All routes are GET/PATCH/PUT — NestJS defaults to 200 (no __httpCode__).
       expect(Reflect.getMetadata('__httpCode__', handler)).toBeUndefined();
     }

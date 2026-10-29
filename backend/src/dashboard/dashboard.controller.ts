@@ -17,7 +17,7 @@ import { DateRangeQueryDto } from './dto/date-range.query.dto.js';
 import { TopProductsQueryDto } from './dto/top-products.query.dto.js';
 import { PaginationQueryDto } from '../common/dto/pagination.query.dto.js';
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
-import { Roles } from '../auth/decorators/roles.decorator.js';
+import { RequirePermission } from '../auth/decorators/require-permission.decorator.js';
 import { type ProductListResponse } from '../products/products.service.js';
 
 /** JWT role claim resolved by the global JwtAuthGuard. */
@@ -34,7 +34,7 @@ interface AuthenticatedUser {
  */
 @ApiTags('dashboard')
 @ApiBearerAuth()
-@Roles('ADMIN')
+@RequirePermission('dashboard.read')
 @Controller('dashboard')
 export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}
