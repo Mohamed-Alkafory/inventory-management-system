@@ -15,6 +15,10 @@ export type AuthApi = {
   me(): Promise<User>;
   /** Updates the signed-in user's name and/or password; resolves with the fresh user. */
   updateProfile(payload: UpdateProfilePayload): Promise<User>;
+  /** Uploads the signed-in user's avatar; resolves with the updated user. */
+  uploadAvatar(file: File): Promise<User>;
+  /** Removes the signed-in user's avatar (204). */
+  removeAvatar(): Promise<void>;
   /** Deactivates the signed-in account. The local session is cleared by the caller. */
   deleteAccount(): Promise<void>;
   logout(): Promise<void>;
@@ -44,6 +48,20 @@ const realAuthApi: AuthApi = {
   async updateProfile(payload) {
     const { data } = await http.patch(AUTH_ENDPOINTS.updateMe, payload);
     return toUser(data);
+  },
+
+  async uploadAvatar(file) {
+    const form = new FormData();
+    form.append("image", file);
+    // The axios instance drops its JSON Content-Type for FormData so the
+    // browser sets multipart/form-data with the boundary.
+    const { data } = await http.post(AUTH_ENDPOINTS.avatar, form);
+    return toUser(data);
+  },
+
+  async removeAvatar() {
+    // The backend answers 204 No Content.
+    await http.delete(AUTH_ENDPOINTS.avatar);
   },
 
   async deleteAccount() {

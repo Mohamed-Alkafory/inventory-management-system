@@ -34,6 +34,7 @@ function read(): StoredSession | null {
         email: u.email,
         name: typeof u.name === "string" ? u.name : u.email,
         role: toRole(u.role),
+        ...(typeof u.avatarUrl === "string" || u.avatarUrl === null ? { avatarUrl: u.avatarUrl } : {}),
         ...(typeof u.createdAt === "string" ? { createdAt: u.createdAt } : {}),
       },
     };

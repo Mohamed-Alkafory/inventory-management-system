@@ -85,6 +85,22 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
     return fresh;
   }, []);
 
+  /** POST /users/me/avatar — the response is the updated current user. */
+  const uploadAvatar = useCallback(async (file: File) => {
+    const fresh = await authApi.uploadAvatar(file);
+    tokenStorage.setUser(fresh);
+    setUser(fresh);
+    return fresh;
+  }, []);
+
+  /** DELETE /users/me/avatar — 204, so clear the avatar locally. */
+  const removeAvatar = useCallback(async () => {
+    await authApi.removeAvatar();
+    const stored = tokenStorage.getSession()?.user;
+    if (stored) tokenStorage.setUser({ ...stored, avatarUrl: null });
+    setUser((prev) => (prev ? { ...prev, avatarUrl: null } : prev));
+  }, []);
+
   /** DELETE /auth/me — deactivates the account, then signs out locally. */
   const deleteAccount = useCallback(async () => {
     try {
@@ -116,11 +132,13 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
       register,
       loginWithGoogle,
       updateProfile,
+      uploadAvatar,
+      removeAvatar,
       deleteAccount,
       logout,
       hasRole: (...roles: Role[]) => (user ? roles.includes(user.role) : false),
     }),
-    [user, login, register, loginWithGoogle, updateProfile, deleteAccount, logout],
+    [user, login, register, loginWithGoogle, updateProfile, uploadAvatar, removeAvatar, deleteAccount, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -11,24 +11,20 @@ import {
   Trash2,
   UserRound,
   ReceiptText,
+  Upload,
 } from "lucide-react";
 import { Badge, Button, Card, ConfirmDialog, IconBadge, StatusBadge, useToast } from "../../components/ui";
+import UserAvatar from "../../components/user/UserAvatar";
 import { useAuth } from "../../context/auth/useAuth";
 import { useOrders } from "../../features/orders/hooks";
 import { formatDate, formatMoney, formatNumber, orderPath } from "../../features/orders/format";
 import type { OrderListParams } from "../../features/orders/types";
+import ImageUploadField from "../../features/products/ImageUploadField";
+import { AVATAR_RULES } from "../../features/users/avatar";
 import EditProfileDialog from "./EditProfileDialog";
 
 /** Shared row dimensions for the order-history list. */
 const RECENT_ORDERS_PAGE_SIZE = 5;
-
-const initials = (name: string) =>
-  name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join("");
 
 const joined = (iso?: string) => {
   if (!iso) return null;
@@ -80,7 +76,7 @@ function DetailTile({
  *   Delete       → DELETE /auth/me (self-deactivation endpoint)
  */
 export default function Profile() {
-  const { user, logout, deleteAccount, hasRole } = useAuth();
+  const { user, logout, deleteAccount, hasRole, uploadAvatar, removeAvatar } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
   const isAdmin = hasRole("ADMIN");
@@ -88,6 +84,10 @@ export default function Profile() {
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarRemoveOpen, setAvatarRemoveOpen] = useState(false);
+  const [avatarRemoving, setAvatarRemoving] = useState(false);
 
   // Stable param object — the query key embeds it.
   const orderParams = useMemo<OrderListParams>(
@@ -114,6 +114,44 @@ export default function Profile() {
     navigate("/", { replace: true });
   };
 
+  const handleAvatarUpload = async () => {
+    if (!avatarFile) return;
+    setAvatarUploading(true);
+    try {
+      await uploadAvatar(avatarFile);
+      setAvatarFile(null);
+      toast.success("Avatar updated", "Your new profile photo is now live.");
+    } catch (err) {
+      toast.error("Couldn't upload the avatar", err instanceof Error ? err.message : undefined);
+    } finally {
+      setAvatarUploading(false);
+    }
+  };
+
+  const handleAvatarRemove = async () => {
+    setAvatarRemoving(true);
+    try {
+      await removeAvatar();
+      setAvatarFile(null);
+      setAvatarRemoveOpen(false);
+      toast.success("Avatar removed", "Your initials will be shown instead.");
+    } catch (err) {
+      setAvatarRemoveOpen(false);
+      toast.error("Couldn't remove the avatar", err instanceof Error ? err.message : undefined);
+    } finally {
+      setAvatarRemoving(false);
+    }
+  };
+
+  /** A picked file is dropped locally; the saved avatar asks for confirmation. */
+  const handleAvatarFieldRemove = () => {
+    if (avatarFile) {
+      setAvatarFile(null);
+      return;
+    }
+    if (user?.avatarUrl) setAvatarRemoveOpen(true);
+  };
+
   if (!user) return null;
 
   const since = joined(user.createdAt);
@@ -126,12 +164,12 @@ export default function Profile() {
           {/* Hero band — name over the brand gradient, avatar overlapping. */}
           <div className="relative bg-gradient-to-r from-primary-600 via-primary-500 to-primary-400 px-6 pb-16 pt-10 sm:px-10">
             <h1 className="text-2xl font-extrabold text-white sm:text-3xl">{user.name}</h1>
-            <span
-              aria-hidden="true"
-              className="absolute -bottom-12 left-6 flex size-24 items-center justify-center rounded-full bg-surface text-3xl font-extrabold text-primary-600 shadow-lg ring-4 ring-primary-100/70 sm:left-10"
-            >
-              {initials(user.name)}
-            </span>
+            <UserAvatar
+              name={user.name}
+              src={user.avatarUrl}
+              size="xl"
+              className="absolute -bottom-12 left-6 bg-surface shadow-lg ring-4 ring-primary-100/70 sm:left-10"
+            />
           </div>
 
           <div className="px-6 pb-8 sm:px-10">
@@ -141,6 +179,48 @@ export default function Profile() {
               <Badge tone="primary" dot className="mt-2 uppercase tracking-widest">
                 {user.role}
               </Badge>
+            </div>
+
+            <h2 className="mt-9 text-lg font-bold">Profile photo</h2>
+            <div className="mt-1.5 h-px bg-line" />
+
+            <div className="mt-5 space-y-3">
+              <ImageUploadField
+                currentUrl={user.avatarUrl}
+                file={avatarFile}
+                onFileSelect={setAvatarFile}
+                onRemove={handleAvatarFieldRemove}
+                disabled={avatarUploading || avatarRemoving}
+                loading={avatarUploading}
+                rules={AVATAR_RULES}
+                label="Avatar"
+                hint="JPEG, PNG or WebP — up to 1 MB."
+                previewAlt="Avatar preview"
+                previewClassName="size-24 rounded-full"
+                helperText={null}
+                chooseLabel="Choose avatar"
+                changeLabel="Change avatar"
+                removeLabel="Remove avatar"
+                loadingLabel="Uploading…"
+              />
+              {avatarFile && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    leftIcon={<Upload className="size-4" aria-hidden="true" />}
+                    loading={avatarUploading}
+                    onClick={() => void handleAvatarUpload()}
+                  >
+                    Upload avatar
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    disabled={avatarUploading}
+                    onClick={() => setAvatarFile(null)}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              )}
             </div>
 
             <h2 className="mt-9 text-lg font-bold">Account details</h2>
@@ -239,6 +319,16 @@ export default function Profile() {
       </div>
 
       <EditProfileDialog open={editOpen} onClose={() => setEditOpen(false)} />
+
+      <ConfirmDialog
+        open={avatarRemoveOpen}
+        title="Remove profile photo?"
+        description="Your initials will be shown instead until you upload a new photo."
+        confirmLabel="Remove"
+        loading={avatarRemoving}
+        onConfirm={() => void handleAvatarRemove()}
+        onCancel={() => setAvatarRemoveOpen(false)}
+      />
 
       <ConfirmDialog
         open={deleteOpen}

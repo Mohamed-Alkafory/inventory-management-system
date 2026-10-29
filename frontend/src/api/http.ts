@@ -30,6 +30,12 @@ type RetriableConfig = InternalAxiosRequestConfig & { _retried?: boolean };
 
 /* ---------- Request: attach the access token ---------- */
 http.interceptors.request.use((config) => {
+  // FormData must be sent as multipart/form-data so the browser can add the
+  // boundary itself — the instance-wide JSON default would break the upload.
+  if (typeof FormData !== "undefined" && config.data instanceof FormData) {
+    config.headers.delete("Content-Type");
+  }
+
   const token = tokenStorage.getAccessToken();
   if (token && !config.headers.has("Authorization")) {
     config.headers.set("Authorization", `Bearer ${token}`);

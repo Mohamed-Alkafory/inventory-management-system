@@ -3,6 +3,7 @@ import { NavLink, Outlet } from "react-router-dom";
 import { Boxes, ClipboardList, FolderTree, LayoutDashboard, Menu, Package, ScrollText, Truck, Users as UsersIcon, X } from "lucide-react";
 import { useAuth } from "../../context/auth/useAuth";
 import { cn } from "../../lib/cn";
+import UserAvatar from "../../components/user/UserAvatar";
 
 const NAV = [
   { to: "/admin", label: "Dashboard", icon: LayoutDashboard, end: true },
@@ -51,9 +52,14 @@ export default function AdminLayout() {
           <p className="px-3 pb-3 text-xs font-semibold uppercase tracking-wide text-muted">Admin panel</p>
           {links}
           <div className="mt-6 rounded-control border border-line bg-surface-alt px-3 py-3 text-xs text-muted">
-            Signed in as
-            <p className="mt-0.5 truncate text-sm font-semibold text-ink">{user?.name}</p>
-            <p className="truncate">{user?.email}</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wide">Signed in as</p>
+            <div className="mt-2 flex items-center gap-2.5">
+              <UserAvatar name={user?.name} src={user?.avatarUrl} size="md" />
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-ink">{user?.name}</p>
+                <p className="truncate">{user?.email}</p>
+              </div>
+            </div>
           </div>
         </div>
       </aside>

@@ -14,6 +14,7 @@ export function normalizeUser(raw: unknown): AdminUser {
     email: str(r.email),
     role: role === "ADMIN" ? "ADMIN" : "STAFF",
     isActive: typeof r.isActive === "boolean" ? r.isActive : true,
+    avatarUrl: typeof r.avatarUrl === "string" && r.avatarUrl.length > 0 ? r.avatarUrl : null,
     createdAt: str(r.createdAt),
   };
 }

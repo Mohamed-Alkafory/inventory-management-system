@@ -33,11 +33,24 @@ function saveExtra(accounts: MockAccount[]) {
 }
 
 const allAccounts = () => [...MOCK_ACCOUNTS, ...loadExtra()];
-const strip = (a: MockAccount): User => ({ id: a.id, name: a.name, email: a.email, role: a.role });
+const strip = (a: MockAccount): User => ({
+  id: a.id,
+  name: a.name,
+  email: a.email,
+  role: a.role,
+  avatarUrl: a.avatarUrl ?? null,
+});
 const sessionFor = (a: MockAccount): AuthSession => ({
   user: strip(a),
   tokens: { accessToken: `mock-access.${a.id}`, refreshToken: `mock-refresh.${a.id}` },
 });
+
+/** Registered accounts survive a reload; the built-in demos reset. */
+function persistAccount(account: MockAccount) {
+  if (!MOCK_ACCOUNTS.some((a) => a.id === account.id)) {
+    saveExtra(loadExtra().map((a) => (a.id === account.id ? account : a)));
+  }
+}
 
 function createAccount(name: string, email: string, password: string): MockAccount {
   const account: MockAccount = { id: `u-${Date.now()}`, name, email, password, role: "STAFF" };
@@ -94,13 +107,31 @@ export const mockAuthApi: AuthApi = {
       account.password = payload.password.next;
     }
 
-    // Persist name/password changes for registered accounts (built-in demo
-    // accounts are reset on reload anyway).
-    if (!MOCK_ACCOUNTS.some((a) => a.id === account.id)) {
-      saveExtra(loadExtra().map((a) => (a.id === account.id ? account : a)));
-    }
+    persistAccount(account);
 
     return strip(account);
+  },
+
+  async uploadAvatar(file) {
+    await delay(600);
+    const id = tokenStorage.getAccessToken()?.split(".")[1];
+    const account = allAccounts().find((a) => a.id === id);
+    if (!account) throw new ApiError("Session expired.", { status: 401 });
+
+    account.avatarUrl =
+      typeof URL.createObjectURL === "function" ? URL.createObjectURL(file) : `mock-avatar.${file.name}`;
+    persistAccount(account);
+    return strip(account);
+  },
+
+  async removeAvatar() {
+    await delay(400);
+    const id = tokenStorage.getAccessToken()?.split(".")[1];
+    const account = allAccounts().find((a) => a.id === id);
+    if (!account) throw new ApiError("Session expired.", { status: 401 });
+
+    account.avatarUrl = null;
+    persistAccount(account);
   },
 
   async deleteAccount() {
