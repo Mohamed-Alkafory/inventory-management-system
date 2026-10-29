@@ -169,12 +169,25 @@ describe('PermissionsGuard', () => {
     ).toThrow(ForbiddenException);
   });
 
-  it('maps CUSTOMER to no permissions and SUPPORT to read-only catalog access', () => {
-    expect(ROLE_PERMISSIONS['CUSTOMER']).toEqual([]);
+  it('maps CUSTOMER to own-order access and SUPPORT to read-only catalog/order access', () => {
+    expect(ROLE_PERMISSIONS['CUSTOMER']).toEqual([
+      'orders.create_own',
+      'orders.read_own',
+      'orders.cancel_own',
+    ]);
     expect(ROLE_PERMISSIONS['SUPPORT']).toEqual([
       'products.read',
       'categories.read',
+      'orders.read_all',
     ]);
+
+    // SUPPORT may read every order but can never confirm/cancel one.
+    expect(ROLE_PERMISSIONS['SUPPORT']).not.toContain('orders.update_status');
+    expect(ROLE_PERMISSIONS['SUPPORT']).not.toContain('orders.create');
+    // STAFF keeps the till permissions and gets no customer-owned routes.
+    expect(ROLE_PERMISSIONS['STAFF']).not.toContain('orders.create_own');
+    expect(ROLE_PERMISSIONS['STAFF']).not.toContain('orders.read_own');
+    expect(ROLE_PERMISSIONS['STAFF']).not.toContain('orders.cancel_own');
 
     expect(() =>
       guard.canActivate(

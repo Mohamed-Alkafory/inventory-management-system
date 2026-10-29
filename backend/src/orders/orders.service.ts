@@ -8,7 +8,10 @@ import {
 
 import { PrismaService } from '../prisma/prisma.service.js';
 import { Prisma, OrderStatus } from '../generated/prisma/client.js';
-import { StockMovementType } from '../generated/prisma/enums.js';
+import {
+  PaymentMethod,
+  StockMovementType,
+} from '../generated/prisma/enums.js';
 import {
   StockService,
   type AdjustedStockResponse,
@@ -16,9 +19,11 @@ import {
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { CreateOrderDto } from './dto/create-order.dto.js';
+import { CreateOwnOrderDto } from './dto/create-own-order.dto.js';
 import { UpdateOrderDto } from './dto/update-order.dto.js';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto.js';
 import { ListOrdersQueryDto } from './dto/list-orders.query.dto.js';
+import { ListOwnOrdersQueryDto } from './dto/list-own-orders.query.dto.js';
 
 /**
  * Contract §3.7 `Order` scalar shape. `totalAmount` is Decimal(12,2) in the
@@ -32,6 +37,12 @@ export interface OrderResponse {
   customerPhone: string | null;
   notes: string | null;
   totalAmount: number;
+  customerId: string | null;
+  recipientName: string | null;
+  recipientPhone: string | null;
+  shippingAddress: string | null;
+  shippingCity: string | null;
+  paymentMethod: PaymentMethod;
   createdById: string;
   cancelledAt: Date | null;
   createdAt: Date;
@@ -74,6 +85,43 @@ export interface OrderListResponse {
   meta: { page: number; limit: number; total: number; totalPages: number };
 }
 
+/**
+ * Customer-facing item snapshot. Deliberately omits ids and product
+ * references so an owner can never learn internal order/product metadata.
+ */
+export interface CustomerOrderItemResponse {
+  productName: string;
+  sku: string;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
+}
+
+/**
+ * Customer-facing order shape. Only the documented fields are exposed —
+ * never `createdBy`, stock movements, audit data or internal ids beyond the
+ * order itself.
+ */
+export interface CustomerOrderResponse {
+  id: string;
+  orderNumber: string;
+  status: OrderStatus;
+  totalAmount: number;
+  items: CustomerOrderItemResponse[];
+  recipientName: string | null;
+  recipientPhone: string | null;
+  shippingAddress: string | null;
+  shippingCity: string | null;
+  paymentMethod: PaymentMethod;
+  createdAt: Date;
+  cancelledAt: Date | null;
+}
+
+export interface CustomerOrderListResponse {
+  data: CustomerOrderResponse[];
+  meta: { page: number; limit: number; total: number; totalPages: number };
+}
+
 const ORDER_SELECT = {
   id: true,
   orderNumber: true,
@@ -82,6 +130,12 @@ const ORDER_SELECT = {
   customerPhone: true,
   notes: true,
   totalAmount: true,
+  customerId: true,
+  recipientName: true,
+  recipientPhone: true,
+  shippingAddress: true,
+  shippingCity: true,
+  paymentMethod: true,
   createdById: true,
   cancelledAt: true,
   createdAt: true,
@@ -98,6 +152,29 @@ const ORDER_ITEM_SELECT = {
   unitPrice: true,
   lineTotal: true,
 } satisfies Prisma.OrderItemSelect;
+
+const CUSTOMER_ORDER_ITEM_SELECT = {
+  productName: true,
+  sku: true,
+  quantity: true,
+  unitPrice: true,
+  lineTotal: true,
+} satisfies Prisma.OrderItemSelect;
+
+const CUSTOMER_ORDER_SELECT = {
+  id: true,
+  orderNumber: true,
+  status: true,
+  totalAmount: true,
+  recipientName: true,
+  recipientPhone: true,
+  shippingAddress: true,
+  shippingCity: true,
+  paymentMethod: true,
+  createdAt: true,
+  cancelledAt: true,
+  orderItems: { select: CUSTOMER_ORDER_ITEM_SELECT },
+} satisfies Prisma.OrderSelect;
 
 /**
  * Issue #29 transition rules. A cancelled order is terminal; going back to
@@ -120,6 +197,25 @@ interface ProductFacts {
   isActive: boolean;
 }
 
+/**
+ * Normalized input of the shared creation pipeline. Only `POST /orders/mine`
+ * supplies `customerId` and the shipping fields; the staff path leaves them
+ * undefined so Prisma skips the columns.
+ */
+interface CreateOrderRecordInput {
+  items: Array<{ productId: string; quantity: number }>;
+  customerName?: string;
+  customerPhone?: string;
+  notes?: string;
+  createdById: string;
+  role: string;
+  customerId?: string;
+  recipientName?: string;
+  recipientPhone?: string;
+  shippingAddress?: string;
+  shippingCity?: string;
+}
+
 @Injectable()
 export class OrdersService {
   constructor(
@@ -130,7 +226,7 @@ export class OrdersService {
   ) {}
 
   /**
-   * Create an order with its items and deduct stock — all in ONE
+   * Create a staff order with its items and deduct stock — all in ONE
    * Serializable transaction (issue #28):
    *
    * 1. every line validated (amount ≥ 1, unique products, real + active);
@@ -140,16 +236,69 @@ export class OrdersService {
    * 4. `Product.quantity` deducted and `SALE` movements stamped with the
    *    new order id through the shared stock logic (409 below zero);
    * 5. any failure throws inside the transaction — nothing partial remains.
+   *
+   * The staff endpoint keeps its existing contract: no customer id and no
+   * shipping fields are stamped here.
    */
   async create(
     dto: CreateOrderDto,
     userId: string,
     role: string,
   ): Promise<CreatedOrderResponse> {
+    return this.createOrderRecord({
+      items: dto.items,
+      customerName: dto.customerName,
+      customerPhone: dto.customerPhone,
+      notes: dto.notes,
+      createdById: userId,
+      role,
+    });
+  }
+
+  /**
+   * `POST /orders/mine` — a CUSTOMER places an order for themselves. The
+   * shared creation transaction is reused; ownership (`customerId`) and
+   * `createdById` come from the token, and the recipient details are copied
+   * into `customerName`/`customerPhone` so staff views keep working.
+   */
+  async createMine(
+    dto: CreateOwnOrderDto,
+    userId: string,
+    role: string,
+  ): Promise<CustomerOrderResponse> {
+    const result = await this.createOrderRecord({
+      items: dto.items,
+      customerName: dto.recipientName,
+      customerPhone: dto.recipientPhone,
+      notes: dto.notes,
+      createdById: userId,
+      role,
+      customerId: userId,
+      recipientName: dto.recipientName,
+      recipientPhone: dto.recipientPhone,
+      shippingAddress: dto.shippingAddress,
+      shippingCity: dto.shippingCity,
+    });
+
+    return serializeCustomerOrder({
+      ...result,
+      orderItems: result.items,
+    });
+  }
+
+  /**
+   * Shared creation pipeline for both the staff and customer endpoints.
+   * Exactly one Serializable transaction covers order + item snapshots +
+   * stock writes + audit, and the best-effort notifications fire only after
+   * the commit.
+   */
+  private async createOrderRecord(
+    input: CreateOrderRecordInput,
+  ): Promise<CreatedOrderResponse> {
     // DTO validation covers field shapes; cross-line duplication is a
     // service-level 400 before any transaction opens. The
     // @@unique([orderId, productId]) index remains the DB backstop.
-    const ids = dto.items.map((item) => item.productId);
+    const ids = input.items.map((item) => item.productId);
     if (new Set(ids).size !== ids.length) {
       throw new BadRequestException('Duplicate productId in items');
     }
@@ -160,7 +309,7 @@ export class OrdersService {
 
     const result = await this.withWriteRetry(() =>
       this.prisma.$transaction(
-        (tx) => this.createOrder(tx, dto, ids, userId, role, soldProducts),
+        (tx) => this.createOrder(tx, input, ids, soldProducts),
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       ),
     );
@@ -180,10 +329,8 @@ export class OrdersService {
 
   private async createOrder(
     tx: Prisma.TransactionClient,
-    dto: CreateOrderDto,
+    input: CreateOrderRecordInput,
     ids: string[],
-    userId: string,
-    role: string,
     soldProducts: AdjustedStockResponse[],
   ): Promise<CreatedOrderResponse> {
     // Snapshot source + existence/active validation (404/422) in one read.
@@ -193,7 +340,7 @@ export class OrdersService {
     })) as ProductFacts[];
     const byId = new Map<string, ProductFacts>(rows.map((r) => [r.id, r]));
 
-    for (const item of dto.items) {
+    for (const item of input.items) {
       const product = byId.get(item.productId);
       if (!product) {
         throw new NotFoundException(`Product ${item.productId} not found`);
@@ -212,7 +359,7 @@ export class OrdersService {
     const orderNumber = `ORD-${String(count + 1).padStart(4, '0')}`;
 
     let total = new Prisma.Decimal(0);
-    const lines = dto.items.map((item) => {
+    const lines = input.items.map((item) => {
       const unit = new Prisma.Decimal(byId.get(item.productId)!.price);
       const line = unit.mul(item.quantity);
       total = total.add(line);
@@ -223,11 +370,26 @@ export class OrdersService {
       data: {
         orderNumber,
         status: OrderStatus.PENDING,
-        customerName: dto.customerName,
-        customerPhone: dto.customerPhone,
-        notes: dto.notes,
+        customerName: input.customerName,
+        customerPhone: input.customerPhone,
+        notes: input.notes,
         totalAmount: total,
-        createdById: userId,
+        createdById: input.createdById,
+        ...(input.customerId !== undefined
+          ? { customerId: input.customerId }
+          : {}),
+        ...(input.recipientName !== undefined
+          ? { recipientName: input.recipientName }
+          : {}),
+        ...(input.recipientPhone !== undefined
+          ? { recipientPhone: input.recipientPhone }
+          : {}),
+        ...(input.shippingAddress !== undefined
+          ? { shippingAddress: input.shippingAddress }
+          : {}),
+        ...(input.shippingCity !== undefined
+          ? { shippingCity: input.shippingCity }
+          : {}),
       },
       select: ORDER_SELECT,
     });
@@ -260,8 +422,8 @@ export class OrdersService {
         -item.quantity,
         StockMovementType.SALE,
         null,
-        userId,
-        role,
+        input.createdById,
+        input.role,
         { orderId: order.id },
       );
       soldProducts.push(change);
@@ -270,7 +432,7 @@ export class OrdersService {
     // Issue #34: one entry per created order, committed with the order.
     await this.audit.log(
       {
-        userId,
+        userId: input.createdById,
         action: 'order.created',
         entityType: 'order',
         entityId: order.id,
@@ -278,8 +440,14 @@ export class OrdersService {
           orderNumber: order.orderNumber,
           status: order.status,
           totalAmount: total,
+          customerId: order.customerId,
           customerName: order.customerName,
           customerPhone: order.customerPhone,
+          recipientName: order.recipientName,
+          recipientPhone: order.recipientPhone,
+          shippingAddress: order.shippingAddress,
+          shippingCity: order.shippingCity,
+          paymentMethod: order.paymentMethod,
           notes: order.notes,
           items,
         },
@@ -326,20 +494,79 @@ export class OrdersService {
     return result;
   }
 
+  /**
+   * `POST /orders/mine/:id/cancel` — a CUSTOMER cancels one of their own
+   * PENDING orders. Reuses the exact staff cancellation transaction with an
+   * ownership scope: an unknown id and another customer's order both answer
+   * 404 (never 403), and the status-conditional write keeps a double cancel
+   * a 409 that never restores stock twice.
+   */
+  async cancelMine(
+    id: string,
+    userId: string,
+    role: string,
+  ): Promise<CustomerOrderResponse> {
+    const result = await this.withWriteRetry(() =>
+      this.prisma.$transaction(
+        (tx) =>
+          this.updateOrderStatus(
+            tx,
+            id,
+            { newStatus: OrderStatus.CANCELLED },
+            userId,
+            role,
+            { customerId: userId },
+          ),
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      ),
+    );
+
+    await this.notifications.notifyOrderCancelled({
+      id: result.id,
+      orderNumber: result.orderNumber,
+      totalAmount: result.totalAmount,
+    });
+
+    return serializeCustomerOrder({
+      ...result,
+      orderItems: result.items,
+    });
+  }
+
   private async updateOrderStatus(
     tx: Prisma.TransactionClient,
     id: string,
     dto: UpdateOrderStatusDto,
     userId: string,
     role: string,
+    scope?: { customerId: string },
   ): Promise<CreatedOrderResponse> {
-    const order = await tx.order.findUnique({
-      where: { id },
-      select: { id: true, orderNumber: true, status: true, cancelledAt: true },
-    });
+    const select = {
+      id: true,
+      orderNumber: true,
+      status: true,
+      cancelledAt: true,
+    } as const;
+
+    // Owner-scoped reads use findFirst so "not found" and "not yours" are
+    // indistinguishable to the caller (both 404).
+    const order = scope
+      ? await tx.order.findFirst({
+          where: { id, customerId: scope.customerId },
+          select,
+        })
+      : await tx.order.findUnique({ where: { id }, select });
 
     if (!order) {
       throw new NotFoundException(`Order ${id} not found`);
+    }
+
+    // Customers may only cancel PENDING orders. STAFF/ADMIN keep the wider
+    // CONFIRMED → CANCELLED transition from issue #29.
+    if (scope && order.status !== OrderStatus.PENDING) {
+      throw new ConflictException(
+        `Order ${order.orderNumber} can only be cancelled while PENDING`,
+      );
     }
 
     if (!STATUS_TRANSITIONS[order.status].includes(dto.newStatus)) {
@@ -349,9 +576,14 @@ export class OrdersService {
     }
 
     // Backstop against races the isolation level may let through: the write
-    // is still conditioned on the status we validated a moment ago.
+    // is still conditioned on the status we validated a moment ago (and on
+    // ownership for customer cancels).
     const { count } = await tx.order.updateMany({
-      where: { id, status: order.status },
+      where: {
+        id,
+        status: order.status,
+        ...(scope ? { customerId: scope.customerId } : {}),
+      },
       data:
         dto.newStatus === OrderStatus.CANCELLED
           ? { status: dto.newStatus, cancelledAt: new Date() }
@@ -480,6 +712,59 @@ export class OrdersService {
       data: orders.map(serializeOrder),
       meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };
+  }
+
+  /**
+   * `GET /orders/mine` — the authenticated customer's own orders, newest
+   * first, with an optional status filter. Ownership is forced server-side.
+   */
+  async findMine(
+    query: ListOwnOrdersQueryDto,
+    customerId: string,
+  ): Promise<CustomerOrderListResponse> {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+
+    const where: Prisma.OrderWhereInput = {
+      customerId,
+      ...(query.status ? { status: query.status } : {}),
+    };
+
+    const [total, orders] = await Promise.all([
+      this.prisma.order.count({ where }),
+      this.prisma.order.findMany({
+        where,
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+        select: CUSTOMER_ORDER_SELECT,
+      }),
+    ]);
+
+    return {
+      data: orders.map(serializeCustomerOrder),
+      meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    };
+  }
+
+  /**
+   * `GET /orders/mine/:id` — one own order. A missing order and another
+   * customer's order both answer 404 so ownership cannot be probed.
+   */
+  async findMineOne(
+    id: string,
+    customerId: string,
+  ): Promise<CustomerOrderResponse> {
+    const order = await this.prisma.order.findFirst({
+      where: { id, customerId },
+      select: CUSTOMER_ORDER_SELECT,
+    });
+
+    if (!order) {
+      throw new NotFoundException(`Order ${id} not found`);
+    }
+
+    return serializeCustomerOrder(order);
   }
 
   /**
@@ -620,5 +905,54 @@ function serializeItem(
     ...item,
     unitPrice: Number(item.unitPrice),
     lineTotal: Number(item.lineTotal),
+  };
+}
+
+/** Row shape accepted by the customer serializer (Prisma or already mapped). */
+interface CustomerOrderRow {
+  id: string;
+  orderNumber: string;
+  status: OrderStatus;
+  totalAmount: Prisma.Decimal | number;
+  recipientName: string | null;
+  recipientPhone: string | null;
+  shippingAddress: string | null;
+  shippingCity: string | null;
+  paymentMethod: PaymentMethod;
+  createdAt: Date;
+  cancelledAt: Date | null;
+  orderItems: Array<{
+    productName: string;
+    sku: string;
+    quantity: number;
+    unitPrice: Prisma.Decimal | number;
+    lineTotal: Prisma.Decimal | number;
+  }>;
+}
+
+/**
+ * Explicit allow-list: a customer response can only ever contain these
+ * fields, whatever the underlying row happens to include.
+ */
+function serializeCustomerOrder(order: CustomerOrderRow): CustomerOrderResponse {
+  return {
+    id: order.id,
+    orderNumber: order.orderNumber,
+    status: order.status,
+    totalAmount: Number(order.totalAmount),
+    items: order.orderItems.map((item) => ({
+      productName: item.productName,
+      sku: item.sku,
+      quantity: item.quantity,
+      unitPrice: Number(item.unitPrice),
+      lineTotal: Number(item.lineTotal),
+    })),
+    recipientName: order.recipientName,
+    recipientPhone: order.recipientPhone,
+    shippingAddress: order.shippingAddress,
+    shippingCity: order.shippingCity,
+    paymentMethod: order.paymentMethod,
+    createdAt: order.createdAt,
+    cancelledAt: order.cancelledAt,
   };
 }
