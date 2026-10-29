@@ -2,7 +2,8 @@
  * Single source of truth for authorization (fail closed).
  *
  * `ADMIN` is a superset of the other roles; `STAFF` is the operational subset;
- * `SUPPORT` is read-only for products, categories and all orders, and owns the
+ * `SUPPORT` reads products, categories and all orders, cancels PENDING orders
+ * only (`orders.cancel_pending`), writes internal order notes and owns the
  * support inbox (`contact.read`, `contact.manage`); `CUSTOMER` can only operate
  * on its own orders (`orders.create_own`, `orders.read_own` and
  * `orders.cancel_own`) plus the `@AnyAuthenticated()` own-account routes.
@@ -23,6 +24,9 @@ export const PERMISSIONS = [
   'orders.update',
   'orders.update_status',
   'orders.cancel_own',
+  'orders.cancel_pending',
+  'orders.notes.read',
+  'orders.notes.write',
   'stock.read',
   'stock.adjust',
   'po.read',
@@ -53,6 +57,9 @@ export const ROLE_PERMISSIONS: Readonly<
     'orders.read_all',
     'orders.update',
     'orders.update_status',
+    'orders.cancel_pending',
+    'orders.notes.read',
+    'orders.notes.write',
     'stock.read',
     'stock.adjust',
     'po.read',
@@ -62,6 +69,9 @@ export const ROLE_PERMISSIONS: Readonly<
     'products.read',
     'categories.read',
     'orders.read_all',
+    'orders.cancel_pending',
+    'orders.notes.read',
+    'orders.notes.write',
     'contact.read',
     'contact.manage',
   ],

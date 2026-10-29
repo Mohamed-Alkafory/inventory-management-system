@@ -24,6 +24,7 @@ import { UpdateOrderDto } from './dto/update-order.dto.js';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto.js';
 import { ListOrdersQueryDto } from './dto/list-orders.query.dto.js';
 import { ListOwnOrdersQueryDto } from './dto/list-own-orders.query.dto.js';
+import { CreateOrderNoteDto } from './dto/create-order-note.dto.js';
 
 /**
  * Contract §3.7 `Order` scalar shape. `totalAmount` is Decimal(12,2) in the
@@ -83,6 +84,16 @@ export interface OrderDetailResponse extends OrderResponse {
 export interface OrderListResponse {
   data: OrderResponse[];
   meta: { page: number; limit: number; total: number; totalPages: number };
+}
+
+/** Internal order note shape — never exposed by a customer-facing response. */
+export interface OrderNoteResponse {
+  id: string;
+  orderId: string;
+  authorId: string;
+  note: string;
+  author: { id: string; name: string };
+  createdAt: Date;
 }
 
 /**
@@ -160,6 +171,15 @@ const CUSTOMER_ORDER_ITEM_SELECT = {
   unitPrice: true,
   lineTotal: true,
 } satisfies Prisma.OrderItemSelect;
+
+const ORDER_NOTE_SELECT = {
+  id: true,
+  orderId: true,
+  authorId: true,
+  note: true,
+  author: { select: { id: true, name: true } },
+  createdAt: true,
+} satisfies Prisma.OrderNoteSelect;
 
 const CUSTOMER_ORDER_SELECT = {
   id: true,
@@ -515,7 +535,7 @@ export class OrdersService {
             { newStatus: OrderStatus.CANCELLED },
             userId,
             role,
-            { customerId: userId },
+            { customerId: userId, pendingOnly: true },
           ),
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       ),
@@ -533,13 +553,49 @@ export class OrdersService {
     });
   }
 
+  /**
+   * `POST /orders/:id/cancel` — SUPPORT (and STAFF/ADMIN) cancel a PENDING
+   * order on the customer's behalf. It deliberately reuses the same cancel
+   * transaction as the staff status route (stock restored exactly once with
+   * RETURN movements and audited), but `pendingOnly` forbids CONFIRMED or any
+   * other status. A non-PENDING order — including a double cancel — is 409.
+   */
+  async cancelPending(
+    id: string,
+    userId: string,
+    role: string,
+  ): Promise<CreatedOrderResponse> {
+    const result = await this.withWriteRetry(() =>
+      this.prisma.$transaction(
+        (tx) =>
+          this.updateOrderStatus(
+            tx,
+            id,
+            { newStatus: OrderStatus.CANCELLED },
+            userId,
+            role,
+            { pendingOnly: true },
+          ),
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      ),
+    );
+
+    await this.notifications.notifyOrderCancelled({
+      id: result.id,
+      orderNumber: result.orderNumber,
+      totalAmount: result.totalAmount,
+    });
+
+    return result;
+  }
+
   private async updateOrderStatus(
     tx: Prisma.TransactionClient,
     id: string,
     dto: UpdateOrderStatusDto,
     userId: string,
     role: string,
-    scope?: { customerId: string },
+    options?: { customerId?: string; pendingOnly?: boolean },
   ): Promise<CreatedOrderResponse> {
     const select = {
       id: true,
@@ -550,9 +606,9 @@ export class OrdersService {
 
     // Owner-scoped reads use findFirst so "not found" and "not yours" are
     // indistinguishable to the caller (both 404).
-    const order = scope
+    const order = options?.customerId
       ? await tx.order.findFirst({
-          where: { id, customerId: scope.customerId },
+          where: { id, customerId: options.customerId },
           select,
         })
       : await tx.order.findUnique({ where: { id }, select });
@@ -561,9 +617,10 @@ export class OrdersService {
       throw new NotFoundException(`Order ${id} not found`);
     }
 
-    // Customers may only cancel PENDING orders. STAFF/ADMIN keep the wider
-    // CONFIRMED → CANCELLED transition from issue #29.
-    if (scope && order.status !== OrderStatus.PENDING) {
+    // Customers and the SUPPORT cancel route may only cancel PENDING orders.
+    // STAFF/ADMIN keep the wider CONFIRMED → CANCELLED transition from issue
+    // #29 on PATCH /orders/:id/status.
+    if (options?.pendingOnly && order.status !== OrderStatus.PENDING) {
       throw new ConflictException(
         `Order ${order.orderNumber} can only be cancelled while PENDING`,
       );
@@ -582,7 +639,7 @@ export class OrdersService {
       where: {
         id,
         status: order.status,
-        ...(scope ? { customerId: scope.customerId } : {}),
+        ...(options?.customerId ? { customerId: options.customerId } : {}),
       },
       data:
         dto.newStatus === OrderStatus.CANCELLED
@@ -661,7 +718,10 @@ export class OrdersService {
    * `GET /orders` — paginated, filterable by status, createdById, search, date range,
    * sorted by status or createdAt.
    */
-  async findAll(query: ListOrdersQueryDto): Promise<OrderListResponse> {
+  async findAll(
+    query: ListOrdersQueryDto,
+    role?: string,
+  ): Promise<OrderListResponse> {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const sortBy = query.sortBy ?? 'createdAt';
@@ -709,7 +769,7 @@ export class OrdersService {
     ]);
 
     return {
-      data: orders.map(serializeOrder),
+      data: orders.map((order) => serializeOrderForList(order, role)),
       meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };
   }
@@ -768,9 +828,16 @@ export class OrdersService {
   }
 
   /**
-   * `GET /orders/:id` — returns order fields plus items[], createdBy, and stockMovements[].
+   * `GET /orders/:id` — returns order fields plus items[], createdBy, and
+   * stockMovements[]. SUPPORT and STAFF detail views are audited because this
+   * is where the full personal data is exposed; the entry contains only the
+   * viewer and order identity, never the PII itself.
    */
-  async findOne(id: string): Promise<OrderDetailResponse> {
+  async findOne(
+    id: string,
+    viewerId?: string,
+    viewerRole?: string,
+  ): Promise<OrderDetailResponse> {
     const order = await this.prisma.order.findUnique({
       where: { id },
       include: {
@@ -799,12 +866,61 @@ export class OrdersService {
       throw new NotFoundException(`Order ${id} not found`);
     }
 
+    if (viewerId && (viewerRole === 'SUPPORT' || viewerRole === 'STAFF')) {
+      await this.audit.log({
+        userId: viewerId,
+        action: 'order.viewed',
+        entityType: 'order',
+        entityId: order.id,
+        newValues: { viewerId, viewerRole },
+      });
+    }
+
     return {
       ...serializeOrder(order),
       items: order.orderItems.map(serializeItem),
       createdBy: order.createdBy,
       stockMovements: order.stockMovements,
     };
+  }
+
+  /** `POST /orders/:id/notes` — append an internal note (never customer-visible). */
+  async createNote(
+    orderId: string,
+    dto: CreateOrderNoteDto,
+    authorId: string,
+  ): Promise<OrderNoteResponse> {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      select: { id: true },
+    });
+
+    if (!order) {
+      throw new NotFoundException(`Order ${orderId} not found`);
+    }
+
+    return this.prisma.orderNote.create({
+      data: { orderId, authorId, note: dto.note },
+      select: ORDER_NOTE_SELECT,
+    });
+  }
+
+  /** `GET /orders/:id/notes` — the internal note thread, oldest first. */
+  async findNotes(orderId: string): Promise<OrderNoteResponse[]> {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      select: { id: true },
+    });
+
+    if (!order) {
+      throw new NotFoundException(`Order ${orderId} not found`);
+    }
+
+    return this.prisma.orderNote.findMany({
+      where: { orderId },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      select: ORDER_NOTE_SELECT,
+    });
   }
 
   /**
@@ -894,6 +1010,30 @@ function serializeOrder(
     ...order,
     totalAmount: Number(order.totalAmount),
   };
+}
+
+/**
+ * SUPPORT list rows deliberately omit the phone columns (both `customerPhone`
+ * and the mirrored `recipientPhone`) and the shipping address. The detail
+ * route still returns them, but every SUPPORT/STAFF detail view is audited.
+ */
+function serializeOrderForList(
+  order: Prisma.OrderGetPayload<{
+    select: typeof ORDER_SELECT;
+  }>,
+  role?: string,
+): OrderResponse {
+  const serialized = serializeOrder(order);
+
+  if (role !== 'SUPPORT') {
+    return serialized;
+  }
+
+  const minimized = { ...serialized } as Partial<OrderResponse>;
+  delete minimized.customerPhone;
+  delete minimized.recipientPhone;
+  delete minimized.shippingAddress;
+  return minimized as OrderResponse;
 }
 
 function serializeItem(

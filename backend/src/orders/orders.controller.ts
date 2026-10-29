@@ -24,10 +24,12 @@ import {
   type CustomerOrderResponse,
   type OrderDetailResponse,
   type OrderListResponse,
+  type OrderNoteResponse,
   type OrderResponse,
 } from './orders.service.js';
 import { CreateOrderDto } from './dto/create-order.dto.js';
 import { CreateOwnOrderDto } from './dto/create-own-order.dto.js';
+import { CreateOrderNoteDto } from './dto/create-order-note.dto.js';
 import { UpdateOrderDto } from './dto/update-order.dto.js';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto.js';
 import { ListOrdersQueryDto } from './dto/list-orders.query.dto.js';
@@ -136,14 +138,131 @@ export class OrdersController {
   }
 
   /**
+   * POST /orders/:id/cancel — cancel a PENDING order on the customer's
+   * behalf. The dedicated permission cannot confirm or perform any other
+   * transition (SUPPORT does not hold orders.update_status).
+   */
+  @Post(':id/cancel')
+  @RequirePermission('orders.cancel_pending')
+  @ApiOperation({
+    summary: 'Cancel a PENDING order (SUPPORT, STAFF and ADMIN)',
+    description:
+      'Cancels only a PENDING order and reuses the existing cancellation transaction: stock is restored exactly once with one RETURN movement per line, cancelledAt is stamped and an audit entry is written. A CONFIRMED, CANCELLED or otherwise non-PENDING order answers 409, so a double cancel can never restore stock twice. This permission cannot confirm an order or perform any other status change.',
+  })
+  @ApiResponse({
+    status: HttpStatus.CREATED,
+    description: 'Order cancelled with its item snapshots',
+  })
+  @ApiResponse({
+    status: HttpStatus.BAD_REQUEST,
+    description: 'Invalid UUID format',
+  })
+  @ApiResponse({
+    status: HttpStatus.UNAUTHORIZED,
+    description: 'Missing or invalid token',
+  })
+  @ApiResponse({
+    status: HttpStatus.FORBIDDEN,
+    description: 'Missing orders.cancel_pending',
+  })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    description: 'Order does not exist',
+  })
+  @ApiResponse({
+    status: HttpStatus.CONFLICT,
+    description:
+      'Order is not PENDING, was already cancelled, or changed concurrently',
+  })
+  cancelPending(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<CreatedOrderResponse> {
+    return this.ordersService.cancelPending(id, user.sub, user.role);
+  }
+
+  /**
+   * POST /orders/:id/notes — append an internal note. Notes are staff-only
+   * and never appear in any customer-facing response.
+   */
+  @Post(':id/notes')
+  @RequirePermission('orders.notes.write')
+  @ApiOperation({
+    summary: 'Add an internal order note (SUPPORT, STAFF and ADMIN)',
+    description:
+      'Appends a trimmed internal note (1–2000 characters) to the order. The note is visible only through GET /orders/:id/notes; no /orders/mine or other customer-facing response ever includes it. Unknown order ids answer 404.',
+  })
+  @ApiResponse({
+    status: HttpStatus.CREATED,
+    description: 'Internal note created',
+  })
+  @ApiResponse({
+    status: HttpStatus.BAD_REQUEST,
+    description: 'Validation failed (malformed id, blank or oversized note)',
+  })
+  @ApiResponse({
+    status: HttpStatus.UNAUTHORIZED,
+    description: 'Missing or invalid token',
+  })
+  @ApiResponse({
+    status: HttpStatus.FORBIDDEN,
+    description: 'Missing orders.notes.write',
+  })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    description: 'Order does not exist',
+  })
+  createNote(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateOrderNoteDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<OrderNoteResponse> {
+    return this.ordersService.createNote(id, dto, user.sub);
+  }
+
+  /** GET /orders/:id/notes — the internal notes thread, oldest first. */
+  @Get(':id/notes')
+  @RequirePermission('orders.notes.read')
+  @ApiOperation({
+    summary: 'List internal order notes (SUPPORT, STAFF and ADMIN)',
+    description:
+      'Returns the internal notes for one order, oldest first, with the author snapshot. This route is private: customer-facing `/orders/mine` responses never include notes. Unknown order ids answer 404.',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Internal notes, oldest first',
+  })
+  @ApiResponse({
+    status: HttpStatus.BAD_REQUEST,
+    description: 'Invalid UUID format',
+  })
+  @ApiResponse({
+    status: HttpStatus.UNAUTHORIZED,
+    description: 'Missing or invalid token',
+  })
+  @ApiResponse({
+    status: HttpStatus.FORBIDDEN,
+    description: 'Missing orders.notes.read',
+  })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    description: 'Order does not exist',
+  })
+  findNotes(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<OrderNoteResponse[]> {
+    return this.ordersService.findNotes(id);
+  }
+
+  /**
    * GET /orders — list orders with pagination and filters (contract §3.7).
    */
   @Get()
   @RequirePermission('orders.read_all')
   @ApiOperation({
-    summary: 'List orders (STAFF and ADMIN)',
+    summary: 'List orders (SUPPORT, STAFF and ADMIN)',
     description:
-      'Paginated list of orders filterable by status, createdById, search (orderNumber or customerName), and creation date range (from/to).',
+      'Paginated list of orders filterable by status, createdById, search (orderNumber or customerName), and creation date range (from/to). SUPPORT rows omit customerPhone, recipientPhone and shippingAddress (data minimization); the detail route returns them and is audited.',
   })
   @ApiResponse({
     status: HttpStatus.OK,
@@ -158,8 +277,11 @@ export class OrdersController {
     status: HttpStatus.UNAUTHORIZED,
     description: 'Missing or invalid token',
   })
-  findAll(@Query() query: ListOrdersQueryDto): Promise<OrderListResponse> {
-    return this.ordersService.findAll(query);
+  findAll(
+    @Query() query: ListOrdersQueryDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<OrderListResponse> {
+    return this.ordersService.findAll(query, user.role);
   }
 
   /**
@@ -338,9 +460,9 @@ export class OrdersController {
   @Get(':id')
   @RequirePermission('orders.read_all')
   @ApiOperation({
-    summary: 'Get order by id (STAFF and ADMIN)',
+    summary: 'Get order by id (SUPPORT, STAFF and ADMIN)',
     description:
-      'Returns the order fields plus items snapshots, createdBy user info, and related stock movements.',
+      'Returns the order fields plus items snapshots, createdBy user info, and related stock movements. This is the PII-bearing read: every SUPPORT or STAFF view writes an order.viewed audit entry (viewer id + order id only, no personal data). ADMIN views are not audited; list requests are never audited.',
   })
   @ApiResponse({
     status: HttpStatus.OK,
@@ -360,8 +482,9 @@ export class OrdersController {
   })
   findOne(
     @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
   ): Promise<OrderDetailResponse> {
-    return this.ordersService.findOne(id);
+    return this.ordersService.findOne(id, user.sub, user.role);
   }
 
   /**

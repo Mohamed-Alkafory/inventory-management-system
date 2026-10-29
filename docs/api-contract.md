@@ -45,7 +45,7 @@
 
 - Four roles (Prisma `UserRole`): `ADMIN`, `STAFF`, `SUPPORT`, `CUSTOMER`.
 - `ADMIN` includes everything the other roles can do. `STAFF` keeps the operational subset from AD-015.
-- `SUPPORT` is read-only for shop data: `products.read`, `categories.read` and `orders.read_all` (read every order, but never confirm, cancel or create one), plus the support inbox permissions `contact.read` and `contact.manage`, and the own-account routes.
+- `SUPPORT` can read shop data and all orders (`products.read`, `categories.read`, `orders.read_all`), cancel **PENDING** orders only (`orders.cancel_pending`), add/read internal order notes (`orders.notes.read`/`orders.notes.write`), and own the support inbox (`contact.read`, `contact.manage`) plus the own-account routes. It cannot create, confirm or otherwise change an order, adjust stock, read stock movements, receive purchase orders, manage users, read the audit log/dashboard/reports, or see `costPrice`. In `GET /orders` its rows omit `customerPhone`, `recipientPhone` and `shippingAddress`; `GET /orders/:id` returns them, and every SUPPORT/STAFF detail view writes an audit entry.
 - `CUSTOMER` can operate on its **own** orders only: `orders.create_own`, `orders.read_own` and `orders.cancel_own` (`POST/GET /orders/mine`, `GET /orders/mine/:id`, `POST /orders/mine/:id/cancel`) plus the own-account routes. Every staff order surface answers `403`.
 - Public `POST /auth/register` always creates a `CUSTOMER`; the body has no `role` field and a client-supplied `role` is rejected with `400`. An admin with `users.manage` creates all roles, including `STAFF`, `SUPPORT`, `ADMIN` and `CUSTOMER`, through `/users`.
 - "Role required" column below: `any` = any authenticated user; `admin` = the `users.manage` permission (ADMIN only).
@@ -235,12 +235,17 @@ Soft delete (AD-001): rows are never removed, so linked `products` and `purchase
 | POST   | `/orders`                    | STAFF, ADMIN         | `type CreateOrderRequest = { items: Array<{ productId: string; quantity: number }>; customerName?: string; customerPhone?: string; notes?: string; }` | `Order` + `items` (201)           | 400, 401, 403, 404 (product not found), 409 (stock), 422 (inactive)    |
 | PATCH  | `/orders/:id`                | STAFF, ADMIN         | `{ customerName?, customerPhone?, notes? }` — only while `PENDING`                                                                                    | `Order`                           | 401, 403, 404, 422 (not editable after PENDING)                        |
 | PATCH  | `/orders/:id/status`         | STAFF, ADMIN         | `{ newStatus: 'CONFIRMED' \| 'CANCELLED' }`                                                                                                           | `Order` + `items`                 | 400, 401, 403, 404, 409 (invalid transition / double cancel)           |
+| POST   | `/orders/:id/cancel`         | SUPPORT, STAFF, ADMIN | —                                                                                                                                                     | `Order` + `items` (201)           | 400, 401, 403, 404, 409 (not PENDING / double cancel)                 |
+| POST   | `/orders/:id/notes`          | SUPPORT, STAFF, ADMIN | `{ note }` — trimmed, 1–2000 characters                                                                                                                | internal `OrderNote` (201)        | 400, 401, 403, 404                                                     |
+| GET    | `/orders/:id/notes`          | SUPPORT, STAFF, ADMIN | —                                                                                                                                                     | internal `OrderNote[]` (oldest first) | 400, 401, 403, 404                                                 |
 | POST   | `/orders/mine`               | CUSTOMER             | `{ items: Array<{ productId: string; quantity: number }>; recipientName; recipientPhone; shippingAddress; shippingCity; notes? }`                      | customer-safe `Order` (201)       | 400, 401, 403, 404, 409, 422, 429 (throttle)                           |
 | GET    | `/orders/mine`               | CUSTOMER             | `?page&limit&status`                                                                                                                                  | paginated customer-safe `Order[]` | 400, 401, 403                                                          |
 | GET    | `/orders/mine/:id`           | CUSTOMER             | —                                                                                                                                                     | customer-safe `Order`             | 400, 401, 403, 404 (missing **or** not owned)                          |
 | POST   | `/orders/mine/:id/cancel`    | CUSTOMER             | —                                                                                                                                                     | customer-safe `Order` (201)       | 400, 401, 403, 404 (missing **or** not owned), 409 (not PENDING)       |
 
-> `POST /orders/:id/confirm` and `POST /orders/:id/cancel` from earlier drafts were never implemented; `PATCH /orders/:id/status` replaces them.
+> `POST /orders/:id/confirm` from earlier drafts was never implemented; `PATCH /orders/:id/status` replaces it. `POST /orders/:id/cancel` exists **only** as the SUPPORT/STAFF/ADMIN pending-only cancellation route and cannot confirm or perform any other transition.
+
+- `OrderNote` shape (internal only): `{ id, orderId, authorId, note, author: { id, name }, createdAt }`. Notes are returned only by `GET /orders/:id/notes`; no `/orders/mine` or other customer-facing response ever includes them (the legacy scalar `Order.notes` field is also excluded from customer responses).
 
 - `Order` (staff) shape: `{ id, orderNumber, status, customerName, customerPhone, notes, totalAmount, customerId, recipientName, recipientPhone, shippingAddress, shippingCity, paymentMethod, createdById, cancelledAt, createdAt, updatedAt, items?: OrderItem[] }`.
 - `paymentMethod` is the `PaymentMethod` enum (`COD` only today) and defaults to `COD`.
@@ -256,6 +261,20 @@ Soft delete (AD-001): rows are never removed, so linked `products` and `purchase
 - `GET /orders/:id`: returns the order fields plus `items[]` (the API property is
   `items`, not `orderItems`), `createdBy` (`id`, `name`, `email`) and the related
   `stockMovements[]`. A non-UUID id returns 400; a missing order returns 404.
+  This is the PII-bearing read: every SUPPORT or STAFF detail view writes an
+  `order.viewed` audit entry containing only the viewer id/role and order id —
+  never the personal data. ADMIN detail views and all list calls are not
+  audited.
+- **SUPPORT data minimization:** in `GET /orders` the SUPPORT rows omit
+  `customerPhone`, `recipientPhone` and `shippingAddress` (the full detail view
+  above returns them and is audited). There is no bulk/export personal-data
+  endpoint for SUPPORT: all CSV reports, the dashboard and `/audit-logs` are
+  ADMIN-only.
+- `POST /orders/:id/cancel` cancels only a `PENDING` order; `CONFIRMED`,
+  `CANCELLED` and every other state answer `409`. It reuses the existing
+  cancellation transaction (one `RETURN` movement per line, `cancelledAt`,
+  `order.cancelled` audit) so a double cancel can never restore stock twice.
+  The permission cannot be used to confirm an order.
 - `OrderItem` shape: `{ id, orderId, productId, productName, sku, quantity, unitPrice, lineTotal }` — snapshots, client must not expect them to track later product edits.
 - `totalAmount` is always computed server-side from the item snapshots' `unitPrice`; client-sent prices are ignored.
 - **Stock is deducted at `PENDING` creation** and fully restored on cancel (see decisions §2).
