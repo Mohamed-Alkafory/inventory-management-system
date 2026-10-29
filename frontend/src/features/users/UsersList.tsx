@@ -6,6 +6,7 @@ import type { MenuAction } from "../../components/ui/RowActionsMenu";
 import ConfirmDialog from "../../components/ui/ConfirmDialog";
 import { useDebouncedValue } from "../../lib/useDebouncedValue";
 import { useAuth } from "../../context/auth/useAuth";
+import UserAvatar from "../../components/user/UserAvatar";
 import { formatDate } from "../orders/format";
 import { useDeactivateUser, useUpdateUser, useUsers } from "./hooks";
 import { AccountStatusChip } from "./RoleBadge";
@@ -202,8 +203,15 @@ export default function UsersList() {
                 {data.items.map((u) => (
                   <tr key={u.id} aria-current={u.id === me?.id ? "true" : undefined}>
                     <td className="px-4 py-2.5 font-semibold text-[#111827]">
-                      {u.name}
-                      {u.id === me?.id && <span className="ms-2 text-[11px] font-medium text-[#6B7280]">(you)</span>}
+                      <div className="flex items-center gap-2.5">
+                        <UserAvatar name={u.name} src={u.avatarUrl} size="sm" />
+                        <div className="min-w-0">
+                          <p className="truncate">
+                            {u.name}
+                            {u.id === me?.id && <span className="ms-2 text-[11px] font-medium text-[#6B7280]">(you)</span>}
+                          </p>
+                        </div>
+                      </div>
                     </td>
                     <td className="px-4 py-2.5 text-[#374151]">{u.email}</td>
                     <td className="px-4 py-2.5">

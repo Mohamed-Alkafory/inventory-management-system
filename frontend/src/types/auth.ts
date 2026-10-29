@@ -5,6 +5,8 @@ export type User = {
   name: string;
   email: string;
   role: Role;
+  /** Backend-relative `/uploads/avatars/...` path, an external URL, or null. */
+  avatarUrl?: string | null;
   /** Present when the backend echoes it (GET /auth/me). Optional elsewhere. */
   createdAt?: string;
 };

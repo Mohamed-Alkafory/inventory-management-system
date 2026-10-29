@@ -13,6 +13,8 @@ export const AUTH_ENDPOINTS = {
   updateMe: "/auth/me",
   /** DELETE /auth/me — deactivate the account (irreversible from the profile page). */
   deleteMe: "/auth/me",
+  /** POST/DELETE /users/me/avatar — the signed-in user's profile photo. */
+  avatar: "/users/me/avatar",
 } as const;
 
 /*

@@ -8,6 +8,7 @@ import { useCart } from "../../context/cart/useCart";
 import { useFavorites } from "../../context/favorites/useFavorites";
 import { useProductCategories } from "../../hooks/useProducts";
 import ProdexaLogo from "../Logo";
+import UserAvatar from "../user/UserAvatar";
 import "./header.css";
 
 const NAV_LINKS = [
@@ -58,7 +59,7 @@ export default function Header() {
   const [open, setOpen] = useState(false);
   const [catsOpen, setCatsOpen] = useState(false);
   const [searchText, setSearchText] = useState("");
-  const { isAuthenticated, logout, hasRole } = useAuth();
+  const { isAuthenticated, user, logout, hasRole } = useAuth();
   const { totalItems } = useCart();
   const { items: favorites } = useFavorites();
   const categories = useProductCategories();
@@ -260,7 +261,7 @@ export default function Header() {
                     Log out
                   </button>
                   <Link to="/profile" className="icon-btn" aria-label="Your profile">
-                    <FaUser aria-hidden="true" />
+                    <UserAvatar name={user?.name} src={user?.avatarUrl} size="sm" />
                   </Link>
                 </>
               ) : (

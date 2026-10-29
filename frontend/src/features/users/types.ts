@@ -8,6 +8,8 @@ export interface AdminUser {
   email: string;
   role: UserRole;
   isActive: boolean;
+  /** Backend-relative `/uploads/avatars/...` path or an external URL. */
+  avatarUrl?: string | null;
   /** ISO date-time. */
   createdAt: string;
 }
