@@ -16,7 +16,7 @@ import {
 import { CreateProductDto } from './dto/create-product.dto.js';
 import { ListProductsQueryDto } from './dto/list-products.query.dto.js';
 import { UpdateProductDto } from './dto/update-product.dto.js';
-import { ROLES_KEY } from '../auth/decorators/roles.decorator.js';
+import { PERMISSIONS_KEY } from '../auth/decorators/require-permission.decorator.js';
 
 const ADMIN = { sub: 'admin-id', role: 'ADMIN' } as const;
 const STAFF = { sub: 'staff-id', role: 'STAFF' } as const;
@@ -194,15 +194,25 @@ describe('ProductsController', () => {
     ).toBe(HttpStatus.NO_CONTENT);
   });
 
-  it('requires ADMIN on POST, PATCH and DELETE (and allows any role on GET)', () => {
-    const rolesFor = (handler: (...args: never[]) => unknown) =>
-      reflector.get<string[]>(ROLES_KEY, handler) ?? [];
+  it('requires products.write on POST, PATCH and DELETE (products.read on GET)', () => {
+    const permissionsFor = (handler: (...args: never[]) => unknown) =>
+      reflector.get<string[]>(PERMISSIONS_KEY, handler) ?? [];
 
-    expect(rolesFor(ProductsController.prototype.create)).toEqual(['ADMIN']);
-    expect(rolesFor(ProductsController.prototype.update)).toEqual(['ADMIN']);
-    expect(rolesFor(ProductsController.prototype.remove)).toEqual(['ADMIN']);
-    expect(rolesFor(ProductsController.prototype.findAll)).toEqual([]);
-    expect(rolesFor(ProductsController.prototype.findOne)).toEqual([]);
+    expect(permissionsFor(ProductsController.prototype.create)).toEqual([
+      'products.write',
+    ]);
+    expect(permissionsFor(ProductsController.prototype.update)).toEqual([
+      'products.write',
+    ]);
+    expect(permissionsFor(ProductsController.prototype.remove)).toEqual([
+      'products.write',
+    ]);
+    expect(permissionsFor(ProductsController.prototype.findAll)).toEqual([
+      'products.read',
+    ]);
+    expect(permissionsFor(ProductsController.prototype.findOne)).toEqual([
+      'products.read',
+    ]);
   });
 
   describe('product image endpoints', () => {
@@ -233,16 +243,16 @@ describe('ProductsController', () => {
       ).toBe(HttpStatus.NO_CONTENT);
     });
 
-    it('requires ADMIN for both image endpoints', () => {
-      const rolesFor = (handler: (...args: never[]) => unknown) =>
-        reflector.get<string[]>(ROLES_KEY, handler) ?? [];
+    it('requires products.write for both image endpoints', () => {
+      const permissionsFor = (handler: (...args: never[]) => unknown) =>
+        reflector.get<string[]>(PERMISSIONS_KEY, handler) ?? [];
 
-      expect(rolesFor(ProductsController.prototype.uploadImage)).toEqual([
-        'ADMIN',
-      ]);
-      expect(rolesFor(ProductsController.prototype.removeImage)).toEqual([
-        'ADMIN',
-      ]);
+      expect(
+        permissionsFor(ProductsController.prototype.uploadImage),
+      ).toEqual(['products.write']);
+      expect(
+        permissionsFor(ProductsController.prototype.removeImage),
+      ).toEqual(['products.write']);
     });
 
     it('propagates 404 for a missing product', async () => {

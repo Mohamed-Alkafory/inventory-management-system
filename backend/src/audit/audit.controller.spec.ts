@@ -5,7 +5,7 @@ import { Reflector } from '@nestjs/core';
 import { AuditController } from './audit.controller.js';
 import { AuditService } from './audit.service.js';
 import { ListAuditLogsQueryDto } from './dto/list-audit-logs.query.dto.js';
-import { ROLES_KEY } from '../auth/decorators/roles.decorator.js';
+import { PERMISSIONS_KEY } from '../auth/decorators/require-permission.decorator.js';
 
 describe('AuditController', () => {
   let controller: AuditController;
@@ -38,9 +38,9 @@ describe('AuditController', () => {
     expect(findAll).toHaveBeenCalledWith(query);
   });
 
-  it('is ADMIN-only (class-level guard)', () => {
-    expect(reflector.get<string[]>(ROLES_KEY, AuditController)).toEqual([
-      'ADMIN',
+  it('is ADMIN-only via audit.read (class-level guard)', () => {
+    expect(reflector.get<string[]>(PERMISSIONS_KEY, AuditController)).toEqual([
+      'audit.read',
     ]);
   });
 

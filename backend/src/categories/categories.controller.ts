@@ -27,7 +27,7 @@ import {
 import { CreateCategoryDto } from './dto/create-category.dto.js';
 import { ListCategoriesQueryDto } from './dto/list-categories.query.dto.js';
 import { UpdateCategoryDto } from './dto/update-category.dto.js';
-import { Roles } from '../auth/decorators/roles.decorator.js';
+import { RequirePermission } from '../auth/decorators/require-permission.decorator.js';
 
 @ApiTags('categories')
 @ApiBearerAuth()
@@ -36,6 +36,7 @@ export class CategoriesController {
   constructor(private readonly categoriesService: CategoriesService) {}
 
   @Get()
+  @RequirePermission('categories.read')
   @ApiOperation({
     summary: 'List categories (search, isActive filter, pagination)',
     description:
@@ -60,6 +61,7 @@ export class CategoriesController {
   }
 
   @Get(':id')
+  @RequirePermission('categories.read')
   @ApiOperation({
     summary: 'Get a category by id',
     description:
@@ -87,7 +89,7 @@ export class CategoriesController {
     return this.categoriesService.findOne(id);
   }
 
-  @Roles('ADMIN')
+  @RequirePermission('categories.write')
   @Post()
   @ApiOperation({ summary: 'Create a category (ADMIN only)' })
   @ApiResponse({ status: HttpStatus.CREATED, description: 'Category created' })
@@ -111,7 +113,7 @@ export class CategoriesController {
     return this.categoriesService.create(dto);
   }
 
-  @Roles('ADMIN')
+  @RequirePermission('categories.write')
   @Patch(':id')
   @ApiOperation({
     summary: 'Update a category (ADMIN only)',
@@ -146,7 +148,7 @@ export class CategoriesController {
     return this.categoriesService.update(id, dto);
   }
 
-  @Roles('ADMIN')
+  @RequirePermission('categories.write')
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({

@@ -15,6 +15,7 @@ import {
 
 import { StockService, type MovementListResponse } from './stock.service.js';
 import { ListMovementsQueryDto } from './dto/list-movements.query.dto.js';
+import { RequirePermission } from '../auth/decorators/require-permission.decorator.js';
 
 /**
  * `GET /products/:id/movements` — one product's stock history. Sits on the
@@ -28,6 +29,7 @@ export class ProductMovementsController {
   constructor(private readonly stockService: StockService) {}
 
   @Get(':id/movements')
+  @RequirePermission('stock.read')
   @ApiOperation({
     summary: "List a product's stock movements",
     description:

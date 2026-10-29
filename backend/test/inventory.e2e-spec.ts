@@ -110,6 +110,68 @@ describe('Inventory Scenarios (e2e)', () => {
     });
   });
 
+  describe('Permission map — STAFF operational access', () => {
+    it('allows STAFF to adjust stock (201)', async () => {
+      const category = await prisma.category.create({
+        data: { name: 'Permission Supplies' },
+      });
+      const product = await prisma.product.create({
+        data: {
+          name: 'Adjustable Item',
+          sku: 'ADJ-001',
+          price: 10,
+          quantity: 5,
+          categoryId: category.id,
+        },
+      });
+
+      await request(app.getHttpServer())
+        .post('/api/v1/stock/adjustments')
+        .set('Authorization', `Bearer ${staffToken}`)
+        .send({
+          productId: product.id,
+          quantityChange: 3,
+          reason: 'Permission map check',
+        })
+        .expect(201);
+
+      const updated = await prisma.product.findUnique({
+        where: { id: product.id },
+      });
+      expect(updated?.quantity).toBe(8);
+    });
+
+    it('allows STAFF to change order status (200)', async () => {
+      const category = await prisma.category.create({
+        data: { name: 'Permission Orders' },
+      });
+      const product = await prisma.product.create({
+        data: {
+          name: 'Order Item',
+          sku: 'ORD-ADJ-001',
+          price: 12,
+          quantity: 4,
+          categoryId: category.id,
+        },
+      });
+
+      const order = await request(app.getHttpServer())
+        .post('/api/v1/orders')
+        .set('Authorization', `Bearer ${staffToken}`)
+        .send({
+          customerName: 'Permission Customer',
+          items: [{ productId: product.id, quantity: 1 }],
+        })
+        .expect(201);
+
+      await request(app.getHttpServer())
+        .patch(`/api/v1/orders/${order.body.id}/status`)
+        .set('Authorization', `Bearer ${staffToken}`)
+        .send({ newStatus: OrderStatus.CONFIRMED })
+        .expect(200);
+    });
+  });
+
   describe('Order stock scenarios', () => {
     let categoryId: string;
     let productId: string;

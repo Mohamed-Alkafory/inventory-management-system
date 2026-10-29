@@ -5,7 +5,8 @@ import { Reflector } from '@nestjs/core';
 import { UsersController } from './users.controller.js';
 import { UsersService, type UserResponse } from './users.service.js';
 import { IS_PUBLIC_KEY } from '../auth/decorators/public.decorator.js';
-import { ROLES_KEY } from '../auth/decorators/roles.decorator.js';
+import { PERMISSIONS_KEY } from '../auth/decorators/require-permission.decorator.js';
+import { ANY_AUTHENTICATED_KEY } from '../auth/decorators/any-authenticated.decorator.js';
 
 const USER_A = { sub: '11111111-1111-4111-8111-111111111111', role: 'STAFF' };
 const USER_B = { sub: '22222222-2222-4222-8222-222222222222', role: 'ADMIN' };
@@ -57,16 +58,18 @@ describe('UsersController avatar endpoints', () => {
     }
   });
 
-  it('allows any authenticated role (overrides the ADMIN-only class metadata)', () => {
+  it('classifies avatar routes as any-authenticated (overriding users.manage)', () => {
     for (const handler of [
       UsersController.prototype.uploadAvatar,
       UsersController.prototype.removeAvatar,
     ]) {
-      expect(reflector.get<string[]>(ROLES_KEY, handler)).toEqual([
-        'ADMIN',
-        'STAFF',
-      ]);
+      expect(
+        reflector.get<boolean>(ANY_AUTHENTICATED_KEY, handler),
+      ).toBe(true);
     }
+    expect(
+      reflector.get<string[]>(PERMISSIONS_KEY, UsersController),
+    ).toEqual(['users.manage']);
   });
 
   it('returns the updated current user with avatarUrl and no passwordHash', async () => {

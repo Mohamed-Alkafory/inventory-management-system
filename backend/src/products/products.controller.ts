@@ -36,7 +36,7 @@ import { CreateProductDto } from './dto/create-product.dto.js';
 import { ListProductsQueryDto } from './dto/list-products.query.dto.js';
 import { UpdateProductDto } from './dto/update-product.dto.js';
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
-import { Roles } from '../auth/decorators/roles.decorator.js';
+import { RequirePermission } from '../auth/decorators/require-permission.decorator.js';
 
 /** JWT role claim resolved from the database by the global JwtAuthGuard. */
 interface AuthenticatedUser {
@@ -51,6 +51,7 @@ export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
 
   @Get()
+  @RequirePermission('products.read')
   @ApiOperation({
     summary: 'List products (search, filters, sorting, pagination)',
     description:
@@ -77,6 +78,7 @@ export class ProductsController {
   }
 
   @Get(':id')
+  @RequirePermission('products.read')
   @ApiOperation({
     summary: 'Get a product by id',
     description:
@@ -98,7 +100,7 @@ export class ProductsController {
     return this.productsService.findOne(id, user.role);
   }
 
-  @Roles('ADMIN')
+  @RequirePermission('products.write')
   @Post()
   @ApiOperation({ summary: 'Create a product (ADMIN only)' })
   @ApiResponse({ status: HttpStatus.CREATED, description: 'Product created' })
@@ -129,7 +131,7 @@ export class ProductsController {
     return this.productsService.create(dto, user.sub);
   }
 
-  @Roles('ADMIN')
+  @RequirePermission('products.write')
   @Patch(':id')
   @ApiOperation({
     summary: 'Update a product (ADMIN only)',
@@ -165,7 +167,7 @@ export class ProductsController {
     return this.productsService.update(id, dto, user.sub);
   }
 
-  @Roles('ADMIN')
+  @RequirePermission('products.write')
   @Post(':id/image')
   @HttpCode(HttpStatus.OK)
   @UseInterceptors(
@@ -221,7 +223,7 @@ export class ProductsController {
     return this.productsService.uploadImage(id, image, user.sub);
   }
 
-  @Roles('ADMIN')
+  @RequirePermission('products.write')
   @Delete(':id/image')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({
@@ -249,7 +251,7 @@ export class ProductsController {
     return this.productsService.removeImage(id, user.sub);
   }
 
-  @Roles('ADMIN')
+  @RequirePermission('products.write')
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Soft-delete a product (ADMIN only, AD-001)' })

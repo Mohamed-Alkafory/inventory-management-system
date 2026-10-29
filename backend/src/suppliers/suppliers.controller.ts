@@ -27,7 +27,7 @@ import {
 import { CreateSupplierDto } from './dto/create-supplier.dto.js';
 import { ListSuppliersQueryDto } from './dto/list-suppliers.query.dto.js';
 import { UpdateSupplierDto } from './dto/update-supplier.dto.js';
-import { Roles } from '../auth/decorators/roles.decorator.js';
+import { RequirePermission } from '../auth/decorators/require-permission.decorator.js';
 
 @ApiTags('suppliers')
 @ApiBearerAuth()
@@ -36,6 +36,7 @@ export class SuppliersController {
   constructor(private readonly suppliersService: SuppliersService) {}
 
   @Get()
+  @RequirePermission('suppliers.read')
   @ApiOperation({
     summary: 'List suppliers (search, isActive filter, pagination)',
     description:
@@ -60,6 +61,7 @@ export class SuppliersController {
   }
 
   @Get(':id')
+  @RequirePermission('suppliers.read')
   @ApiOperation({
     summary: 'Get a supplier by id',
     description:
@@ -87,7 +89,7 @@ export class SuppliersController {
     return this.suppliersService.findOne(id);
   }
 
-  @Roles('ADMIN')
+  @RequirePermission('suppliers.write')
   @Post()
   @ApiOperation({ summary: 'Create a supplier (ADMIN only)' })
   @ApiResponse({ status: HttpStatus.CREATED, description: 'Supplier created' })
@@ -107,7 +109,7 @@ export class SuppliersController {
     return this.suppliersService.create(dto);
   }
 
-  @Roles('ADMIN')
+  @RequirePermission('suppliers.write')
   @Patch(':id')
   @ApiOperation({
     summary: 'Update a supplier (ADMIN only)',
@@ -138,7 +140,7 @@ export class SuppliersController {
     return this.suppliersService.update(id, dto);
   }
 
-  @Roles('ADMIN')
+  @RequirePermission('suppliers.write')
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({

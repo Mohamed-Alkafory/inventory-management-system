@@ -22,7 +22,8 @@ import {
 } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 
-import { Roles } from '../auth/decorators/roles.decorator.js';
+import { RequirePermission } from '../auth/decorators/require-permission.decorator.js';
+import { AnyAuthenticated } from '../auth/decorators/any-authenticated.decorator.js';
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
 import { UsersService, type UserResponse } from './users.service.js';
 import {
@@ -33,10 +34,10 @@ import { CreateUserDto } from './dto/create-user.dto.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
 import { ListUsersQueryDto } from './dto/list-users.query.dto.js';
 
-/** Users management is ADMIN-only (AD-006; enforced by the global RolesGuard). */
+/** Users management requires `users.manage`; avatars are own-account routes. */
 @ApiTags('users')
 @ApiBearerAuth()
-@Roles('ADMIN')
+@RequirePermission('users.manage')
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
@@ -46,7 +47,7 @@ export class UsersController {
    * parameter, so an admin can never change someone else's avatar here.
    */
   @Post('me/avatar')
-  @Roles('ADMIN', 'STAFF')
+  @AnyAuthenticated()
   @HttpCode(HttpStatus.OK)
   @UseInterceptors(
     // Memory storage lets the service inspect magic bytes before writing.
@@ -94,7 +95,7 @@ export class UsersController {
   }
 
   @Delete('me/avatar')
-  @Roles('ADMIN', 'STAFF')
+  @AnyAuthenticated()
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({
     summary: 'Delete the current user avatar',

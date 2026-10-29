@@ -15,6 +15,7 @@ import { CreateAdjustmentDto } from './dto/create-adjustment.dto.js';
 import { ListMovementsQueryDto } from './dto/list-movements.query.dto.js';
 import type { ProductListResponse } from '../products/products.service.js';
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
+import { RequirePermission } from '../auth/decorators/require-permission.decorator.js';
 
 /** JWT role claim resolved from the database by the global JwtAuthGuard. */
 interface AuthenticatedUser {
@@ -29,6 +30,7 @@ export class StockController {
   constructor(private readonly stockService: StockService) {}
 
   @Get('movements')
+  @RequirePermission('stock.read')
   @ApiOperation({
     summary: 'List stock movements (filters, date range, sorting, pagination)',
     description:
@@ -53,6 +55,7 @@ export class StockController {
   }
 
   @Post('adjustments')
+  @RequirePermission('stock.adjust')
   @ApiOperation({
     summary: 'Adjust a product quantity (STAFF and ADMIN)',
     description:
@@ -90,6 +93,7 @@ export class StockController {
   }
 
   @Get('low-stock')
+  @RequirePermission('stock.read')
   @ApiOperation({
     summary: 'List low-stock products',
     description:

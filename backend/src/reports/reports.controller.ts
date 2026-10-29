@@ -14,7 +14,7 @@ import {
   ExportMovementsQueryDto,
 } from './dto/export.query.dto.js';
 import { DateRangeQueryDto } from '../dashboard/dto/date-range.query.dto.js';
-import { Roles } from '../auth/decorators/roles.decorator.js';
+import { RequirePermission } from '../auth/decorators/require-permission.decorator.js';
 
 /**
  * CSV exports of the inventory reports (issue #55). ADMIN-only (the inventory
@@ -24,7 +24,7 @@ import { Roles } from '../auth/decorators/roles.decorator.js';
  */
 @ApiTags('reports')
 @ApiBearerAuth()
-@Roles('ADMIN')
+@RequirePermission('reports.read')
 @Controller('reports')
 export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}

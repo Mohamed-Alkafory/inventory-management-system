@@ -10,7 +10,7 @@ import {
   ExportMovementsQueryDto,
 } from './dto/export.query.dto.js';
 import { DateRangeQueryDto } from '../dashboard/dto/date-range.query.dto.js';
-import { ROLES_KEY } from '../auth/decorators/roles.decorator.js';
+import { PERMISSIONS_KEY } from '../auth/decorators/require-permission.decorator.js';
 
 const report = {
   filename: 'inventory-2026-10-25.csv',
@@ -49,9 +49,9 @@ describe('ReportsController', () => {
     reflector = module.get(Reflector);
   });
 
-  it('is ADMIN-only on the whole controller', () => {
-    expect(reflector.get<string[]>(ROLES_KEY, ReportsController)).toEqual([
-      'ADMIN',
+  it('is ADMIN-only via reports.read on the whole controller', () => {
+    expect(reflector.get<string[]>(PERMISSIONS_KEY, ReportsController)).toEqual([
+      'reports.read',
     ]);
     for (const handler of [
       ReportsController.prototype.inventory,
@@ -59,7 +59,7 @@ describe('ReportsController', () => {
       ReportsController.prototype.sales,
       ReportsController.prototype.stockMovements,
     ]) {
-      expect(reflector.get<string[]>(ROLES_KEY, handler)).toBeUndefined();
+      expect(reflector.get<string[]>(PERMISSIONS_KEY, handler)).toBeUndefined();
     }
   });
 

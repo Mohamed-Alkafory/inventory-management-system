@@ -8,7 +8,7 @@ import {
 
 import { AuditService, type AuditLogListResponse } from './audit.service.js';
 import { ListAuditLogsQueryDto } from './dto/list-audit-logs.query.dto.js';
-import { Roles } from '../auth/decorators/roles.decorator.js';
+import { RequirePermission } from '../auth/decorators/require-permission.decorator.js';
 
 /**
  * Read-only audit trail (issue #34). Entries are created by the services
@@ -17,7 +17,7 @@ import { Roles } from '../auth/decorators/roles.decorator.js';
  */
 @ApiTags('audit-logs')
 @ApiBearerAuth()
-@Roles('ADMIN')
+@RequirePermission('audit.read')
 @Controller('audit-logs')
 export class AuditController {
   constructor(private readonly auditService: AuditService) {}
