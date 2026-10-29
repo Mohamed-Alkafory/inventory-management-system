@@ -2,10 +2,11 @@
  * Single source of truth for authorization (fail closed).
  *
  * `ADMIN` is a superset of the other roles; `STAFF` is the operational subset;
- * `SUPPORT` is read-only for products and categories; `CUSTOMER` has no
- * permissions beyond the `@AnyAuthenticated()` own-account routes. Any role
- * missing from `ROLE_PERMISSIONS` (including an unexpected value from the
- * database) receives no permissions.
+ * `SUPPORT` is read-only for products, categories and all orders; `CUSTOMER`
+ * can only operate on its own orders (`orders.create_own`, `orders.read_own`
+ * and `orders.cancel_own`) plus the `@AnyAuthenticated()` own-account routes.
+ * Any role missing from `ROLE_PERMISSIONS` (including an unexpected value
+ * from the database) receives no permissions.
  */
 export const PERMISSIONS = [
   'products.read',
@@ -15,9 +16,12 @@ export const PERMISSIONS = [
   'suppliers.read',
   'suppliers.write',
   'orders.create',
+  'orders.create_own',
   'orders.read_all',
+  'orders.read_own',
   'orders.update',
   'orders.update_status',
+  'orders.cancel_own',
   'stock.read',
   'stock.adjust',
   'po.read',
@@ -51,6 +55,6 @@ export const ROLE_PERMISSIONS: Readonly<
     'po.read',
     'po.receive',
   ],
-  SUPPORT: ['products.read', 'categories.read'],
-  CUSTOMER: [],
+  SUPPORT: ['products.read', 'categories.read', 'orders.read_all'],
+  CUSTOMER: ['orders.create_own', 'orders.read_own', 'orders.cancel_own'],
 };

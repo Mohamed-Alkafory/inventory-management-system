@@ -91,7 +91,8 @@ model User {
   isActive                Boolean                  @default(true) @map("is_active")
   createdAt               DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt               DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(6)
-  orders                  Order[]
+  createdOrders           Order[]                  @relation("OrderCreatedBy")
+  customerOrders          Order[]                  @relation("OrderCustomer")
   stockMovements          StockMovement[]
   purchaseOrders          PurchaseOrder[]
   notifications           Notification[]
@@ -108,25 +109,37 @@ enum OrderStatus {
   CANCELLED
 }
 
-model Order {
-  id            String      @id @default(uuid()) @db.Uuid
-  orderNumber   String      @unique @map("order_number") @db.VarChar(30)
-  status        OrderStatus @default(PENDING)
-  customerName  String?     @map("customer_name") @db.VarChar(100)
-  customerPhone String?     @map("customer_phone") @db.VarChar(20)
-  notes         String?     @db.Text
-  totalAmount   Decimal     @map("total_amount") @db.Decimal(12, 2)
-  createdById   String      @map("created_by_id") @db.Uuid
-  cancelledAt   DateTime?   @map("cancelled_at") @db.Timestamptz(6)
-  createdAt     DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+enum PaymentMethod {
+  COD
+}
 
-  createdBy      User            @relation(fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Cascade)
+model Order {
+  id              String        @id @default(uuid()) @db.Uuid
+  orderNumber     String        @unique @map("order_number") @db.VarChar(30)
+  status          OrderStatus   @default(PENDING)
+  customerName    String?       @map("customer_name") @db.VarChar(100)
+  customerPhone   String?       @map("customer_phone") @db.VarChar(20)
+  notes           String?       @db.Text
+  totalAmount     Decimal       @map("total_amount") @db.Decimal(12, 2)
+  customerId      String?       @map("customer_id") @db.Uuid
+  recipientName   String?       @map("recipient_name") @db.VarChar(100)
+  recipientPhone  String?       @map("recipient_phone") @db.VarChar(20)
+  shippingAddress String?       @map("shipping_address") @db.Text
+  shippingCity    String?       @map("shipping_city") @db.VarChar(100)
+  paymentMethod   PaymentMethod @default(COD) @map("payment_method")
+  createdById     String        @map("created_by_id") @db.Uuid
+  cancelledAt     DateTime?     @map("cancelled_at") @db.Timestamptz(6)
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  createdBy      User            @relation("OrderCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  customer       User?           @relation("OrderCustomer", fields: [customerId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   orderItems     OrderItem[]
   stockMovements StockMovement[]
 
   @@index([status, createdAt])
   @@index([createdById])
+  @@index([customerId, createdAt])
   @@map("orders")
 }
 

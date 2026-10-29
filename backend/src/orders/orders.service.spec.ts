@@ -46,6 +46,7 @@ describe('OrdersService', () => {
   const txOrderCount = vi.fn();
   const txOrderCreate = vi.fn();
   const txOrderFindUnique = vi.fn();
+  const txOrderFindFirst = vi.fn();
   const txOrderUpdateMany = vi.fn();
   const txOrderItemCreate = vi.fn();
   const txOrderItemFindMany = vi.fn();
@@ -60,6 +61,7 @@ describe('OrdersService', () => {
       count: txOrderCount,
       create: txOrderCreate,
       findUnique: txOrderFindUnique,
+      findFirst: txOrderFindFirst,
       updateMany: txOrderUpdateMany,
     },
     orderItem: { create: txOrderItemCreate, findMany: txOrderItemFindMany },
@@ -89,6 +91,12 @@ describe('OrdersService', () => {
         customerPhone: data.customerPhone ?? null,
         notes: data.notes ?? null,
         totalAmount: data.totalAmount,
+        customerId: data.customerId ?? null,
+        recipientName: data.recipientName ?? null,
+        recipientPhone: data.recipientPhone ?? null,
+        shippingAddress: data.shippingAddress ?? null,
+        shippingCity: data.shippingCity ?? null,
+        paymentMethod: data.paymentMethod ?? 'COD',
         createdById: data.createdById,
         cancelledAt: null,
         createdAt: new Date('2026-10-23T12:00:00Z'),
@@ -121,6 +129,12 @@ describe('OrdersService', () => {
       status: 'PENDING',
       cancelledAt: null,
     });
+    txOrderFindFirst.mockReset().mockResolvedValue({
+      id: ORDER_ID,
+      orderNumber: 'ORD-0001',
+      status: 'PENDING',
+      cancelledAt: null,
+    });
     txOrderUpdateMany.mockReset().mockResolvedValue({ count: 1 });
     txOrderItemFindMany.mockReset().mockResolvedValue([]);
     notifyOrderCreated.mockReset().mockResolvedValue(undefined);
@@ -138,6 +152,7 @@ describe('OrdersService', () => {
               count: vi.fn(),
               findMany: vi.fn(),
               findUnique: vi.fn(),
+              findFirst: vi.fn(),
               update: vi.fn(),
             },
           },
@@ -1192,6 +1207,320 @@ describe('OrdersService', () => {
       await expect(
         service.update('00000000-0000-4000-8000-000000000000', {}, USER_ID),
       ).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  describe('customer-owned orders', () => {
+    const CUSTOMER_A = 'aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa';
+    const CUSTOMER_B = 'bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb';
+
+    const ownDto = (extra: Record<string, unknown> = {}) =>
+      ({
+        items: [{ productId: PRODUCT_A, quantity: 2 }],
+        recipientName: 'Jane Doe',
+        recipientPhone: '+201005551234',
+        shippingAddress: '12 Nile Street',
+        shippingCity: 'Cairo',
+        ...extra,
+      }) as never;
+
+    const customerRow = (customerId: string | null = CUSTOMER_A) => ({
+      id: ORDER_ID,
+      orderNumber: 'ORD-0001',
+      status: 'PENDING',
+      totalAmount: new Prisma.Decimal('3.98'),
+      recipientName: 'Jane Doe',
+      recipientPhone: '+201005551234',
+      shippingAddress: '12 Nile Street',
+      shippingCity: 'Cairo',
+      paymentMethod: 'COD',
+      createdAt: new Date('2026-10-23T12:00:00Z'),
+      cancelledAt: null,
+      customerId,
+      orderItems: [
+        {
+          productName: 'Ballpoint Pen',
+          sku: 'OFF-PEN-002',
+          quantity: 2,
+          unitPrice: new Prisma.Decimal('1.99'),
+          lineTotal: new Prisma.Decimal('3.98'),
+        },
+      ],
+    });
+
+    const CUSTOMER_KEYS = [
+      'cancelledAt',
+      'createdAt',
+      'id',
+      'items',
+      'orderNumber',
+      'paymentMethod',
+      'recipientName',
+      'recipientPhone',
+      'shippingAddress',
+      'shippingCity',
+      'status',
+      'totalAmount',
+    ];
+
+    it('createMine stamps ownership and recipient details from the token and drops client prices', async () => {
+      const result = await service.createMine(
+        ownDto({
+          items: [{ productId: PRODUCT_A, quantity: 2, unitPrice: 0.01 }],
+        }),
+        CUSTOMER_A,
+        'CUSTOMER',
+      );
+
+      expect(txOrderCreate).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          customerId: CUSTOMER_A,
+          createdById: CUSTOMER_A,
+          customerName: 'Jane Doe',
+          customerPhone: '+201005551234',
+          recipientName: 'Jane Doe',
+          recipientPhone: '+201005551234',
+          shippingAddress: '12 Nile Street',
+          shippingCity: 'Cairo',
+          notes: undefined,
+          status: OrderStatus.PENDING,
+        }),
+        select: expect.anything(),
+      });
+      // 2 × 1.99 — the client price is ignored.
+      expect(result.totalAmount).toBe(3.98);
+      expect(result.items[0]).toMatchObject({
+        productName: 'Ballpoint Pen',
+        sku: 'OFF-PEN-002',
+        quantity: 2,
+        unitPrice: 1.99,
+        lineTotal: 3.98,
+      });
+      expect(Object.keys(result).sort()).toEqual(CUSTOMER_KEYS);
+      expect(result).not.toHaveProperty('createdById');
+      expect(result).not.toHaveProperty('customerId');
+      expect(result).not.toHaveProperty('stockMovements');
+    });
+
+    it('createMine reuses the ONE Serializable transaction and SALE stock write', async () => {
+      await service.createMine(ownDto(), CUSTOMER_A, 'CUSTOMER');
+
+      expect($transaction).toHaveBeenCalledTimes(1);
+      expect($transaction.mock.calls[0][1]).toEqual({
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      });
+      expect(applyStockChange).toHaveBeenCalledWith(
+        tx,
+        PRODUCT_A,
+        -2,
+        StockMovementType.SALE,
+        null,
+        CUSTOMER_A,
+        'CUSTOMER',
+        { orderId: ORDER_ID },
+      );
+    });
+
+    it('createMine rejects duplicate product lines with 400 before any transaction', async () => {
+      await expect(
+        service.createMine(
+          ownDto({
+            items: [
+              { productId: PRODUCT_A, quantity: 1 },
+              { productId: PRODUCT_A, quantity: 2 },
+            ],
+          }),
+          CUSTOMER_A,
+          'CUSTOMER',
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
+
+      expect($transaction).not.toHaveBeenCalled();
+    });
+
+    it('createMine rejects inactive products with 422 (shared validation)', async () => {
+      txProductFindMany.mockResolvedValue([fact({ isActive: false })]);
+
+      await expect(
+        service.createMine(ownDto(), CUSTOMER_A, 'CUSTOMER'),
+      ).rejects.toBeInstanceOf(UnprocessableEntityException);
+      expect(txOrderCreate).not.toHaveBeenCalled();
+      expect(applyStockChange).not.toHaveBeenCalled();
+    });
+
+    it('findMine scopes by customerId, newest first and filters by status', async () => {
+      const prisma = (
+        service as unknown as {
+          prisma: {
+            order: {
+              count: ReturnType<typeof vi.fn>;
+              findMany: ReturnType<typeof vi.fn>;
+            };
+          };
+        }
+      ).prisma;
+      prisma.order.count.mockResolvedValue(1);
+      prisma.order.findMany.mockResolvedValue([customerRow()]);
+
+      const res = await service.findMine(
+        { page: 1, limit: 20, status: 'PENDING' },
+        CUSTOMER_A,
+      );
+
+      expect(prisma.order.count).toHaveBeenCalledWith({
+        where: { customerId: CUSTOMER_A, status: 'PENDING' },
+      });
+      expect(prisma.order.findMany).toHaveBeenCalledWith({
+        where: { customerId: CUSTOMER_A, status: 'PENDING' },
+        skip: 0,
+        take: 20,
+        orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+        select: expect.anything(),
+      });
+      expect(res.meta).toEqual({ page: 1, limit: 20, total: 1, totalPages: 1 });
+      expect(Object.keys(res.data[0]).sort()).toEqual(CUSTOMER_KEYS);
+      expect(res.data[0].totalAmount).toBe(3.98);
+      expect(res.data[0]).not.toHaveProperty('createdById');
+    });
+
+    it('findMineOne only reads an order owned by the caller (404 for a foreign id)', async () => {
+      const prisma = (
+        service as unknown as {
+          prisma: { order: { findFirst: ReturnType<typeof vi.fn> } };
+        }
+      ).prisma;
+      prisma.order.findFirst.mockResolvedValueOnce(customerRow(CUSTOMER_A));
+
+      const res = await service.findMineOne(ORDER_ID, CUSTOMER_A);
+      expect(prisma.order.findFirst).toHaveBeenCalledWith({
+        where: { id: ORDER_ID, customerId: CUSTOMER_A },
+        select: expect.anything(),
+      });
+      expect(Object.keys(res).sort()).toEqual(CUSTOMER_KEYS);
+
+      // Another customer's order is indistinguishable from a missing one.
+      prisma.order.findFirst.mockResolvedValueOnce(null);
+      await expect(
+        service.findMineOne(ORDER_ID, CUSTOMER_B),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('cancelMine restores stock exactly once for an owned PENDING order', async () => {
+      const updatedAt = new Date('2026-10-23T13:00:00Z');
+      txOrderFindUnique.mockResolvedValueOnce({
+        id: ORDER_ID,
+        orderNumber: 'ORD-0001',
+        status: OrderStatus.CANCELLED,
+        customerName: 'Jane Doe',
+        customerPhone: '+201005551234',
+        notes: null,
+        totalAmount: new Prisma.Decimal('3.98'),
+        customerId: CUSTOMER_A,
+        recipientName: 'Jane Doe',
+        recipientPhone: '+201005551234',
+        shippingAddress: '12 Nile Street',
+        shippingCity: 'Cairo',
+        paymentMethod: 'COD',
+        createdById: CUSTOMER_A,
+        cancelledAt: updatedAt,
+        createdAt: new Date('2026-10-23T12:00:00Z'),
+        updatedAt,
+      });
+      txOrderItemFindMany.mockResolvedValueOnce([
+        { productId: PRODUCT_A, quantity: 2 },
+      ]);
+
+      const res = await service.cancelMine(ORDER_ID, CUSTOMER_A, 'CUSTOMER');
+
+      expect(txOrderFindFirst).toHaveBeenCalledWith({
+        where: { id: ORDER_ID, customerId: CUSTOMER_A },
+        select: expect.anything(),
+      });
+      expect(txOrderUpdateMany).toHaveBeenCalledWith({
+        where: {
+          id: ORDER_ID,
+          status: OrderStatus.PENDING,
+          customerId: CUSTOMER_A,
+        },
+        data: {
+          status: OrderStatus.CANCELLED,
+          cancelledAt: expect.any(Date),
+        },
+      });
+      expect(applyStockChange).toHaveBeenCalledTimes(1);
+      expect(applyStockChange).toHaveBeenCalledWith(
+        tx,
+        PRODUCT_A,
+        2,
+        StockMovementType.RETURN,
+        'Cancelled order ORD-0001',
+        CUSTOMER_A,
+        'CUSTOMER',
+        { orderId: ORDER_ID, allowInactive: true },
+      );
+      expect(res.status).toBe(OrderStatus.CANCELLED);
+      expect(res.cancelledAt).toEqual(updatedAt);
+      expect(Object.keys(res).sort()).toEqual(CUSTOMER_KEYS);
+      expect(notifyOrderCancelled).toHaveBeenCalledTimes(1);
+    });
+
+    it('cancelMine answers 409 on a double cancel and never restores stock twice', async () => {
+      txOrderFindFirst.mockResolvedValueOnce({
+        id: ORDER_ID,
+        orderNumber: 'ORD-0001',
+        status: OrderStatus.CANCELLED,
+        cancelledAt: new Date('2026-10-23T13:00:00Z'),
+      });
+
+      await expect(
+        service.cancelMine(ORDER_ID, CUSTOMER_A, 'CUSTOMER'),
+      ).rejects.toBeInstanceOf(ConflictException);
+
+      expect(txOrderUpdateMany).not.toHaveBeenCalled();
+      expect(applyStockChange).not.toHaveBeenCalled();
+      expect(notifyOrderCancelled).not.toHaveBeenCalled();
+    });
+
+    it('cancelMine answers 404 for another customer’s order and writes nothing', async () => {
+      txOrderFindFirst.mockResolvedValueOnce(null);
+
+      await expect(
+        service.cancelMine(ORDER_ID, CUSTOMER_B, 'CUSTOMER'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+
+      expect(txOrderFindFirst).toHaveBeenCalledWith({
+        where: { id: ORDER_ID, customerId: CUSTOMER_B },
+        select: expect.anything(),
+      });
+      expect(txOrderUpdateMany).not.toHaveBeenCalled();
+      expect(applyStockChange).not.toHaveBeenCalled();
+    });
+
+    it('cancelMine keeps the concurrent backstop (409, no restore)', async () => {
+      txOrderUpdateMany.mockResolvedValueOnce({ count: 0 });
+
+      await expect(
+        service.cancelMine(ORDER_ID, CUSTOMER_A, 'CUSTOMER'),
+      ).rejects.toBeInstanceOf(ConflictException);
+
+      expect(applyStockChange).not.toHaveBeenCalled();
+    });
+
+    it('createMine retries a P2034 conflict once, preserving concurrency safety', async () => {
+      const conflict = new PrismaClientKnownRequestError('write conflict', {
+        code: 'P2034',
+        clientVersion: 'test',
+      });
+      $transaction
+        .mockReset()
+        .mockRejectedValueOnce(conflict)
+        .mockImplementation((fn: (t: typeof tx) => unknown) => fn(tx));
+
+      await expect(
+        service.createMine(ownDto(), CUSTOMER_A, 'CUSTOMER'),
+      ).resolves.toBeDefined();
+      expect($transaction).toHaveBeenCalledTimes(2);
+      expect(applyStockChange).toHaveBeenCalledTimes(1);
     });
   });
 });

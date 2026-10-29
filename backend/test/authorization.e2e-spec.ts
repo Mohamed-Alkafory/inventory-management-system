@@ -25,11 +25,15 @@ import { PERMISSIONS_KEY } from '../src/auth/decorators/require-permission.decor
 
 const ADMIN_ID = '11111111-1111-4111-8111-111111111111';
 const STAFF_ID = '22222222-2222-4222-8222-222222222222';
+const SUPPORT_ID = '33333333-3333-4333-8333-333333333333';
+const CUSTOMER_ID = '44444444-4444-4444-8444-444444444444';
 
 function createFakePrisma() {
   const users = [
     { id: ADMIN_ID, role: 'ADMIN', isActive: true },
     { id: STAFF_ID, role: 'STAFF', isActive: true },
+    { id: SUPPORT_ID, role: 'SUPPORT', isActive: true },
+    { id: CUSTOMER_ID, role: 'CUSTOMER', isActive: true },
   ];
 
   return {
@@ -44,12 +48,30 @@ function createFakePrisma() {
         return row ? { ...row } : null;
       },
     },
+    // Only reached by SUPPORT/CUSTOMER read routes that pass the guard;
+    // writes and other modules are never expected to run in this suite.
+    order: {
+      async count() {
+        return 0;
+      },
+      async findMany() {
+        return [];
+      },
+      async findFirst() {
+        return null;
+      },
+      async findUnique() {
+        return null;
+      },
+    },
   };
 }
 
 describe('Authorization (e2e)', () => {
   let app: INestApplication;
   let staffToken: string;
+  let supportToken: string;
+  let customerToken: string;
 
   beforeAll(async () => {
     const moduleFixture = await Test.createTestingModule({
@@ -76,6 +98,8 @@ describe('Authorization (e2e)', () => {
 
     const jwt = app.get(JwtService);
     staffToken = await jwt.signAsync({ sub: STAFF_ID, role: 'STAFF' });
+    supportToken = await jwt.signAsync({ sub: SUPPORT_ID, role: 'SUPPORT' });
+    customerToken = await jwt.signAsync({ sub: CUSTOMER_ID, role: 'CUSTOMER' });
   });
 
   afterAll(async () => {
@@ -182,6 +206,75 @@ describe('Authorization (e2e)', () => {
       });
       expect(res.body.message).toBe('Insufficient permissions');
       expect(res.body.timestamp).toEqual(expect.any(String));
+    });
+  });
+
+  describe('CUSTOMER is forbidden on staff order surfaces (403)', () => {
+    it.each([
+      ['post', '/api/v1/orders'],
+      ['get', '/api/v1/orders'],
+      ['get', '/api/v1/orders/22222222-2222-4222-8222-222222222222'],
+      ['patch', '/api/v1/orders/22222222-2222-4222-8222-222222222222'],
+      [
+        'patch',
+        '/api/v1/orders/22222222-2222-4222-8222-222222222222/status',
+      ],
+    ] as const)('%s %s', async (method, path) => {
+      await request(app.getHttpServer())
+        [method](path)
+        .set('Authorization', `Bearer ${customerToken}`)
+        .expect(403);
+    });
+
+    it('can list its own orders (guard passes; empty fixture)', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/api/v1/orders/mine')
+        .set('Authorization', `Bearer ${customerToken}`)
+        .expect(200);
+
+      expect(res.body).toEqual({
+        data: [],
+        meta: { page: 1, limit: 20, total: 0, totalPages: 0 },
+      });
+    });
+
+    it('gets 404 (not 403) for an unknown own-order id', async () => {
+      await request(app.getHttpServer())
+        .get('/api/v1/orders/mine/22222222-2222-4222-8222-222222222222')
+        .set('Authorization', `Bearer ${customerToken}`)
+        .expect(404);
+    });
+  });
+
+  describe('SUPPORT can read every order but cannot confirm or cancel', () => {
+    it('lists all orders (200)', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/api/v1/orders')
+        .set('Authorization', `Bearer ${supportToken}`)
+        .expect(200);
+
+      expect(res.body.meta).toMatchObject({ page: 1, limit: 20, total: 0 });
+    });
+
+    it('gets 404 (not 403) for a missing order detail', async () => {
+      await request(app.getHttpServer())
+        .get('/api/v1/orders/22222222-2222-4222-8222-222222222222')
+        .set('Authorization', `Bearer ${supportToken}`)
+        .expect(404);
+    });
+
+    it.each([
+      [
+        'patch',
+        '/api/v1/orders/22222222-2222-4222-8222-222222222222/status',
+      ],
+      ['patch', '/api/v1/orders/22222222-2222-4222-8222-222222222222'],
+      ['post', '/api/v1/orders'],
+    ] as const)('%s %s is forbidden', async (method, path) => {
+      await request(app.getHttpServer())
+        [method](path)
+        .set('Authorization', `Bearer ${supportToken}`)
+        .expect(403);
     });
   });
 });
