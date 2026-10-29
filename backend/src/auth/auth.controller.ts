@@ -90,7 +90,7 @@ export class AuthController {
     return this.authService.login(loginDto);
   }
 
-  /** Public sign-up (creates a STAFF account). Stricter rate limit than the global one. */
+  /** Public sign-up (always creates a CUSTOMER account). Stricter rate limit. */
   @Public()
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post('register')

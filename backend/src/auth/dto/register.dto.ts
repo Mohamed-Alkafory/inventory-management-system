@@ -1,6 +1,6 @@
 import { IsByteLength, IsEmail, IsString, MaxLength, MinLength } from 'class-validator';
 
-/** POST /auth/register — public self-registration. The new account is always STAFF. */
+/** POST /auth/register — public self-registration. The new account is always CUSTOMER. */
 export class RegisterDto {
   @IsString()
   @MinLength(2)

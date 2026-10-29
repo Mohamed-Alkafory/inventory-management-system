@@ -349,6 +349,41 @@ describe('Auth & Users (e2e)', () => {
     });
   });
 
+  describe('POST /auth/register', () => {
+    it('always creates a CUSTOMER account', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/api/v1/auth/register')
+        .send({
+          name: 'New Customer',
+          email: 'newcustomer@example.com',
+          password: 'Customer123!',
+        })
+        .expect(201);
+
+      expect(res.body.user.role).toBe('CUSTOMER');
+      const stored = db.users.find(
+        (u) => u['email'] === 'newcustomer@example.com',
+      );
+      expect(stored?.role).toBe('CUSTOMER');
+    });
+
+    it('rejects a client-supplied role with 400 and creates nothing', async () => {
+      await request(app.getHttpServer())
+        .post('/api/v1/auth/register')
+        .send({
+          name: 'Sneaky Admin',
+          email: 'sneaky@example.com',
+          password: 'Sneaky123!',
+          role: 'ADMIN',
+        })
+        .expect(400);
+
+      expect(
+        db.users.find((u) => u['email'] === 'sneaky@example.com'),
+      ).toBeUndefined();
+    });
+  });
+
   describe('refresh & logout', () => {
     it('rotates a valid refresh token and rejects the old one', async () => {
       const first = await loginAs('admin@example.com', 'Admin123!');
@@ -473,6 +508,40 @@ describe('Auth & Users (e2e)', () => {
       await loginAs('created@example.com', 'Created123!');
     });
 
+    it.each(['ADMIN', 'STAFF', 'SUPPORT', 'CUSTOMER'] as const)(
+      'lets an admin create a %s user',
+      async (role) => {
+        const email = `${role.toLowerCase()}-created@example.com`;
+
+        const res = await request(app.getHttpServer())
+          .post('/api/v1/users')
+          .set('Authorization', `Bearer ${adminToken}`)
+          .send({
+            name: `${role} User`,
+            email,
+            password: 'Created123!',
+            role,
+          })
+          .expect(201);
+
+        expect(res.body.role).toBe(role);
+        expect(db.users.find((u) => u['email'] === email)?.role).toBe(role);
+      },
+    );
+
+    it('rejects an unknown role with 400', async () => {
+      await request(app.getHttpServer())
+        .post('/api/v1/users')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Nope',
+          email: 'nope-role@example.com',
+          password: 'Whatever123!',
+          role: 'OWNER',
+        })
+        .expect(400);
+    });
+
     it('rejects a duplicate email with 409', async () => {
       await request(app.getHttpServer())
         .post('/api/v1/users')
@@ -538,11 +607,88 @@ describe('Auth & Users (e2e)', () => {
       expect(staff).toBeDefined();
     });
 
-    it('rejects self-deactivation with 422', async () => {
+    it('forbids STAFF from updating or deactivating users (403)', async () => {
+      await request(app.getHttpServer())
+        .patch('/api/v1/users/11111111-1111-4111-8111-111111111111')
+        .set('Authorization', `Bearer ${staffToken}`)
+        .send({ name: 'Nope' })
+        .expect(403);
+
+      await request(app.getHttpServer())
+        .delete('/api/v1/users/11111111-1111-4111-8111-111111111111')
+        .set('Authorization', `Bearer ${staffToken}`)
+        .expect(403);
+    });
+
+    it('revokes refresh tokens when an admin changes a role', async () => {
+      const login = await loginAs('staff@example.com', 'Staff123!');
+
+      await request(app.getHttpServer())
+        .patch('/api/v1/users/22222222-2222-4222-8222-222222222222')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ role: 'SUPPORT' })
+        .expect(200);
+
+      await request(app.getHttpServer())
+        .post('/api/v1/auth/refresh')
+        .send({ refreshToken: login.refreshToken })
+        .expect(401);
+    });
+
+    it('revokes refresh tokens when an admin deactivates an account', async () => {
+      const login = await loginAs('staff@example.com', 'Staff123!');
+
+      await request(app.getHttpServer())
+        .delete('/api/v1/users/22222222-2222-4222-8222-222222222222')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(204);
+
+      await request(app.getHttpServer())
+        .post('/api/v1/auth/refresh')
+        .send({ refreshToken: login.refreshToken })
+        .expect(401);
+    });
+
+    it('rejects self-deactivation of the last active admin with 409', async () => {
+      const res = await request(app.getHttpServer())
+        .delete('/api/v1/auth/me')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(409);
+
+      expect(res.body.message).toBe('At least one active ADMIN must remain');
+      expect(
+        db.users.find(
+          (u) => u['id'] === '11111111-1111-4111-8111-111111111111',
+        )?.isActive,
+      ).toBe(true);
+    });
+
+    it('rejects self-deactivation with 422 when another admin exists', async () => {
+      await request(app.getHttpServer())
+        .post('/api/v1/users')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Second Admin',
+          email: 'second-admin@example.com',
+          password: 'Second123!',
+          role: 'ADMIN',
+        })
+        .expect(201);
+
       await request(app.getHttpServer())
         .delete('/api/v1/users/11111111-1111-4111-8111-111111111111')
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(422);
+    });
+
+    it('rejects demoting the last active admin with 409', async () => {
+      const res = await request(app.getHttpServer())
+        .patch('/api/v1/users/11111111-1111-4111-8111-111111111111')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ role: 'STAFF' })
+        .expect(409);
+
+      expect(res.body.message).toBe('At least one active ADMIN must remain');
     });
   });
 

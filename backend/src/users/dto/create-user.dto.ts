@@ -6,6 +6,7 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
 import { UserRole } from '../../generated/prisma/enums.js';
 
 export class CreateUserDto {
@@ -24,6 +25,11 @@ export class CreateUserDto {
   @IsByteLength(8, 72)
   password!: string;
 
+  @ApiProperty({
+    enum: UserRole,
+    example: UserRole.STAFF,
+    description: 'ADMIN, STAFF, SUPPORT or CUSTOMER (requires users.manage)',
+  })
   @IsEnum(UserRole)
   role!: UserRole;
 }

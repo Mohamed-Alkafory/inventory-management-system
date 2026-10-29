@@ -19,6 +19,7 @@ describe('AuthService', () => {
   let service: AuthService;
 
   const userFindUnique = vi.fn();
+  const userCount = vi.fn();
   const userUpdate = vi.fn();
   const userCreate = vi.fn();
   const refreshTokenCreate = vi.fn();
@@ -61,6 +62,7 @@ describe('AuthService', () => {
 
   beforeEach(async () => {
     userFindUnique.mockReset();
+    userCount.mockReset();
     userUpdate.mockReset();
     userCreate.mockReset();
     refreshTokenCreate.mockReset();
@@ -74,13 +76,14 @@ describe('AuthService', () => {
     refreshTokenCreate.mockResolvedValue({});
     refreshTokenUpdate.mockResolvedValue({});
     refreshTokenUpdateMany.mockResolvedValue({ count: 1 });
+    userCount.mockResolvedValue(1);
     userUpdate.mockImplementation(
       ({ data }: { data: Record<string, unknown> }) =>
         Promise.resolve(publicAdmin(data)),
     );
 
     const tx = {
-      user: { findUnique: userFindUnique, update: userUpdate },
+      user: { findUnique: userFindUnique, count: userCount, update: userUpdate },
       refreshToken: {
         create: refreshTokenCreate,
         updateMany: refreshTokenUpdateMany,
@@ -100,6 +103,7 @@ describe('AuthService', () => {
           useValue: {
             user: {
               findUnique: userFindUnique,
+              count: userCount,
               update: userUpdate,
               create: userCreate,
             },
@@ -315,12 +319,12 @@ describe('AuthService', () => {
 
   describe('register', () => {
     const dto = {
-      name: 'New Staff',
-      email: 'staff@example.com',
-      password: 'Staff123!',
+      name: 'New Customer',
+      email: 'customer@example.com',
+      password: 'Customer123!',
     };
 
-    it('creates a STAFF account (hashed password) and signs it in', async () => {
+    it('always creates a CUSTOMER account (hashed password) and signs it in', async () => {
       userFindUnique.mockResolvedValue(null);
       userCreate.mockImplementation(
         ({ data }: { data: Record<string, string> }) =>
@@ -336,15 +340,15 @@ describe('AuthService', () => {
       const result = await service.register(dto);
 
       const data = userCreate.mock.calls[0][0].data;
-      expect(data.role).toBe('STAFF');
+      expect(data.role).toBe('CUSTOMER');
       expect(data.passwordHash).not.toBe(dto.password);
       await expect(bcrypt.compare(dto.password, data.passwordHash)).resolves.toBe(true);
       expect(result.user).toEqual({
         id: '22222222-2222-4222-8222-222222222222',
-        name: 'New Staff',
-        email: 'staff@example.com',
+        name: 'New Customer',
+        email: 'customer@example.com',
         avatarUrl: null,
-        role: 'STAFF',
+        role: 'CUSTOMER',
       });
       expect(result.accessToken).toBe('signed-access-token');
       expect(typeof result.refreshToken).toBe('string');
@@ -552,6 +556,50 @@ describe('AuthService', () => {
 
       expect(userUpdate).not.toHaveBeenCalled();
       expect(refreshTokenUpdateMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('deactivate', () => {
+    it('deactivates the account, revokes refresh tokens and audits it', async () => {
+      userFindUnique.mockResolvedValue(adminRow());
+      userUpdate.mockResolvedValue({});
+      userCount.mockResolvedValue(1);
+
+      await expect(service.deactivate(adminRow().id)).resolves.toBeUndefined();
+
+      expect(userUpdate).toHaveBeenCalledWith({
+        where: { id: adminRow().id },
+        data: { isActive: false },
+        select: { id: true },
+      });
+      expect(refreshTokenUpdateMany).toHaveBeenCalledWith({
+        where: { userId: adminRow().id, revokedAt: null },
+        data: { revokedAt: expect.any(Date) },
+      });
+      expect(auditLog).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'user.deactivated' }),
+        expect.anything(),
+      );
+    });
+
+    it('rejects deactivating the last active admin with 409', async () => {
+      userFindUnique.mockResolvedValue(adminRow());
+      userCount.mockResolvedValue(0);
+
+      await expect(service.deactivate(adminRow().id)).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+      expect(userUpdate).not.toHaveBeenCalled();
+      expect(refreshTokenUpdateMany).not.toHaveBeenCalled();
+    });
+
+    it('is idempotent for an already deactivated account', async () => {
+      userFindUnique.mockResolvedValue({ ...adminRow(), isActive: false });
+
+      await expect(service.deactivate(adminRow().id)).resolves.toBeUndefined();
+
+      expect(userCount).not.toHaveBeenCalled();
+      expect(userUpdate).not.toHaveBeenCalled();
     });
   });
 });

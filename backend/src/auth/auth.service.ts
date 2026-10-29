@@ -87,9 +87,10 @@ export class AuthService {
   }
 
   /**
-   * Public self-registration. Always creates a STAFF account (ADMIN accounts are
-   * created by an admin through POST /users) and signs it in, so the response
-   * has the same shape as `login`.
+   * Public self-registration. Always creates a CUSTOMER account (privileged
+   * roles are created by an admin through POST /users) and signs it in, so the
+   * response has the same shape as `login`. `RegisterDto` has no `role` field;
+   * the global whitelist pipe rejects one with 400.
    */
   async register(registerDto: RegisterDto) {
     const existing = await this.prisma.user.findUnique({
@@ -110,7 +111,7 @@ export class AuthService {
         name: registerDto.name,
         email: registerDto.email,
         passwordHash,
-        role: 'STAFF',
+        role: 'CUSTOMER',
       },
       select: {
         id: true,
@@ -231,7 +232,8 @@ export class AuthService {
   /**
    * `DELETE /auth/me` — self-deactivation. Deactivates the account and
    * revokes every active refresh token in ONE transaction, so the signed-in
-   * session (and any other device) is invalid at once. Idempotent: an
+   * session (and any other device) is invalid at once. The last active ADMIN
+   * is refused with 409. Idempotent: an
    * already-deactivated account still ends in 204 — the response never
    * leaks whether the account existed. Reactivation is ADMIN-only
    * (`PATCH /users/:id`), exactly like the admin `DELETE /users/:id` flow.
@@ -245,6 +247,16 @@ export class AuthService {
 
       if (!user || !user.isActive) {
         return; // already gone or deactivated — nothing to do, still 204
+      }
+
+      // The last active ADMIN cannot leave the system without an admin.
+      if (user.role === 'ADMIN') {
+        const otherActiveAdmins = await tx.user.count({
+          where: { role: 'ADMIN', isActive: true, id: { not: userId } },
+        });
+        if (otherActiveAdmins === 0) {
+          throw new ConflictException('At least one active ADMIN must remain');
+        }
       }
 
       await tx.user.update({

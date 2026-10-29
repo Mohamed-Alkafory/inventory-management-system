@@ -22,6 +22,7 @@ describe('UsersService', () => {
   const userCount = vi.fn();
   const userCreate = vi.fn();
   const userUpdate = vi.fn();
+  const refreshTokenUpdateMany = vi.fn();
   const $transactionWithOptions = vi.fn();
   const imageSave = vi.fn();
   const imageDelete = vi.fn();
@@ -46,6 +47,7 @@ describe('UsersService', () => {
     userCount.mockReset();
     userCreate.mockReset();
     userUpdate.mockReset();
+    refreshTokenUpdateMany.mockReset();
     $transactionWithOptions.mockReset();
     imageSave.mockReset();
     imageDelete.mockReset();
@@ -53,6 +55,7 @@ describe('UsersService', () => {
     userFindMany.mockResolvedValue([]);
     userCount.mockResolvedValue(0);
     userUpdate.mockResolvedValue(adminRow());
+    refreshTokenUpdateMany.mockResolvedValue({ count: 2 });
     // The serializable last-admin guard runs its count + write through the
     // transaction client; reuse the same mocks as the transaction client.
     $transactionWithOptions.mockImplementation(
@@ -62,10 +65,12 @@ describe('UsersService', () => {
             count: typeof userCount;
             update: typeof userUpdate;
           };
+          refreshToken: { updateMany: typeof refreshTokenUpdateMany };
         }) => Promise<unknown>,
       ) =>
         fn({
           user: { count: userCount, update: userUpdate },
+          refreshToken: { updateMany: refreshTokenUpdateMany },
         }),
     );
 
@@ -246,6 +251,7 @@ describe('UsersService', () => {
 
     it('rejects an admin changing their own role (422)', async () => {
       userFindUnique.mockResolvedValue(adminRow());
+      userCount.mockResolvedValue(1); // another active admin still exists
 
       await expect(
         service.update(ADMIN_ID, { role: 'STAFF' }, ADMIN_ID),
@@ -253,8 +259,19 @@ describe('UsersService', () => {
       expect(userUpdate).not.toHaveBeenCalled();
     });
 
+    it('rejects a last-admin self-demotion with 409', async () => {
+      userFindUnique.mockResolvedValue(adminRow());
+      userCount.mockResolvedValue(0);
+
+      await expect(
+        service.update(ADMIN_ID, { role: 'STAFF' }, ADMIN_ID),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(userUpdate).not.toHaveBeenCalled();
+    });
+
     it('rejects an admin deactivating themselves (422)', async () => {
       userFindUnique.mockResolvedValue(adminRow());
+      userCount.mockResolvedValue(1); // another active admin still exists
 
       await expect(
         service.update(ADMIN_ID, { isActive: false }, ADMIN_ID),
@@ -262,13 +279,23 @@ describe('UsersService', () => {
       expect(userUpdate).not.toHaveBeenCalled();
     });
 
-    it('rejects demoting the last active admin (422)', async () => {
+    it('rejects a last-admin self-deactivation with 409', async () => {
+      userFindUnique.mockResolvedValue(adminRow());
+      userCount.mockResolvedValue(0);
+
+      await expect(
+        service.update(ADMIN_ID, { isActive: false }, ADMIN_ID),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(userUpdate).not.toHaveBeenCalled();
+    });
+
+    it('rejects demoting the last active admin (409)', async () => {
       userFindUnique.mockResolvedValue(adminRow());
       userCount.mockResolvedValue(0);
 
       await expect(
         service.update(ADMIN_ID, { role: 'STAFF' }, STAFF_ID),
-      ).rejects.toBeInstanceOf(UnprocessableEntityException);
+      ).rejects.toBeInstanceOf(ConflictException);
       // The count and the write share one serializable transaction.
       expect($transactionWithOptions).toHaveBeenCalledWith(
         expect.any(Function),
@@ -278,6 +305,59 @@ describe('UsersService', () => {
         where: { role: 'ADMIN', isActive: true, id: { not: ADMIN_ID } },
       });
       expect(userUpdate).not.toHaveBeenCalled();
+    });
+
+    it('revokes every active refresh token when the role changes', async () => {
+      userFindUnique.mockResolvedValue({
+        ...adminRow(),
+        id: STAFF_ID,
+        role: 'STAFF' as const,
+        email: 'staff@example.com',
+      });
+      userUpdate.mockResolvedValue({
+        ...adminRow(),
+        id: STAFF_ID,
+        role: 'SUPPORT' as const,
+      });
+
+      await service.update(STAFF_ID, { role: 'SUPPORT' }, ADMIN_ID);
+
+      expect(refreshTokenUpdateMany).toHaveBeenCalledWith({
+        where: { userId: STAFF_ID, revokedAt: null },
+        data: { revokedAt: expect.any(Date) },
+      });
+    });
+
+    it('does not revoke refresh tokens when the role is unchanged', async () => {
+      userFindUnique.mockResolvedValue({
+        ...adminRow(),
+        id: STAFF_ID,
+        role: 'STAFF' as const,
+      });
+
+      await service.update(STAFF_ID, { role: 'STAFF' }, ADMIN_ID);
+
+      expect(refreshTokenUpdateMany).not.toHaveBeenCalled();
+    });
+
+    it('revokes every active refresh token when the account is deactivated', async () => {
+      userFindUnique.mockResolvedValue({
+        ...adminRow(),
+        id: STAFF_ID,
+        role: 'STAFF' as const,
+      });
+      userUpdate.mockResolvedValue({
+        ...adminRow(),
+        id: STAFF_ID,
+        isActive: false,
+      });
+
+      await service.update(STAFF_ID, { isActive: false }, ADMIN_ID);
+
+      expect(refreshTokenUpdateMany).toHaveBeenCalledWith({
+        where: { userId: STAFF_ID, revokedAt: null },
+        data: { revokedAt: expect.any(Date) },
+      });
     });
 
     it('retries once on a P2034 write conflict and still applies the update', async () => {
@@ -294,6 +374,7 @@ describe('UsersService', () => {
         .mockImplementationOnce(async (fn: (tx: unknown) => Promise<unknown>) =>
           fn({
             user: { count: userCount, update: userUpdate },
+            refreshToken: { updateMany: refreshTokenUpdateMany },
           }),
         );
 
@@ -449,6 +530,7 @@ describe('UsersService', () => {
 
     it('rejects self-deactivation (422)', async () => {
       userFindUnique.mockResolvedValue(adminRow());
+      userCount.mockResolvedValue(1); // another active admin still exists
 
       await expect(
         service.deactivate(ADMIN_ID, ADMIN_ID),
@@ -456,14 +538,41 @@ describe('UsersService', () => {
       expect(userUpdate).not.toHaveBeenCalled();
     });
 
-    it('rejects deactivating the last active admin (422)', async () => {
+    it('rejects last-admin self-deactivation with 409', async () => {
+      userFindUnique.mockResolvedValue(adminRow());
+      userCount.mockResolvedValue(0);
+
+      await expect(
+        service.deactivate(ADMIN_ID, ADMIN_ID),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(userUpdate).not.toHaveBeenCalled();
+    });
+
+    it('rejects deactivating the last active admin (409)', async () => {
       userFindUnique.mockResolvedValue(adminRow());
       userCount.mockResolvedValue(0);
 
       await expect(
         service.deactivate(ADMIN_ID, STAFF_ID),
-      ).rejects.toBeInstanceOf(UnprocessableEntityException);
+      ).rejects.toBeInstanceOf(ConflictException);
       expect(userUpdate).not.toHaveBeenCalled();
+    });
+
+    it('revokes every active refresh token when deactivating', async () => {
+      userFindUnique.mockResolvedValue({
+        ...adminRow(),
+        id: STAFF_ID,
+        role: 'STAFF' as const,
+        email: 'staff@example.com',
+      });
+      userUpdate.mockResolvedValue({});
+
+      await service.deactivate(STAFF_ID, ADMIN_ID);
+
+      expect(refreshTokenUpdateMany).toHaveBeenCalledWith({
+        where: { userId: STAFF_ID, revokedAt: null },
+        data: { revokedAt: expect.any(Date) },
+      });
     });
 
     it('allows deactivating an admin when another active admin remains', async () => {
