@@ -1,3 +1,4 @@
+import { can } from "../../lib/permissions";
 import type { Role } from "../../types/auth";
 import type { OrderAction, OrderStatus } from "./types";
 
@@ -35,19 +36,16 @@ export const ACTION_RULES: Record<OrderAction, { to: OrderStatus; label: string 
  * actions from the status alone.
  */
 export function getOrderActions(role: Role | null | undefined, order: { status: OrderStatus }): OrderAction[] {
-  if (!role) return [];
+  const actions: OrderAction[] = [];
 
-  switch (role) {
-    case "CUSTOMER":
-    case "SUPPORT":
-      return order.status === "PENDING" ? ["cancel"] : [];
-    case "STAFF":
-    case "ADMIN":
-      return [
-        ...(order.status === "PENDING" ? (["confirm"] as const) : []),
-        ...(order.status === "PENDING" || order.status === "CONFIRMED" ? (["cancel"] as const) : []),
-      ];
-    default:
-      return [];
+  if (order.status === "PENDING" && can(role, "orders.confirm")) actions.push("confirm");
+  if (
+    order.status === "PENDING" &&
+    (can(role, "orders.cancelPending") || can(role, "orders.cancelOwn"))
+  ) {
+    actions.push("cancel");
   }
+  if (order.status === "CONFIRMED" && can(role, "orders.cancelConfirmed")) actions.push("cancel");
+
+  return actions;
 }

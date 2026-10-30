@@ -1,14 +1,11 @@
 import { request } from "../../../lib/http";
+import { USE_MOCK } from "../../../lib/env";
 import { normalizeStaffOrder } from "../normalize";
 import { mockOrderBuilderApi } from "./mockApi";
 import type { CreateOrderInput, OrderBuilderApi, PickerProduct } from "./types";
 
-/**
- * ► CONNECTING THE REAL API
- *   When the backend is merged, set  VITE_USE_MOCK_API=false  in your .env
- *   (the same switch the other pages use). Nothing else changes.
- */
-export const USE_MOCK = import.meta.env?.VITE_USE_MOCK_API !== "false";
+/** One switch for the whole app: the shared `VITE_USE_MOCK` flag (lib/env). */
+export { USE_MOCK };
 
 type Obj = Record<string, unknown>;
 const isObject = (v: unknown): v is Obj => typeof v === "object" && v !== null;
@@ -48,7 +45,8 @@ function unwrapList(body: unknown): unknown[] {
 
 export const realOrderBuilderApi: OrderBuilderApi = {
   async searchProducts(search) {
-    const q = new URLSearchParams({ page: "1", pageSize: "20" });
+    // The backend takes `limit`, not `pageSize`; unknown params are rejected.
+    const q = new URLSearchParams({ page: "1", limit: "20" });
     if (search.trim()) q.set("search", search.trim());
     return unwrapList(await request<unknown>(`/products?${q}`))
       .map(normalizeProduct)
@@ -56,12 +54,16 @@ export const realOrderBuilderApi: OrderBuilderApi = {
       .slice(0, 10);
   },
 
-  /** If your API expects another body shape or route, change only this method. */
+  /** POST /orders takes flat customer fields; prices/status are server-side. */
   async createOrder(input: CreateOrderInput) {
+    const customerName = input.customer.name.trim();
+    const customerPhone = input.customer.phone.trim();
+    const notes = input.notes.trim();
     const body = {
-      customer: input.customer,
-      ...(input.notes ? { notes: input.notes } : {}),
       items: input.items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
+      ...(customerName ? { customerName } : {}),
+      ...(customerPhone ? { customerPhone } : {}),
+      ...(notes ? { notes } : {}),
     };
     const resp = await request<unknown>("/orders", { method: "POST", body: JSON.stringify(body) });
     const order = isObject(resp) && isObject(resp.data) ? resp.data : resp; // some APIs wrap the result in { data }

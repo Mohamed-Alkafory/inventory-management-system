@@ -1,5 +1,6 @@
 export const PO_PATH = "/admin/purchase-orders";
-export const poPath = (id: string | number) => `${PO_PATH}/${id}`;
+export const STAFF_PO_PATH = "/staff/purchase-orders";
+export const poPath = (id: string | number, basePath = PO_PATH) => `${basePath}/${id}`;
 
 const CURRENCY = "USD";
 const money = new Intl.NumberFormat(undefined, { style: "currency", currency: CURRENCY });

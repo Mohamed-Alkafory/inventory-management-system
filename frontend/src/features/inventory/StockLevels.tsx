@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { ArrowUpDown, History, PackagePlus, Search } from "lucide-react";
 import Pagination from "../../components/ui/Pagination";
 import RowActionsMenu from "../../components/ui/RowActionsMenu";
+import { useAuth } from "../../context/auth/useAuth";
+import { can } from "../../lib/permissions";
 import { useDebouncedValue } from "../../lib/useDebouncedValue";
 import { resolveImageUrl } from "../../lib/imageUrl";
 import AdjustStockDialog from "./AdjustStockDialog";
@@ -19,6 +21,9 @@ const control =
 
 export default function StockLevels() {
   const navigate = useNavigate();
+  const { role } = useAuth();
+  const canAdjust = can(role, "stock.adjust");
+  const canReorder = can(role, "po.create");
   const [searchInput, setSearchInput] = useState("");
   const search = useDebouncedValue(searchInput, 300);
   const [categoryId, setCategoryId] = useState("");
@@ -146,11 +151,14 @@ export default function StockLevels() {
                         <RowActionsMenu
                           label={`Actions for ${i.name}`}
                           actions={[
-                            { label: "Adjust stock", icon: ArrowUpDown, onSelect: () => setAdjusting(i) },
+                            ...(canAdjust
+                              ? [{ label: "Adjust stock", icon: ArrowUpDown, onSelect: () => setAdjusting(i) }]
+                              : []),
                             { label: "View history", icon: History, onSelect: () => setHistory(i) },
                             // Reorder only makes sense when the stock ran low — it opens
-                            // a purchase-order draft with this product pre-filled.
-                            ...(i.status === "low_stock" || i.status === "out_of_stock"
+                            // a purchase-order draft with this product pre-filled. Only
+                            // roles that may create POs (ADMIN) see it.
+                            ...(canReorder && (i.status === "low_stock" || i.status === "out_of_stock")
                               ? [
                                   {
                                     label: "Reorder from supplier",

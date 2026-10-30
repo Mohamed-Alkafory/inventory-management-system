@@ -6,7 +6,7 @@ import RowActionsMenu from "../../components/ui/RowActionsMenu";
 import type { MenuAction } from "../../components/ui/RowActionsMenu";
 import { useAuth } from "../../context/auth/useAuth";
 import { useDebouncedValue } from "../../lib/useDebouncedValue";
-import { formatDate, formatMoney, formatNumber, orderPath } from "./format";
+import { ORDERS_PATH, formatDate, formatMoney, formatNumber, orderPath } from "./format";
 import { useMyOrders, useOrders } from "./hooks";
 import OrderActionDialog from "./OrderActionDialog";
 import type { ActionTarget } from "./OrderActionDialog";
@@ -40,7 +40,7 @@ const customerLabel = (order: Row, scope: OrderScope) =>
  * Actions always come from getOrderActions(role, order); the list never
  * derives them from the status alone.
  */
-export default function OrdersList({ scope = "staff" }: { scope?: OrderScope }) {
+export default function OrdersList({ scope = "staff", basePath = ORDERS_PATH }: { scope?: OrderScope; basePath?: string }) {
   const navigate = useNavigate();
   const { role } = useAuth();
   const [searchInput, setSearchInput] = useState("");
@@ -79,7 +79,7 @@ export default function OrdersList({ scope = "staff" }: { scope?: OrderScope }) 
       customerName: scope === "staff" ? (order as StaffOrder).customerName : undefined,
     };
     return [
-      { label: "View details", icon: Eye, onSelect: () => navigate(orderPath(order.id)) },
+      { label: "View details", icon: Eye, onSelect: () => navigate(orderPath(order.id, basePath)) },
       ...(allowed.includes("confirm")
         ? [{ label: "Confirm order", icon: CheckCircle2, onSelect: () => setTarget({ action: "confirm" as const, scope, order: ref }) }]
         : []),
@@ -202,7 +202,7 @@ export default function OrdersList({ scope = "staff" }: { scope?: OrderScope }) 
                 {orders.map((o) => (
                   <tr key={o.id}>
                     <td className="px-4 py-3">
-                      <Link to={orderPath(o.id)} className="font-semibold text-[#111827] hover:text-[#FF5615] hover:underline">
+                      <Link to={orderPath(o.id, basePath)} className="font-semibold text-[#111827] hover:text-[#FF5615] hover:underline">
                         {formatNumber(o.orderNumber)}
                       </Link>
                     </td>

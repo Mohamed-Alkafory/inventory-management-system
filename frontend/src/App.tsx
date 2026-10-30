@@ -1,4 +1,4 @@
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import AdminLayout from "./admin/layouts/AdminLayout";
 import AdminDashboard from "./admin/pages/Dashboard/AdminDashboard";
 import AdminProducts from "./admin/pages/Products/AdminProducts";
@@ -9,7 +9,6 @@ import Users from "./admin/pages/Users/Users";
 import Audit from "./admin/pages/Audit/Audit";
 import PurchaseOrders from "./admin/pages/PurchaseOrders/PurchaseOrders";
 import PurchaseOrderDetails from "./admin/pages/PurchaseOrders/PurchaseOrderDetails";
-import NewOrder from "./admin/pages/Orders/NewOrder";
 import Header from "./components/header/Header";
 import ToastProvider from "./components/ui/toast/ToastProvider";
 import AuthProvider from "./context/auth/AuthProvider";
@@ -37,6 +36,14 @@ import RoleRoute from "./routes/RoleRoute";
 import Profile from "./page/Profile/Profile";
 import StaffLayout from "./staff/layouts/StaffLayout";
 import StaffDashboard from "./staff/pages/Dashboard/StaffDashboard";
+import StaffInventory from "./staff/pages/Inventory/Inventory";
+import StaffPurchaseOrders from "./staff/pages/PurchaseOrders/PurchaseOrders";
+import StaffPurchaseOrderDetails from "./staff/pages/PurchaseOrders/PurchaseOrderDetails";
+import StaffOrderDetailsPage from "./features/orders/StaffOrderDetailsPage";
+import StaffOrdersPage from "./features/orders/StaffOrdersPage";
+import NewOrderFlow from "./features/orders/create/NewOrderFlow";
+import StaffProducts from "./features/products/StaffProducts";
+import StaffProductDetails from "./features/products/StaffProductDetails";
 import SupportLayout from "./support/layouts/SupportLayout";
 import SupportDashboard from "./support/pages/Dashboard/SupportDashboard";
 
@@ -76,11 +83,20 @@ export function AppRoutes() {
           <Route path="/orders/:id" element={<OrderDetails />} />
         </Route>
 
-        {/* STAFF + ADMIN — staff order builder */}
+        {/* STAFF + ADMIN — staff workspace (admin can use it too) */}
         <Route element={<RoleRoute allow={["ADMIN", "STAFF"]} />}>
-          <Route path="/orders/new" element={<NewOrder />} />
+          {/* Old builder URL: keep the link working for both roles. */}
+          <Route path="/orders/new" element={<Navigate to="/staff/orders/new" replace />} />
           <Route path="/staff" element={<StaffLayout />}>
             <Route index element={<StaffDashboard />} />
+            <Route path="orders" element={<StaffOrdersPage />} />
+            <Route path="orders/new" element={<NewOrderFlow />} />
+            <Route path="orders/:id" element={<StaffOrderDetailsPage />} />
+            <Route path="inventory" element={<StaffInventory />} />
+            <Route path="purchase-orders" element={<StaffPurchaseOrders />} />
+            <Route path="purchase-orders/:id" element={<StaffPurchaseOrderDetails />} />
+            <Route path="products" element={<StaffProducts />} />
+            <Route path="products/:id" element={<StaffProductDetails />} />
           </Route>
         </Route>
 

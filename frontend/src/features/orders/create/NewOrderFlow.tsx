@@ -2,7 +2,7 @@ import { useCallback, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { ApiError } from "../../../lib/http";
-import { ORDERS_PATH, orderPath } from "../format";
+import { STAFF_ORDERS_PATH, orderPath } from "../format";
 import { USE_MOCK } from "./api";
 import { useCreateOrder } from "./hooks";
 import OrderBuilder from "./OrderBuilder";
@@ -81,7 +81,7 @@ export default function NewOrderFlow() {
         notes: customer.notes,
         items: lines.map((l) => ({ productId: l.product.id, quantity: l.quantity })),
       });
-      navigate(created.id !== null ? orderPath(created.id) : ORDERS_PATH, { replace: true });
+      navigate(created.id !== null ? orderPath(created.id, STAFF_ORDERS_PATH) : STAFF_ORDERS_PATH, { replace: true });
     } catch (err) {
       if (!(err instanceof ApiError)) return setSummaryError("Something went wrong. Please try again.");
 
@@ -118,7 +118,7 @@ export default function NewOrderFlow() {
 
   return (
     <div>
-      <Link to={ORDERS_PATH} className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#6B7280] hover:text-[#FF5615]">
+      <Link to={STAFF_ORDERS_PATH} className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#6B7280] hover:text-[#FF5615]">
         <ArrowLeft className="h-4 w-4" />
         Back to orders
       </Link>

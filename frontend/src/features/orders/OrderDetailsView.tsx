@@ -13,9 +13,9 @@ import type { CustomerOrder, OrderScope, StaffOrder } from "./types";
 
 const card = "rounded-2xl border border-[#E5E7EB] bg-white";
 
-function BackLink() {
+function BackLink({ to }: { to: string }) {
   return (
-    <Link to={ORDERS_PATH} className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#6B7280] hover:text-[#FF5615]">
+    <Link to={to} className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#6B7280] hover:text-[#FF5615]">
       <ArrowLeft className="h-4 w-4" />
       Back to orders
     </Link>
@@ -39,7 +39,15 @@ function Field({ label, value }: { label: string; value?: string }) {
  *
  * Empty/undefined personal fields are never rendered.
  */
-export default function OrderDetailsView({ id, scope = "staff" }: { id: string; scope?: OrderScope }) {
+export default function OrderDetailsView({
+  id,
+  scope = "staff",
+  basePath = ORDERS_PATH,
+}: {
+  id: string;
+  scope?: OrderScope;
+  basePath?: string;
+}) {
   const { role } = useAuth();
   const myQuery = useMyOrder(id, { enabled: scope === "my" });
   const staffQuery = useOrder(id, { enabled: scope === "staff" });
@@ -49,7 +57,7 @@ export default function OrderDetailsView({ id, scope = "staff" }: { id: string; 
   if (isPending) {
     return (
       <div className="mx-auto w-full max-w-5xl px-4 sm:px-6">
-        <BackLink />
+        <BackLink to={basePath} />
         <p role="status" className="py-10 text-center text-sm text-[#6B7280]">
           Loading order…
         </p>
@@ -61,7 +69,7 @@ export default function OrderDetailsView({ id, scope = "staff" }: { id: string; 
     const missing = error instanceof ApiError && error.status === 404;
     return (
       <div className="mx-auto w-full max-w-5xl px-4 sm:px-6">
-        <BackLink />
+        <BackLink to={basePath} />
         <div role="alert" className="py-10 text-center text-sm">
           <p className={missing ? "font-semibold text-[#111827]" : "text-[#DC2626]"}>{missing ? "Order not found" : "Couldn’t load this order."}</p>
           {missing ? (
@@ -89,7 +97,7 @@ export default function OrderDetailsView({ id, scope = "staff" }: { id: string; 
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 sm:px-6">
-      <BackLink />
+      <BackLink to={basePath} />
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
         <div className="flex flex-wrap items-center gap-2">
