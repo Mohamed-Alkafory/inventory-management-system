@@ -1,9 +1,12 @@
 # API Contract — Inventory Management System
 
-> **Source of truth for all endpoints.** Frontend and backend build against this document.
-> Status fields (`status: planned | in-progress | implemented`) track reality — update them
-> when a route ships. Data models referenced here mirror `backend/prisma/schema.prisma`
-> (see `docs/database-schema.md`).
+> **Source of truth for the HTTP surface.** Frontend and backend build against this
+> document. It is generated from `backend/src/**/*.controller.ts`,
+> `backend/src/auth/permissions.ts`, the DTOs and the response serializers.
+> Data models mirror `backend/prisma/schema.prisma` (see `docs/database-schema.md`).
+>
+> When the code and this file disagree, the code wins — and this file must be fixed
+> in the same change.
 
 ---
 
@@ -11,9 +14,15 @@
 
 ### Base URL
 
-- Dev: `http://localhost:3000/api/v1`
+- **Default dev setup (docker compose):** `http://localhost:3010/api/v1`
+  - `docker-compose.yml` publishes the backend container port `3000` on host
+    `${BACKEND_PORT:-3010}`.
+  - The Vite dev server proxies `/api` and `/uploads` to `http://localhost:3010`.
+- **Backend run directly (no compose port mapping):** `http://localhost:3000/api/v1`
+  (`PORT` defaults to `3000` in `backend/src/env.validation.ts` / `main.ts`).
 - All paths below are relative to the base URL.
 - Version prefix `/api/v1` is mandatory; a future `/api/v2` may coexist.
+- Uploaded files are **not** under `/api/v1`; they are served from `/uploads/...`.
 
 ### JSON casing
 
@@ -26,34 +35,59 @@
 - All timestamps are ISO 8601 strings in **UTC**, e.g. `2026-10-19T14:30:00.000Z`.
 - Date-only fields (`expectedAt`, `receivedAt` when sent by the client) also use full
   ISO 8601 timestamps; the client never sends bare `YYYY-MM-DD`.
-- The `Z` suffix is always present. No local-timeZONE offsets from the client.
+- The `Z` suffix is always present. No local-timezone offsets from the client.
 
 ### Money
 
-- Sent as JSON **strings** with 2 decimal places (Prisma `DECIMAL` → string), e.g. `"19.99"`, never floats.
+- Money is serialized as a JSON **number** (Prisma `DECIMAL` is converted with
+  `Number(...)`), never as a string.
+- Fields that are numbers: `Product.price`, `Product.costPrice` (ADMIN only),
+  `Order.totalAmount`, `OrderItem.unitPrice`, `OrderItem.lineTotal`,
+  `CustomerOrder.totalAmount`, customer order item `unitPrice`/`lineTotal`,
+  `PurchaseOrder.totalAmount`, `PurchaseOrderItem.unitCost`, dashboard
+  `stockValue`/`revenueInPeriod`/`totalSales`/`revenue`, and money columns in CSV exports.
+- Requests that accept money (`price`, `costPrice`, `unitCost`) also accept JSON numbers.
+- Example: `19.99`, not `"19.99"`. The frontend formats currency for display; do not
+  parse these fields as strings.
 
 ### Authentication
 
-- `Authorization: Bearer <accessToken>` header on every protected endpoint.
-- Access tokens are short-lived (15 min); refresh via `POST /auth/refresh`.
-- Tokens are **not** stored in cookies by the API; the frontend holds them and attaches the header.
-- Public (no auth) endpoints: `POST /auth/login`, `POST /auth/register` (if enabled),
-  `POST /auth/refresh`, `GET /health`, `POST /contact`, `GET /catalog/products`,
-  `GET /catalog/products/:id`, `GET /catalog/categories`.
+- `Authorization: Bearer <accessToken>` on every protected endpoint.
+- Access tokens live **15 minutes** (`expiresIn: 900`).
+- Refresh tokens live 7 days and **rotate on every refresh**. A presented refresh token
+  is revoked; replaying it answers `401`.
+- Tokens are **not** stored in cookies by the API; the frontend holds them and attaches
+  the header.
+- Public (no token) endpoints: `POST /auth/login`, `POST /auth/register`,
+  `POST /auth/refresh`, `GET /health`, `POST /contact`,
+  `GET /catalog/products`, `GET /catalog/products/:id`, `GET /catalog/categories`.
 
 ### Roles
 
 - Four roles (Prisma `UserRole`): `ADMIN`, `STAFF`, `SUPPORT`, `CUSTOMER`.
-- `ADMIN` includes everything the other roles can do. `STAFF` keeps the operational subset from AD-015.
-- `SUPPORT` can read shop data and all orders (`products.read`, `categories.read`, `orders.read_all`), cancel **PENDING** orders only (`orders.cancel_pending`), add/read internal order notes (`orders.notes.read`/`orders.notes.write`), and own the support inbox (`contact.read`, `contact.manage`) plus the own-account routes. It cannot create, confirm or otherwise change an order, adjust stock, read stock movements, receive purchase orders, manage users, read the audit log/dashboard/reports, or see `costPrice`. In `GET /orders` its rows omit `customerPhone`, `recipientPhone` and `shippingAddress`; `GET /orders/:id` returns them, and every SUPPORT/STAFF detail view writes an audit entry.
-- `CUSTOMER` can operate on its **own** orders only: `orders.create_own`, `orders.read_own` and `orders.cancel_own` (`POST/GET /orders/mine`, `GET /orders/mine/:id`, `POST /orders/mine/:id/cancel`) plus the own-account routes. Every staff order surface answers `403`.
-- Public `POST /auth/register` always creates a `CUSTOMER`; the body has no `role` field and a client-supplied `role` is rejected with `400`. An admin with `users.manage` creates all roles, including `STAFF`, `SUPPORT`, `ADMIN` and `CUSTOMER`, through `/users`.
-- "Role required" column below: `any` = any authenticated user; `admin` = the `users.manage` permission (ADMIN only).
-- Authorization is **deny-by-default**: each handler must declare `@Public()`, `@AnyAuthenticated()`, or `@RequirePermission(...)`. A handler with none of these answers `403` with the standard `FORBIDDEN` envelope (`{ statusCode: 403, message: "Insufficient permissions", error: "FORBIDDEN", path, timestamp }`), even for an authenticated ADMIN. The full permission map lives in `docs/decisions.md` (AD-015, AD-016).
+- `ADMIN` holds **every** permission and is a superset of every other role.
+- `STAFF` is the operational subset: products/categories/suppliers read, orders
+  create/edit/status, stock read/adjust, purchase-order read/receive.
+- `SUPPORT` reads products, categories and all orders, cancels **PENDING** orders only,
+  reads/writes internal order notes, and owns the contact inbox. It cannot create,
+  edit, confirm or otherwise change an order, adjust/read stock movements, read
+  suppliers or purchase orders, manage users, read dashboard/reports/audit, or see
+  `costPrice`.
+- `CUSTOMER` operates on **its own** orders only: `orders.create_own`,
+  `orders.read_own`, `orders.cancel_own`, plus the any-authenticated own-account and
+  notification routes.
+- Public `POST /auth/register` always creates a `CUSTOMER`. The body has no `role`
+  field and a client-supplied `role` is rejected with `400`.
+- An ADMIN creates all roles through `POST /users` (`users.manage`).
+- Authorization is **deny-by-default**: every handler declares exactly one of
+  `@Public()`, `@AnyAuthenticated()` or `@RequirePermission(...)`. A handler with
+  none answers `403 FORBIDDEN`, even for an authenticated ADMIN. The permission map
+  is `backend/src/auth/permissions.ts` and is documented in `docs/decisions.md`
+  (AD-015, AD-016, AD-017, AD-019, AD-020).
 
 ### Pagination
 
-List endpoints return the envelope:
+Paginated list endpoints return the envelope:
 
 ```json
 {
@@ -63,19 +97,24 @@ List endpoints return the envelope:
 ```
 
 - Query params: `page` (1-based, default 1), `limit` (default 20, max 100).
-- Non-paginated list endpoints (e.g. dropdowns) return a bare array and are marked below.
-- Sorting: `sortBy` + `sortOrder` (`asc` | `desc`, default `desc`); allowed `sortBy`
-  values are listed per endpoint.
+- Public catalog endpoints use the same envelope but cap `limit` at **50**.
+- Non-paginated endpoints return a bare array and are marked below
+  (`/orders/:id/notes`, `/notifications/preferences`, dashboard series).
+- Sorting uses `sortBy` + `sortOrder` (`asc` | `desc`); allowed `sortBy` values are
+  listed per endpoint. Ties are broken by `id` ascending where documented.
+- On routes that bind a query DTO, unknown query parameters are rejected with `400`
+  by the global whitelist pipe. Routes without a query DTO ignore extra query params.
 
 ### IDs
 
-- UUID v4 strings everywhere, including in URLs (`/products/:id`).
+- UUID v4 strings everywhere, including URLs. A malformed UUID on a route that uses
+  `ParseUUIDPipe` answers `400`.
 
 ---
 
 ## 2. Standard error response
 
-Every non-2xx response uses this shape:
+Every non-2xx response uses this shape (from `AllExceptionsFilter`):
 
 ```json
 {
@@ -83,379 +122,1289 @@ Every non-2xx response uses this shape:
   "message": "Validation failed",
   "error": "VALIDATION_ERROR",
   "fieldErrors": {
-    "quantity": ["quantity must be greater than 0"],
-    "unitPrice": ["unitPrice must be a positive number"]
+    "quantity": ["quantity must be greater than 0"]
   },
-  "path": "/api/v1/orders",
-  "timestamp": "2026-10-19T14:30:00.000Z"
+  "path": "/api/v1/orders/mine",
+  "timestamp": "2026-10-30T14:30:00.000Z"
 }
 ```
 
-| Field         | Type                     | Always present | Notes                                                 |
-| ------------- | ------------------------ | -------------- | ----------------------------------------------------- |
-| `statusCode`  | number                   | yes            | HTTP status, duplicated in the body                   |
-| `message`     | string \| string[]       | yes            | Human-readable summary; arrays allowed (Nest default) |
-| `error`       | string                   | yes            | Machine-readable error `CODE` (see table)             |
-| `fieldErrors` | Record<string, string[]> | no             | Only for validation errors; maps JSON key → messages  |
-| `path`        | string                   | yes            | Request URL                                           |
-| `timestamp`   | string                   | yes            | ISO 8601 UTC                                          |
+| Field         | Type                     | Always present | Notes                                                  |
+| ------------- | ------------------------ | -------------- | ------------------------------------------------------ |
+| `statusCode`  | number                   | yes            | HTTP status, duplicated in the body                    |
+| `message`     | string \| string[]       | yes            | Human-readable summary; arrays allowed (Nest default)  |
+| `error`       | string                   | yes            | Machine-readable code derived from the HTTP status     |
+| `fieldErrors` | Record<string, string[]> | no             | Only for `400` validation errors; maps JSON key → messages |
+| `path`        | string                   | yes            | Request URL                                            |
+| `timestamp`   | string                   | yes            | ISO 8601 UTC                                           |
 
 Error codes:
 
 | Code                  | HTTP | Meaning                                                                 |
 | --------------------- | ---- | ----------------------------------------------------------------------- |
-| `VALIDATION_ERROR`    | 400  | Body/query failed Zod/class-validator checks                            |
-| `UNAUTHORIZED`        | 401  | Missing/expired/invalid token                                           |
-| `FORBIDDEN`           | 403  | Authenticated but role insufficient                                     |
-| `NOT_FOUND`           | 404  | Resource does not exist                                                 |
-| `CONFLICT`            | 409  | Duplicate unique field (e.g. SKU, email) or last-admin safety rule      |
-| `BUSINESS_RULE_ERROR` | 422  | Semantically invalid (e.g. stock below zero, invalid status transition) |
-| `INTERNAL_ERROR`      | 500  | Unexpected server failure                                               |
-| `SERVICE_UNAVAILABLE` | 503  | Database or dependency down                                             |
+| `VALIDATION_ERROR`    | 400  | Body/query failed class-validator checks or unknown field              |
+| `UNAUTHORIZED`        | 401  | Missing/expired/invalid token, bad credentials, deactivated account    |
+| `FORBIDDEN`           | 403  | Authenticated but missing the required permission                      |
+| `NOT_FOUND`           | 404  | Resource missing, hidden, or not owned by the caller                   |
+| `CONFLICT`            | 409  | Duplicate unique value, invalid transition, stock shortage, last admin |
+| `PAYLOAD_TOO_LARGE`   | 413  | Uploaded image exceeds the route limit                                 |
+| `BUSINESS_RULE_ERROR` | 422  | Semantic rule violation (inactive product, non-PENDING edit, bad password) |
+| `INTERNAL_ERROR`      | 500  | Unexpected server failure                                              |
+| `SERVICE_UNAVAILABLE` | 503  | Database or dependency unavailable                                     |
+
+> **429 note:** `@nestjs/throttler` throws a `429`, but `errorCodeForStatus` has no
+> `429` branch, so the body currently carries `"error": "INTERNAL_ERROR"` with
+> `statusCode: 429`. Treat HTTP `429` as the signal and ignore the `error` string.
 
 ---
 
-## 3. Endpoints
+## 3. Access classes and role-permission matrix
 
-Legend: 🔓 public · Role: `any` / `admin` · Paginated unless marked "no pagination".
+Endpoints are grouped below by the **lowest access class** that can call them. The
+`Access` column repeats the full role set, because `ADMIN` always holds every
+permission.
 
-### 3.1 Auth
+Matrix generated from `ROLE_PERMISSIONS` and the controller decorators:
 
-| Method  | Path                    | Role | Request body                            | Response                                    | Errors        |
-| ------- | ----------------------- | ---- | --------------------------------------- | ------------------------------------------- | ------------- |
-| POST 🔓 | `/auth/login`           | —    | `{ email, password }`                   | `{ user: User, accessToken, refreshToken }` | 400, 401      |
-| POST 🔓 | `/auth/register`        | —    | `{ name, email, password }`             | `{ user: User, accessToken, refreshToken }` (201); `user.role` is always `CUSTOMER` | 400, 409 |
-| POST 🔓 | `/auth/refresh`         | —    | `{ refreshToken }`                      | `{ accessToken, refreshToken }`             | 400, 401      |
-| POST    | `/auth/logout`          | any  | `{ refreshToken }`                      | `204` (empty)                               | 401           |
-| GET     | `/auth/me`              | any  | —                                       | `User` (no `passwordHash`)                  | 401           |
-| PATCH   | `/auth/me`              | any  | `{ name?, password?{ current, next } }` | `User`                                      | 400, 401, 422 |
-| DELETE  | `/auth/me`              | any  | —                                       | `204` (self-deactivation)                   | 401, 409      |
-| POST    | `/auth/change-password` | any  | `{ currentPassword, newPassword }`      | `204` (empty)                               | 400, 401, 422 |
+| Endpoint group | Anonymous | CUSTOMER | SUPPORT | STAFF | ADMIN |
+| --- | --- | --- | --- | --- | --- |
+| `POST /auth/login`, `/register`, `/refresh` | yes | yes | yes | yes | yes |
+| `GET /health` | yes | yes | yes | yes | yes |
+| `GET /catalog/products`, `/:id`, `/categories` | yes | yes | yes | yes | yes |
+| `POST /contact` | yes | yes | yes | yes | yes |
+| Own account (`/auth/me`, change-password, logout, avatar) | no | yes | yes | yes | yes |
+| Notifications (all `/notifications/*`) | no | yes | yes | yes | yes |
+| Products read (`GET /products`, `GET /products/:id`) | no | no | yes | yes | yes |
+| Categories read (`GET /categories`, `GET /categories/:id`) | no | no | yes | yes | yes |
+| Orders list/detail (`GET /orders`, `GET /orders/:id`) | no | no | yes | yes | yes |
+| Order PENDING cancel (`POST /orders/:id/cancel`) | no | no | yes | yes | yes |
+| Order notes (`GET/POST /orders/:id/notes`) | no | no | yes | yes | yes |
+| Contact inbox (`/contact-messages/*`) | no | no | yes | yes | yes |
+| Customer own orders (`/orders/mine/*`) | no | yes | no | no | yes |
+| Order create/edit/status (`POST /orders`, `PATCH /orders/:id`, `PATCH /orders/:id/status`) | no | no | no | yes | yes |
+| Suppliers read | no | no | no | yes | yes |
+| Stock read/adjust | no | no | no | yes | yes |
+| Purchase orders read/receive | no | no | no | yes | yes |
+| Users management (`/users/*`) | no | no | no | no | yes |
+| Product/category/supplier writes and image uploads | no | no | no | no | yes |
+| Purchase order create/status | no | no | no | no | yes |
+| Dashboard | no | no | no | no | yes |
+| Reports | no | no | no | no | yes |
+| Audit log | no | no | no | no | yes |
+| `GET /auth/admin-only` | no | no | no | no | yes |
 
-`User` shape: `{ id, name, email, avatarUrl, role, isActive, createdAt, updatedAt }` — `passwordHash` is **never** returned by any endpoint. `avatarUrl` is either `null` or a relative `/uploads/avatars/<uuid>.<jpg|png|webp>` path.
+> `ADMIN` appears as **yes** for `/orders/mine` because it holds every permission
+> (AD-017). In practice those routes filter by `customerId = caller`, so an admin only
+> sees orders whose `customerId` is their own user id (normally none).
 
-- `GET /auth/me` returns the **full** public profile of the authenticated user; a missing/deactivated account answers 401.
-- `PATCH /auth/me` only accepts `name` and the nested `password: { current, next }` — `role`, `email` and `isActive` stay ADMIN-managed (`/users`), so sending them is 400.
-- Changing a password (either route) verifies `current`/`currentPassword` first: a mismatch is **422** (the request is authenticated, so this is not a 401). `next`/`newPassword` must be 8–72 bytes; it is bcrypt-hashed (rounds 10) and **every active refresh token of the user is revoked**, so other devices must log in again.
-- Password changes are audited as `user.password_changed` without any credential material (§3.11).
-- `DELETE /auth/me` soft-deactivates the current account and revokes every active refresh token. The last active ADMIN cannot self-deactivate: answers `409 CONFLICT` (`At least one active ADMIN must remain`).
+---
 
-- Public self-registration (`POST /auth/register`) always creates a **CUSTOMER** account. It is the only role a public caller can obtain; privileged roles are provisioned by an ADMIN through `POST /users`.
+## 4. Public endpoints (no token)
 
-### 3.2 Users
+### 4.1 Auth
 
-| Method | Path         | Role  | Request body                               | Response                           | Errors                  |
-| ------ | ------------ | ----- | ------------------------------------------ | ---------------------------------- | ----------------------- |
-| GET    | `/users`     | admin | `?page&limit&search&role&sortBy&sortOrder` | paginated `User[]`                 | 401, 403                |
-| GET    | `/users/:id` | admin | —                                          | `User`                             | 401, 403, 404           |
-| POST   | `/users`     | admin | `{ name, email, password, role }` where `role` is `ADMIN`, `STAFF`, `SUPPORT` or `CUSTOMER` | `User` (201)                       | 400, 401, 403, 409      |
-| PATCH  | `/users/:id` | admin | `{ name?, email?, role?, isActive? }`      | `User`                             | 400, 403, 404, 409, 422 |
-| DELETE | `/users/:id` | admin | —                                          | `204` (soft delete, see decisions) | 401, 403, 404, 409, 422      |
-| POST   | `/users/me/avatar`   | any   | `multipart/form-data` with one binary field, `image` (JPEG, PNG or WebP, max 1 MB) | `User` (200) with the new `avatarUrl` | 400 (missing/unsupported image), 401, 413 (too large) |
-| DELETE | `/users/me/avatar`   | any   | —                                          | `204` (avatar cleared)             | 401                     |
+| Method | Path | Request body | Response | Statuses / errors |
+| --- | --- | --- | --- | --- |
+| POST | `/auth/login` | `{ email, password }` (`password` 8–72 bytes) | `Session` (200) | 400, 401 |
+| POST | `/auth/register` | `{ name (2–100), email, password (8–72 bytes) }` | `Session` (201); `user.role` is always `CUSTOMER` | 400, 409; **5 req/min** |
+| POST | `/auth/refresh` | `{ refreshToken }` (min 20 chars) | `SessionTokens` (200) | 400, 401 |
 
-Avatar endpoints always act on the **authenticated user** (the id comes from the JWT, there is no id in the URL), so even an ADMIN cannot change another user's avatar through them.
+`Session`:
 
-- `POST /users/me/avatar` saves a new file, updates `avatarUrl`, then deletes the previous local file. If the database update fails, the new file is deleted so no orphan is left behind.
-- `DELETE /users/me/avatar` clears `avatarUrl` and deletes the local file. External `https://...` avatar URLs are never deleted from disk.
-- Uploads are **public** (no JWT required) and served outside the `/api/v1` prefix at `/uploads/avatars/<uuid>.<ext>`; the real type is detected from magic bytes, never from the client filename or MIME type.
+```ts
+{
+  accessToken: string;
+  refreshToken: string;
+  tokenType: "Bearer";
+  expiresIn: 900;          // seconds
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    avatarUrl: string | null;
+    role: "ADMIN" | "STAFF" | "SUPPORT" | "CUSTOMER";
+  };
+}
+```
 
-Errors: `400` for an invalid/unknown role, `409` when deactivating or demoting the last active ADMIN, `422` for self-deactivation / self-role-change. Changing a user's `role` revokes all of their active refresh tokens; deactivating an account revokes them too (as does a password change or self-deactivation).
+`SessionTokens` is the same object without `user`.
 
-### 3.3 Categories
+- `401` for unknown email, wrong password or a deactivated account; the message is the
+  same (`Invalid credentials`) so account existence is not disclosed.
+- `409` when registering an email that already exists.
+- `POST /auth/register` rejects a client-supplied `role` (or any unknown field) with
+  `400`.
+- Refresh rotation: a valid refresh token is revoked and replaced; a reused, expired,
+  revoked or deactivated-user token answers `401`.
 
-| Method | Path              | Role  | Request body                         | Response                                                | Errors                               |
-| ------ | ----------------- | ----- | ------------------------------------ | ------------------------------------------------------- | ------------------------------------ |
-| GET    | `/categories`     | any   | `?page&limit&search&isActive`        | paginated `Category[]` (active only by default, AD-001) | 400, 401                             |
-| GET    | `/categories/:id` | any   | —                                    | `Category` + `productCount`                             | 400 (invalid id), 401, 404           |
-| POST   | `/categories`     | admin | `{ name, description? }`             | `Category` (201)                                        | 400, 401, 403, 409                   |
-| PATCH  | `/categories/:id` | admin | `{ name?, description?, isActive? }` | `Category`                                              | 400, 401, 403, 404, 409              |
-| DELETE | `/categories/:id` | admin | —                                    | `204` (soft delete)                                     | 400 (invalid id), 401, 403, 404, 409 |
+### 4.2 Health
 
-`Category`: `{ id, name, description, isActive, createdAt, updatedAt }`.
-Errors: `409` when deleting (or renaming to) a category while another category already uses the name (unique index), or when deleting a category that still has linked products — `products.category_id` is FK `ON DELETE RESTRICT`, so the product relation must never be broken (AD-001 soft delete keeps rows).
+| Method | Path | Response | Statuses |
+| --- | --- | --- | --- |
+| GET | `/health` | `{ status: "ok", db: "up" }` | 200; 503 standard error when the DB is unreachable |
 
-### 3.4 Products
+### 4.3 Public catalog
 
-| Method | Path            | Role  | Request body / query                                                                                                                                 | Response                                       | Errors                                                                      |
-| ------ | --------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- | --------------------------------------------------------------------------- |
-| GET    | `/products`     | any   | `?page&limit&search&categoryId&supplierId&isActive&stockStatus(in_stock,low_stock,out_of_stock)&sortBy(name,sku,price,quantity,createdAt)&sortOrder` | paginated `Product[]`                          | 400, 401                                                                    |
-| GET    | `/products/:id` | any   | —                                                                                                                                                    | `Product` + `{ category, supplier }` populated | 401, 404                                                                    |
-| POST   | `/products`     | admin | `{ sku, name, description?, imageUrl?, barcode?, price, costPrice?, quantity?, minStock?, categoryId, supplierId? }`                                 | `Product` (201)                                | 400, 401, 403, 404 (bad categoryId/supplierId), 409 (duplicate sku/barcode) |
-| PATCH  | `/products/:id` | admin | same fields, all optional — **`quantity` not directly editable, use `/stock`**                                                                       | `Product`                                      | 400, 401, 403, 404, 409, 422                                                |
-| DELETE | `/products/:id` | admin | —                                                                                                                                                    | `204` (soft delete)                            | 401, 403, 404, 422                                                          |
-| POST   | `/products/:id/image` | admin | `multipart/form-data` with one binary field, `image` (JPEG, PNG or WebP, max 2 MB) | `Product` (200) with the new `imageUrl`        | 400 (missing/unsupported image), 401, 403, 404, 413 (too large)              |
-| DELETE | `/products/:id/image` | admin | —                                                                                                                                                    | `204` (image cleared)                          | 401, 403, 404                                                               |
+Anonymous visitors browse only active products in active categories. These routes never
+expose internal product data (AD-018). All three are throttled to **30 requests per
+minute per client per route**.
 
-`Product` shape: `{ id, sku, name, description, imageUrl, barcode, price, costPrice, quantity, minStock, isActive, categoryId, supplierId, createdAt, updatedAt }`.
+| Method | Path | Query | Response | Statuses / errors |
+| --- | --- | --- | --- | --- |
+| GET | `/catalog/products` | `page`, `limit` (max 50), `search` (name only, max 100), `categoryId` (UUID), `sort` (`name`\|`price`\|`newest`, default `newest`), `order` (`asc`\|`desc`) | paginated `CatalogProduct[]` | 400, 429 |
+| GET | `/catalog/products/:id` | — | `CatalogProduct` | 400 (invalid UUID), 404, 429 |
+| GET | `/catalog/categories` | `page`, `limit` (max 50) | paginated `CatalogCategory[]` | 400, 429 |
 
-- `imageUrl` is either an external `https://...` URL or a relative path served by the API: `/uploads/products/<uuid>.<jpg|png|webp>`. Uploads are **public** (no JWT required) and outside the `/api/v1` prefix. The client filename and MIME type are not trusted; the real type is detected from the file's magic bytes.
-- `POST /products/:id/image` replaces an existing image and deletes the previous local file; external URLs are never deleted from disk. `DELETE /products/:id/image` clears `imageUrl` and deletes the local file if it is a `/uploads/products/...` path.
+```ts
+CatalogProduct = {
+  id: string;
+  sku: string;
+  name: string;
+  description: string | null;
+  price: number;
+  imageUrl: string | null;
+  category: { id: string; name: string };
+  inStock: boolean;
+  maxOrderable: number;   // min(quantity, 20); 0 when out of stock
+};
 
-- `costPrice` is included **only** for ADMIN (see decisions §4). STAFF responses omit the field entirely (not `null`).
-- `stockStatus=low_stock` filters `quantity <= minStock`; `in_stock` → `quantity > 0`;
-  `out_of_stock` → `quantity = 0` (drives dashboard + notifications).
-  Invalid query values are rejected with `400 VALIDATION_ERROR`.
-- Errors: `422` when price/cost validation fails (`price < 0`, `costPrice < 0`), or when deleting a product referenced by an active order/purchase order item.
+CatalogCategory = {
+  id: string;
+  name: string;
+  description: string | null;
+};
+```
 
-### 3.5 Suppliers
+- Unknown ids, inactive products and products in inactive categories all answer the
+  same `404`, so hidden rows cannot be probed.
+- `order` defaults to `desc` for `newest` and `asc` for `name`/`price`; every sort has
+  an ascending `id` tie-break.
+- `costPrice`, `minStock`, exact `quantity`, `barcode`, `supplier`, `isActive`,
+  `categoryId` and timestamps are never returned.
 
-| Method | Path             | Role  | Request body / query                                    | Response                                                | Errors                          |
-| ------ | ---------------- | ----- | ------------------------------------------------------- | ------------------------------------------------------- | ------------------------------- |
-| GET    | `/suppliers`     | any   | `?page&limit&search&isActive`                           | paginated `Supplier[]` (active only by default, AD-001) | 400, 401                        |
-| GET    | `/suppliers/:id` | any   | —                                                       | `Supplier` + `productCount`                             | 400 (invalid id), 401, 404      |
-| POST   | `/suppliers`     | admin | `{ companyName, email?, phone?, address? }`             | `Supplier` (201)                                        | 400, 401, 403                   |
-| PATCH  | `/suppliers/:id` | admin | `{ companyName?, email?, phone?, address?, isActive? }` | `Supplier`                                              | 400, 401, 403, 404              |
-| DELETE | `/suppliers/:id` | admin | —                                                       | `204` (soft delete)                                     | 400 (invalid id), 401, 403, 404 |
+### 4.4 Contact submission
 
-`Supplier`: `{ id, companyName, email, phone, address, isActive, createdAt, updatedAt }`.
-Soft delete (AD-001): rows are never removed, so linked `products` and `purchase_orders` (FK `ON DELETE RESTRICT`) keep their references intact; deactivation only drops the supplier from the default listing.
+| Method | Path | Request body | Response | Statuses / errors |
+| --- | --- | --- | --- | --- |
+| POST | `/contact` | `{ name (≤100), email (valid, ≤255), subject (≤200), message (≤5000), honeypot? (≤255) }` | `{ received: true }` (201) | 400, 429; **5 req/hour** |
 
-### 3.6 Stock
+- Every text field is trimmed; all four main fields are required; unknown fields are
+  rejected with `400`.
+- `honeypot` is a spam trap: when non-empty the API still answers `201 { received: true }`
+  but stores nothing.
+- A real submission sends a best-effort `CONTACT_MESSAGE_RECEIVED` notification to
+  active SUPPORT users only.
+- The 201 body never contains a message id, assignee or internal note.
 
-| Method | Path                      | Role | Request body / query                                                          | Response                                                    | Errors                           |
-| ------ | ------------------------- | ---- | ----------------------------------------------------------------------------- | ----------------------------------------------------------- | -------------------------------- |
-| GET    | `/stock/movements`        | any  | `?page&limit&productId&type&orderId&purchaseOrderId&from&to&sortBy&sortOrder` | paginated `StockMovement[]`                                 | 400, 401                         |
-| GET    | `/products/:id/movements` | any  | `?page&limit&type&orderId&purchaseOrderId&from&to&sortBy&sortOrder`           | paginated `StockMovement[]` (forced to the path product)    | 400 (invalid id/query), 401, 404 |
-| POST   | `/stock/adjustments`      | any  | `{ productId, quantityChange, reason }` (quantityChange ≠ 0)                  | `{ movement: StockMovement, product: Product }` (201)       | 400, 401, 404, 409, 422          |
-| GET    | `/stock/low-stock`        | any  | `?page&limit`                                                                 | paginated `Product[]` (`quantity <= minStock`, active only) | 400, 401                         |
+---
 
-- `StockMovement` shape: `{ id, productId, type, quantityChange, quantityAfter, reason, orderId, purchaseOrderId, createdById, createdAt }`.
-- `type` on adjustments is always `ADJUSTMENT`; `SALE`/`PURCHASE_RECEIPT`/`RETURN` are system-generated from orders/purchase orders.
-- Role: STAFF may adjust stock (they run the till); `RETURN` and other system types cannot be created manually.
-- Errors: `409` when the quantity would go below zero (atomic guard, issue-specified); `422` when the product is inactive; `quantityChange = 0` is a `400` field error. The write is one conditional atomic `updateMany` (quantity guard + `increment`) inside a Serializable transaction, so two concurrent decreases can never push the quantity below zero.
-- Product quantity and the movement row are written in **one transaction** (`quantityAfter` computed server-side, never sent by client).
+## 5. Any authenticated user
 
-### 3.7 Orders
+All four roles can call these. Ownership is enforced in the service, not by the URL.
 
-| Method | Path                         | Role                 | Request body / query                                                                                                                                  | Response                          | Errors                                                                 |
-| ------ | ---------------------------- | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- | ---------------------------------------------------------------------- |
-| GET    | `/orders`                    | STAFF, ADMIN, SUPPORT | `?page&limit&status&search(customerName,orderNumber)&createdById&sortBy(status,createdAt)&sortOrder`                                                  | paginated `Order[]`               | 401, 403                                                               |
-| GET    | `/orders/:id`                | STAFF, ADMIN, SUPPORT | —                                                                                                                                                     | `Order` + `items[]` + `createdBy` | 401, 403, 404                                                          |
-| POST   | `/orders`                    | STAFF, ADMIN         | `type CreateOrderRequest = { items: Array<{ productId: string; quantity: number }>; customerName?: string; customerPhone?: string; notes?: string; }` | `Order` + `items` (201)           | 400, 401, 403, 404 (product not found), 409 (stock), 422 (inactive)    |
-| PATCH  | `/orders/:id`                | STAFF, ADMIN         | `{ customerName?, customerPhone?, notes? }` — only while `PENDING`                                                                                    | `Order`                           | 401, 403, 404, 422 (not editable after PENDING)                        |
-| PATCH  | `/orders/:id/status`         | STAFF, ADMIN         | `{ newStatus: 'CONFIRMED' \| 'CANCELLED' }`                                                                                                           | `Order` + `items`                 | 400, 401, 403, 404, 409 (invalid transition / double cancel)           |
-| POST   | `/orders/:id/cancel`         | SUPPORT, STAFF, ADMIN | —                                                                                                                                                     | `Order` + `items` (201)           | 400, 401, 403, 404, 409 (not PENDING / double cancel)                 |
-| POST   | `/orders/:id/notes`          | SUPPORT, STAFF, ADMIN | `{ note }` — trimmed, 1–2000 characters                                                                                                                | internal `OrderNote` (201)        | 400, 401, 403, 404                                                     |
-| GET    | `/orders/:id/notes`          | SUPPORT, STAFF, ADMIN | —                                                                                                                                                     | internal `OrderNote[]` (oldest first) | 400, 401, 403, 404                                                 |
-| POST   | `/orders/mine`               | CUSTOMER             | `{ items: Array<{ productId: string; quantity: number }>; recipientName; recipientPhone; shippingAddress; shippingCity; notes? }`                      | customer-safe `Order` (201)       | 400, 401, 403, 404, 409, 422, 429 (throttle)                           |
-| GET    | `/orders/mine`               | CUSTOMER             | `?page&limit&status`                                                                                                                                  | paginated customer-safe `Order[]` | 400, 401, 403                                                          |
-| GET    | `/orders/mine/:id`           | CUSTOMER             | —                                                                                                                                                     | customer-safe `Order`             | 400, 401, 403, 404 (missing **or** not owned)                          |
-| POST   | `/orders/mine/:id/cancel`    | CUSTOMER             | —                                                                                                                                                     | customer-safe `Order` (201)       | 400, 401, 403, 404 (missing **or** not owned), 409 (not PENDING)       |
+### 5.1 Own account (`/auth`)
 
-> `POST /orders/:id/confirm` from earlier drafts was never implemented; `PATCH /orders/:id/status` replaces it. `POST /orders/:id/cancel` exists **only** as the SUPPORT/STAFF/ADMIN pending-only cancellation route and cannot confirm or perform any other transition.
+| Method | Path | Request body | Response | Statuses / errors |
+| --- | --- | --- | --- | --- |
+| GET | `/auth/me` | — | `User` (200) | 401 |
+| PATCH | `/auth/me` | `{ name? (2–100), password? { current, next } (8–72 bytes each) }` | `User` (200) | 400, 401, 422 |
+| DELETE | `/auth/me` | — | 204 empty (soft-deactivate) | 401, 409 |
+| POST | `/auth/change-password` | `{ currentPassword, newPassword }` (8–72 bytes each) | 204 empty | 400, 401, 422 |
+| POST | `/auth/logout` | `{ refreshToken }` (min 20) | 204 empty | 401 (only if the guard rejects the access token); unknown tokens still answer 204 |
+| POST | `/users/me/avatar` | `multipart/form-data`, field `image` | `User` (200) with new `avatarUrl` | 400 (missing/unsupported), 401, 413 (>1 MB) |
+| DELETE | `/users/me/avatar` | — | 204 empty | 401 |
 
-- `OrderNote` shape (internal only): `{ id, orderId, authorId, note, author: { id, name }, createdAt }`. Notes are returned only by `GET /orders/:id/notes`; no `/orders/mine` or other customer-facing response ever includes them (the legacy scalar `Order.notes` field is also excluded from customer responses).
+`User`:
 
-- `Order` (staff) shape: `{ id, orderNumber, status, customerName, customerPhone, notes, totalAmount, customerId, recipientName, recipientPhone, shippingAddress, shippingCity, paymentMethod, createdById, cancelledAt, createdAt, updatedAt, items?: OrderItem[] }`.
-- `paymentMethod` is the `PaymentMethod` enum (`COD` only today) and defaults to `COD`.
-- **Customer-safe `Order` shape** (all `/orders/mine` routes): `{ id, orderNumber, status, totalAmount, items: Array<{ productName, sku, quantity, unitPrice, lineTotal }>, recipientName, recipientPhone, shippingAddress, shippingCity, paymentMethod, createdAt, cancelledAt }`. It never contains `createdById`, `customerId`, `notes`, `createdBy`, stock movements, audit data, item/product ids or any other internal field.
-- `POST /orders/mine` accepts 1–30 **distinct** products with `quantity` 1–50 and only active products. The body can never carry `price`, `status`, `customerId` or `createdById` (unknown properties are rejected with `400`). `customerId` and `createdById` are taken from the token, `recipientName`/`recipientPhone` are copied into `customerName`/`customerPhone`, and totals/stock/audit/notifications reuse the same Serializable creation transaction as the staff till. After the commit, a customer order sends `ORDER_CREATED` to every active STAFF and ADMIN user (staff-created orders keep the ADMIN-only target). Throttled to 10 requests per minute (`429` beyond that).
-- `GET /orders/mine` is paginated (default 20, max 100), newest first, optional `status`, and only returns rows whose `customerId` equals the caller. `GET /orders/mine/:id` answers `404` both for an unknown id and for another customer's order (never `403`). `POST /orders/mine/:id/cancel` only succeeds while the order is `PENDING` and owned; it reuses the staff cancel transaction (stock restored with `RETURN` movements, `cancelledAt` stamped) and a second cancel answers `409` without restoring stock again.
-- `GET /orders`: `page` defaults to 1, `limit` defaults to 20 (max 100); default sort is
-  `createdAt DESC` with `id ASC` as the deterministic tie-breaker. `status` accepts
-  `PENDING | CONFIRMED | CANCELLED`; `search` matches `orderNumber` or `customerName`
-  case-insensitively; `createdById` is a UUID. `from` and `to` are inclusive ISO 8601
-  bounds on `createdAt`; an invalid date or `from > to` returns 400. Unknown query
-  parameters return 400.
-- `GET /orders/:id`: returns the order fields plus `items[]` (the API property is
-  `items`, not `orderItems`), `createdBy` (`id`, `name`, `email`) and the related
-  `stockMovements[]`. A non-UUID id returns 400; a missing order returns 404.
-  This is the PII-bearing read: every SUPPORT or STAFF detail view writes an
-  `order.viewed` audit entry containing only the viewer id/role and order id —
-  never the personal data. ADMIN detail views and all list calls are not
-  audited.
-- **SUPPORT data minimization:** in `GET /orders` the SUPPORT rows omit
-  `customerPhone`, `recipientPhone` and `shippingAddress` (the full detail view
-  above returns them and is audited). There is no bulk/export personal-data
-  endpoint for SUPPORT: all CSV reports, the dashboard and `/audit-logs` are
-  ADMIN-only.
-- `POST /orders/:id/cancel` cancels only a `PENDING` order; `CONFIRMED`,
-  `CANCELLED` and every other state answer `409`. It reuses the existing
-  cancellation transaction (one `RETURN` movement per line, `cancelledAt`,
-  `order.cancelled` audit) so a double cancel can never restore stock twice.
-  The permission cannot be used to confirm an order.
-- `OrderItem` shape: `{ id, orderId, productId, productName, sku, quantity, unitPrice, lineTotal }` — snapshots, client must not expect them to track later product edits.
-- `totalAmount` is always computed server-side from the item snapshots' `unitPrice`; client-sent prices are ignored.
-- **Customer status notifications:** confirming an order with a `customerId` sends one `ORDER_CONFIRMED` to that customer; cancelling it sends one `ORDER_CANCELLED` to the customer **in addition to** the unchanged ADMIN alert. A staff-created order without a `customerId` notifies no customer. Customer messages contain only the order number and new status (`CONFIRMED`/`CANCELLED`), and carry `entityType: "order"` + `entityId` so `/orders/mine/:id` can link to the caller's own order — never internal notes, staff names, other customers' data or stock details. Failures are swallowed (AD-021).
-- **Stock is deducted at `PENDING` creation** and fully restored on cancel (see decisions §2).
-- A readable sequential `orderNumber` (`ORD-0001`) is generated server-side from the row count; rows are never removed, so the sequence only grows.
-- `POST /orders` runs in **ONE Serializable transaction**: order + item snapshots + one `SALE` movement per line (via the shared stock logic). Any failure rolls everything back — no partial order remains. Conflicting concurrent attempts are retried once, so stock can never drop below zero and the orderNumber cannot collide.
-- Errors: `422` when confirming a PENDING order whose stock somehow became unavailable, cancelling a `CONFIRMED` order without permission, or transitioning from a terminal (`CANCELLED`) state.
-- Status transitions (issue-specified endpoint): `PENDING → CONFIRMED`, `PENDING → CANCELLED`, `CONFIRMED → CANCELLED` only — every other combination (including re-touching the current status or un-cancelling) answers `409`, and a `CANCELLED` order is terminal. Cancelling restores every line's quantity with one `RETURN` movement per item and stamps `cancelledAt`, all in the SAME Serializable transaction — cancelling twice can never restore stock twice. Soft-deleted products still receive their stock back.
+```ts
+{
+  id: string;
+  name: string;
+  email: string;
+  avatarUrl: string | null;
+  role: "ADMIN" | "STAFF" | "SUPPORT" | "CUSTOMER";
+  isActive: boolean;
+  createdAt: string;   // ISO 8601
+  updatedAt: string;   // ISO 8601
+}
+```
 
-### 3.8 Purchase orders
+- `passwordHash` is **never** returned.
+- `PATCH /auth/me` only accepts `name` and the nested `password`. `role`, `email` and
+  `isActive` remain ADMIN-managed; sending them is `400`.
+- A wrong `current` password is **422** (authenticated request, invalid input), not 401.
+- A successful password change revokes every active refresh token. The current access
+  token stays valid until it expires.
+- `DELETE /auth/me` deactivates the caller and revokes all refresh tokens. The last
+  active ADMIN cannot self-deactivate: `409 CONFLICT`
+  (`At least one active ADMIN must remain`).
+- Avatar uploads accept JPEG, PNG or WebP (detected from magic bytes) up to **1 MB**.
+  `avatarUrl` is `null` or a relative `/uploads/avatars/<uuid>.<jpg|png|webp>` path.
 
-| Method | Path                           | Role  | Request body / query                                                                     | Response                                                   | Errors                                                           |
-| ------ | ------------------------------ | ----- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------------- |
-| GET    | `/purchase-orders`             | any   | `?page&limit&status&supplierId&sortBy(createdAt,status)&sortOrder`                       | paginated `PurchaseOrder[]`                                | 400, 401                                                         |
-| GET    | `/purchase-orders/:id`         | any   | —                                                                                        | `PurchaseOrder` + `items[]` + supplier                     | 400, 401, 404                                                    |
-| POST   | `/purchase-orders`             | admin | `{ supplierId, expectedAt?, notes?, items: [{ productId, quantityOrdered, unitCost }] }` | `PurchaseOrder` (201, status `DRAFT`)                      | 400, 401, 403, 404, 409, 422                                     |
-| PATCH  | `/purchase-orders/:id/status`  | admin | `{ newStatus: 'ORDERED' \| 'CANCELLED' }`                                                | `PurchaseOrder` (manual transition)                        | 400, 401, 403, 404, 409                                          |
-| POST   | `/purchase-orders/:id/receive` | any   | `{ items: [{ productId, quantity }] }` (full or partial)                                 | `PurchaseOrder` (status → `PARTIALLY_RECEIVED`/`RECEIVED`) | 400, 401, 404, 409 (over-receive or wrong state), 422 (inactive) |
+### 5.2 Notifications
 
-- `PurchaseOrder` shape: `{ id, orderNumber, supplierId, status, totalAmount, expectedAt, receivedAt, notes, createdById, createdAt, updatedAt }`; detail responses add `items[]` and `supplier: { id, companyName }`.
-- `PurchaseOrderItem`: `{ id, purchaseOrderId, productId, quantityOrdered, quantityReceived, unitCost }`.
-- `unitCost` is client input; `totalAmount` is computed server-side with decimal math. A readable sequential `orderNumber` (`PO-0001`) is generated from the row count (a concurrent race is retried once).
-- `POST /purchase-orders` runs in ONE Serializable transaction and touches NO stock (a DRAFT is paperwork); missing supplier/product is 404, inactive supplier/product is 422, duplicate `productId` lines are 400.
-- Manual transitions (issue #32 supersedes the contract's `/order` + `/cancel` routes): `DRAFT → ORDERED`, `DRAFT → CANCELLED`, `ORDERED → CANCELLED` — everything else (`RECEIVED`/`PARTIALLY_RECEIVED` targets, terminal states, same status) answers 409. Receiving is the only path to `PARTIALLY_RECEIVED`/`RECEIVED`.
-- Receiving runs in ONE Serializable transaction: per line it increments `quantityReceived`, raises product stock and writes one `PURCHASE_RECEIPT` movement (reason `Received purchase order PO-####`, `purchaseOrderId` stamped); the status becomes `PARTIALLY_RECEIVED` or `RECEIVED` (`receivedAt` stamped on full receipt) — any failure leaves no partial data. Receiving more than the remaining quantity is 409; DRAFT/CANCELLED/RECEIVED orders are 409; a product that is not a line of the order is 400. A committed receipt fans a best-effort `PURCHASE_ORDER_RECEIVED` notification to ADMINs (AD-007).
-- Not implemented in this issue (kept out of the table on purpose): `PATCH /purchase-orders/:id` (draft editing), `POST /:id/order` and `POST /:id/cancel` (replaced by `PATCH :id/status`), `DELETE /purchase-orders/:id`, and `search(orderNumber)` on the list (only status/supplier filters are implemented).
+All routes force `userId = caller`. A missing notification and another user's
+notification both answer `404`.
 
-### 3.9 Notifications
+| Method | Path | Query / body | Response | Statuses / errors |
+| --- | --- | --- | --- | --- |
+| GET | `/notifications` | `page`, `limit`, `type`, `unread` (boolean), `sortBy` (`createdAt`\|`type`), `sortOrder` | paginated `Notification[]` (200) | 400, 401 |
+| GET | `/notifications/unread-count` | — | `{ count: number }` (200) | 401 |
+| PATCH | `/notifications/read-all` | — | `{ updated: number }` (200) | 401 |
+| PATCH | `/notifications/:id/read` | — | `Notification` (200) | 400, 401, 404 |
+| GET | `/notifications/preferences` | — | `Preference[]` (200; all 7 types, defaults filled) | 401 |
+| PUT | `/notifications/preferences` | `{ preferences: [{ type, enabled }] }` — **1–5 rows per request** | full `Preference[]` (200) | 400, 401 |
 
-| Method | Path                          | Role | Request body / query                       | Response                                 | Errors                             |
-| ------ | ----------------------------- | ---- | ------------------------------------------ | ---------------------------------------- | ---------------------------------- |
-| GET    | `/notifications`              | any  | `?page&limit&type&unread&sortBy&sortOrder` | paginated `Notification[]` (own only)    | 400, 401                           |
-| GET    | `/notifications/unread-count` | any  | —                                          | `{ count: number }`                      | 401                                |
-| PATCH  | `/notifications/:id/read`     | any  | —                                          | `Notification` (sets `isRead`, `readAt`) | 400, 401, 404 (missing or not own) |
-| PATCH  | `/notifications/read-all`     | any  | —                                          | `{ updated: number }`                    | 401                                |
-| GET    | `/notifications/preferences`  | any  | —                                          | `[{ type, enabled }]` (defaults filled)  | 401                                |
-| PUT    | `/notifications/preferences`  | any  | `{ preferences: [{ type, enabled }] }`     | `[{ type, enabled }]` (full list)        | 400, 401                           |
+```ts
+Notification = {
+  id: string;
+  userId: string;
+  type: NotificationType;
+  title: string;
+  message: string;
+  entityType: string | null;
+  entityId: string | null;
+  data: unknown;       // opaque JSON
+  isRead: boolean;
+  readAt: string | null;
+  createdAt: string;
+};
 
-`Notification` shape: `{ id, userId, type, title, message, entityType, entityId, data, isRead, readAt, createdAt }`.
-Users only ever see their **own** notifications (404 for others'). Delivery: polling `unread-count` (60s) initially; upgrade path noted in §4 of the roadmap.
+Preference = { type: NotificationType; enabled: boolean };
+```
 
-Notification types and recipients (AD-021):
+`NotificationType` = `LOW_STOCK` | `ORDER_CREATED` | `ORDER_CONFIRMED` |
+`ORDER_CANCELLED` | `PURCHASE_ORDER_RECEIVED` | `CONTACT_MESSAGE_RECEIVED` |
+`SYSTEM`.
+
+- `unread=true` lists only unread rows; `unread=false` lists only read rows; omit it to
+  list both.
+- `GET /notifications/preferences` returns all seven types even if a type never fans
+  out to the caller's role.
+- `PUT /notifications/preferences` upserts the supplied rows and returns the full
+  list. The DTO cap is 5 rows, so a client sending all seven types must split the call.
+
+Notification fan-out (AD-021):
 
 | Type | Recipient(s) |
-| ---- | ------------ |
+| --- | --- |
 | `LOW_STOCK` | active ADMIN users (one unread alert per product/recipient) |
-| `ORDER_CREATED` | active ADMIN for a staff order; active STAFF + ADMIN for `POST /orders/mine` |
-| `ORDER_CONFIRMED` | the owning CUSTOMER only (walk-in orders with no `customerId` skip it) |
-| `ORDER_CANCELLED` | active ADMIN (unchanged) + the owning CUSTOMER when present |
+| `ORDER_CREATED` | active ADMIN for a staff order; active STAFF + ADMIN for a customer order |
+| `ORDER_CONFIRMED` | the owning CUSTOMER only (walk-in orders without `customerId` notify nobody) |
+| `ORDER_CANCELLED` | active ADMIN + the owning CUSTOMER when present |
 | `PURCHASE_ORDER_RECEIVED` | active ADMIN users |
 | `CONTACT_MESSAGE_RECEIVED` | active SUPPORT users |
-| `SYSTEM` | reserved for manually created system notices; no automatic fan-out |
-
-Recipients are resolved server-side from roles or one specific user id, and every event still creates one row per active recipient and honours `NotificationPreference` opt-outs. Customer routes (`/orders/mine`, including the status events above) and all `/notifications` routes are available to any authenticated role, but the service forces `userId = caller` on reads and updates. Customer A therefore cannot list, read or mark customer B's notifications. `GET/PUT /notifications/preferences` always returns every enum value, even types that never fan out to the caller's role; those preferences are harmless and switching them does not break the inbox.
-
-Notes (issue #31 supersessions): the list filter is `unread` (boolean) — `isRead` is no longer exposed; the standalone `/notification-preferences` routes and `DELETE /notifications/:id` are replaced by `/notifications/preferences` under the notifications path (and deletion is not implemented); a missing LOW_STOCK alert is never created while an unread one for the same product exists; notification creation is best-effort and can never fail a stock/order/PO/contact operation (AD-007/AD-021).
-
-### 3.10 Dashboard
-
-ADMIN-only (AD-009). Every route takes an optional inclusive `from`/`to` range (ISO-8601): both or neither, `from <= to`, at most 92 days — otherwise 400. Omitted range = last 30 days. Day buckets are UTC and zero-filled.
-
-| Method | Path                         | Role  | Query                              | Response                                                                                                                                | Errors        |
-| ------ | ---------------------------- | ----- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
-| GET    | `/dashboard/summary`         | admin | `?from&to`                         | `{ totalProducts, totalStockUnits, stockValue, lowStockCount, outOfStockCount, ordersInPeriod, revenueInPeriod, period: { from, to } }` | 400, 401, 403 |
-| GET    | `/dashboard/low-stock`       | admin | `?page&limit`                      | paginated `Product[]` where `quantity <= minStock` (same query as `/stock/low-stock`)                                                   | 400, 401, 403 |
-| GET    | `/dashboard/sales`           | admin | `?from&to`                         | `[{ date: 'YYYY-MM-DD', totalSales: number, orderCount: number }]` (one entry per day)                                                  | 400, 401, 403 |
-| GET    | `/dashboard/top-products`    | admin | `?from&to&limit` (1–50, default 5) | `[{ productId, productName, sku, quantitySold, revenue }]`                                                                              | 400, 401, 403 |
-| GET    | `/dashboard/stock-movements` | admin | `?from&to`                         | `[{ date: 'YYYY-MM-DD', unitsIn, unitsOut }]` (one entry per day)                                                                       | 400, 401, 403 |
-
-- `stockValue` uses the **cost basis**: `SUM(quantity * costPrice)` over active products (`costPrice` NULL counts as 0) — see AD-009.
-- `totalProducts`, `totalStockUnits`, `lowStockCount`, `outOfStockCount` cover **active** products only.
-- `ordersInPeriod` / `revenueInPeriod` / `sales` / `top-products` exclude **CANCELLED** orders; PENDING and CONFIRMED both count (stock already left at creation — AD-002).
-- Prisma `aggregate`/`groupBy`/`count` do the aggregation wherever possible; `$queryRaw` is used only for the column-math figures (`quantity * costPrice`, `quantity <= minStock`) and UTC `date_trunc` day grouping — always parameterized. Empty periods return zeros/empty arrays, never errors.
-- Supersedes the earlier `/dashboard/sales-trend` (its `days` query is replaced by the `from`/`to` range on `/dashboard/sales`) and the `summary` payload listed in the original contract.
-
-### 3.11 Audit log
-
-| Method | Path          | Role  | Request query                                                            | Response               | Errors        |
-| ------ | ------------- | ----- | ------------------------------------------------------------------------ | ---------------------- | ------------- |
-| GET    | `/audit-logs` | admin | `?page&limit&userId&entityType&entityId&action&from&to&sortBy&sortOrder` | paginated `AuditLog[]` | 400, 401, 403 |
-
-- `AuditLog` shape: `{ id, userId, action, entityType, entityId, oldValues, newValues, createdAt }` (`oldValues`/`newValues` are opaque JSON objects; `userId` may be `null`).
-- Filters are exact matches (`userId`, `entityType`, `entityId`, `action`); `from`/`to` are inclusive ISO-8601 bounds on `createdAt`; `sortBy` is `createdAt` (default, `desc`) or `action`.
-- Audit logs are **read-only** via the API — created server-side, never manually; there is no POST/PATCH/DELETE route.
-- Actions currently written (issue #34): `product.created|updated|deleted`, `stock.adjusted`, `order.created|cancelled`, `purchase_order.received`, `user.updated|deactivated` (plus `user.password_changed` from issue #54) — see AD-010/AD-011. Category/supplier mutations are not instrumented yet.
-- Sensitive keys (`password`, `*Hash*`, `*token*`, `*secret*` — case-insensitive, at any depth) are **stripped** before persisting; no password hashes or tokens can appear in `oldValues`/`newValues`.
-- Logging is **best effort**: an audit write failure never aborts the operation it describes. Entries for transactional mutations are written inside the same transaction, so they commit/roll back with the change.
-
-### 3.12 Misc
-
-| Method | Path      | Role | Response                  | Errors    |
-| ------ | --------- | ---- | ------------------------- | --------- |
-| GET 🔓 | `/health` | —    | `{ status: 'ok', db: 'up' | 'down' }` | —   |
-
-### 3.13 Reports (CSV exports)
-
-All routes are **ADMIN-only** and authenticated; they answer `200` with `Content-Type: text/csv; charset=utf-8` and `Content-Disposition: attachment; filename="<report>.csv"`. Exports are read-only and contain **every** matching row (no pagination). Fields are RFC-4180 escaped (quotes doubled, commas/newlines quoted) and text starting with `= + - @` is prefixed with `'` to prevent formula injection.
-
-| Method | Path                           | Role  | Query                                                           | Filename                          | Errors        |
-| ------ | ------------------------------ | ----- | --------------------------------------------------------------- | --------------------------------- | ------------- |
-| GET    | `/reports/inventory.csv`       | admin | `?search&categoryId&supplierId&isActive&stockStatus`            | `inventory-YYYY-MM-DD.csv`        | 400, 401, 403 |
-| GET    | `/reports/low-stock.csv`       | admin | —                                                               | `low-stock-YYYY-MM-DD.csv`        | 401, 403      |
-| GET    | `/reports/sales.csv`           | admin | `?from&to` (both or neither; default last 30 days; max 92 days) | `sales-YYYY-MM-DD_YYYY-MM-DD.csv` | 400, 401, 403 |
-| GET    | `/reports/stock-movements.csv` | admin | `?productId&type&orderId&purchaseOrderId&from&to`               | `stock-movements-<range>.csv`     | 400, 401, 403 |
-
-- **Inventory** columns: `SKU, Name, Category, Supplier, Quantity, Min Stock, Price, Cost Price, Active` (`yes`/`no`). `isActive` defaults to `true`; `stockStatus` uses the `/products` semantics (`in_stock`, `low_stock` = `quantity <= minStock`, `out_of_stock`). The cost column is why this is ADMIN-only (AD-004).
-- **Low stock** columns: the same products filtered to `isActive = true` and `quantity <= minStock`, plus `Shortfall` (`max(0, minStock - quantity)`).
-- **Sales** columns: `Order Number, Created At, Status, Customer, Phone, Items, Total, Created By`; one row per order in the period and **CANCELLED orders are excluded** (same rules as the dashboard, AD-009).
-- **Stock movements** columns: `Created At, SKU, Product, Type, Change, Quantity After, Reason, Order Number, Purchase Order Number, Created By`; filters match `GET /stock/movements`.
-- Empty results still return the header row (valid CSV). Underlying data is queried directly by the reports service — there is no separate JSON "reports API" yet (AD-012).
-
-### 3.14 Public catalog
-
-Anonymous visitors browse only active products in active categories. These routes never require a token and never expose internal product data (AD-018).
-
-| Method | Path                         | Role | Query                                                                                              | Response                          | Errors |
-| ------ | ---------------------------- | ---- | -------------------------------------------------------------------------------------------------- | --------------------------------- | ------ |
-| GET 🔓 | `/catalog/products`          | —    | `?page&limit(max 50)&search(name)&categoryId&sort(name,price,newest)&order(asc,desc)`               | paginated `CatalogProduct[]`      | 400, 429 |
-| GET 🔓 | `/catalog/products/:id`      | —    | —                                                                                                  | `CatalogProduct`                  | 400 (invalid id), 404, 429 |
-| GET 🔓 | `/catalog/categories`        | —    | `?page&limit(max 50)`                                                                              | paginated `CatalogCategory[]`     | 400, 429 |
-
-`CatalogProduct`: `{ id, sku, name, description, price, imageUrl, category: { id, name }, inStock, maxOrderable }`.
-
-- `price` is a JSON **number** on this customer-facing endpoint (the same serialization as `GET /products`).
-- `inStock` is `quantity > 0`; `maxOrderable` is `min(quantity, 20)`, or `0` when out of stock. The exact quantity, `minStock`, `costPrice`, `barcode`, supplier, `isActive` and timestamps are never returned.
-- `imageUrl` is `null`, an external `https://...` URL or a relative `/uploads/products/...` path.
-- `sku` is included because it is already customer-visible in the customer-safe order items (`GET /orders/mine`) and the storefront cart.
-- Only `isActive = true` products **and** `isActive = true` categories are visible. Unknown, inactive and inactive-category products all answer the same `404` so hidden rows cannot be probed.
-- `search` matches the product **name** only. `sort=newest` maps to `createdAt`; `order` defaults to `desc` for `newest` and `asc` for `name`/`price`. Every sort has an ascending `id` tie-break for deterministic pagination.
-- Both list endpoints use the §1 envelope with `limit` capped at **50** (instead of the private API's 100).
-- Rate limiting is stricter than the private API: **30 requests per minute per client per route** (global private default is 100/minute).
-
-`CatalogCategory`: `{ id, name, description }`. Only active categories are listed; `isActive`, timestamps and product counters are internal and omitted.
-
-### 3.15 Contact messages
-
-A public contact form feeds a private support inbox. `SUPPORT` and `ADMIN` hold `contact.read` and `contact.manage`; `STAFF` and `CUSTOMER` receive `403`. The internal note and assignee are **never** exposed by a public route (AD-019).
-
-| Method  | Path                     | Role           | Request body / query                                                        | Response                    | Errors                                  |
-| ------- | ------------------------ | -------------- | --------------------------------------------------------------------------- | --------------------------- | --------------------------------------- |
-| POST 🔓 | `/contact`               | —              | `{ name(max 100), email(valid, max 255), subject(max 200), message(max 5000), honeypot? }` | `{ received: true }` (201)  | 400, 429                                |
-| GET     | `/contact-messages`      | SUPPORT, ADMIN | `?page&limit&status&assignedToId&search(name,email,subject)`                | paginated `ContactMessage[]` | 400, 401, 403                          |
-| GET     | `/contact-messages/:id`  | SUPPORT, ADMIN | —                                                                           | `ContactMessage`            | 400 (invalid id), 401, 403, 404         |
-| PATCH   | `/contact-messages/:id`  | SUPPORT, ADMIN | `{ status?, assignedToId?, internalNote? }`                                 | `ContactMessage`            | 400, 401, 403, 404                      |
-
-`ContactMessage`: `{ id, name, email, subject, message, status, assignedToId, assignedTo, internalNote, createdAt, updatedAt }`.
-
-- `status` is the `ContactStatus` enum: `NEW` (default), `IN_PROGRESS`, `RESOLVED`.
-- `assignedTo` is `{ id, name, email, role } | null`; `assignedToId` may be set to `null` to unassign. The assignee must be an **active SUPPORT or ADMIN** user — unknown, inactive or other-role ids answer `404` (the message is left unchanged).
-- Every change of `status` writes an audit entry (`action: contact_message.status_changed`, `entityType: contact_message`) with the actor in `userId` and the previous/new status plus `changedBy` in `oldValues`/`newValues` (§3.11).
-- `internalNote` (max 5000) is private triage text and can be cleared with `null`.
-- The list is newest first with an `id` ascending tie-break. `search` is case-insensitive over name, email and subject; `status` and `assignedToId` are exact filters.
-- `POST /contact` trims every text field. `honeypot` is optional and ignored by real clients; when non-empty the API still answers `201 { received: true }` but stores nothing. A real submission sends a best-effort `CONTACT_MESSAGE_RECEIVED` notification to every active SUPPORT user (never ADMIN/STAFF/CUSTOMER) with `entityType: "contact_message"` and the message id. Submissions are throttled to **5 requests per hour per client** (`429` beyond that), and the 201 body never contains a message id, assignee or internal note.
-- All four fields are required and the global `ValidationPipe` rejects unknown properties (including `status`, `assignedToId` and `internalNote`) with `400`.
+| `SYSTEM` | reserved; no automatic fan-out |
 
 ---
 
-## 4. Statuses & transitions (reference)
+## 6. CUSTOMER — own orders (`/orders/mine`)
 
-**Order:** `PENDING → CONFIRMED` (deducts nothing extra; stock leaves at creation)
-`PENDING|CONFIRMED → CANCELLED` (restores stock on cancel; terminal, no further transitions)
-**PurchaseOrder:** `DRAFT → ORDERED → PARTIALLY_RECEIVED → RECEIVED`, and `DRAFT|ORDERED → CANCELLED`.
-Manual endpoints only perform `DRAFT → ORDERED` and the two cancels (`PATCH /purchase-orders/:id/status`); the `PARTIALLY_RECEIVED`/`RECEIVED` steps happen exclusively through `POST /purchase-orders/:id/receive`.
-`RECEIVED`/`CANCELLED` are terminal.
+`ADMIN` also holds these permissions (superset); every route still scopes by
+`customerId = caller`. The shapes below are an explicit allow-list — no internal field
+can leak.
+
+| Method | Path | Request / query | Response | Statuses / errors |
+| --- | --- | --- | --- | --- |
+| POST | `/orders/mine` | body below | `CustomerOrder` (201) | 400, 401, 403, 404 (product), 409 (stock), 422 (inactive), 429; **10 req/min** |
+| GET | `/orders/mine` | `page`, `limit` (max 100), `status` (`PENDING`\|`CONFIRMED`\|`CANCELLED`) | paginated `CustomerOrder[]` (200), newest first | 400, 401, 403 |
+| GET | `/orders/mine/:id` | — | `CustomerOrder` (200) | 400, 401, 403, 404 (missing **or** not owned) |
+| POST | `/orders/mine/:id/cancel` | — | `CustomerOrder` (201) with `cancelledAt` | 400, 401, 403, 404 (missing **or** not owned), 409 (not PENDING) |
+
+`POST /orders/mine` body:
+
+```ts
+{
+  items: Array<{ productId: string; quantity: number }>; // 1–30 distinct lines, each 1–50
+  recipientName: string;     // 1–100
+  recipientPhone: string;    // 1–20
+  shippingAddress: string;   // 1–500
+  shippingCity: string;      // 1–100
+  notes?: string;            // ≤2000, internal only
+}
+```
+
+- Only active products are accepted. Duplicate `productId` lines, unknown properties
+  (`price`, `status`, `customerId`, `createdById`, …) and out-of-range quantities are
+  `400`.
+- Prices, line totals, `totalAmount`, `status`, `customerId` and `createdById` are set
+  server-side from the token/catalogue. The client cannot send them.
+- `recipientName`/`recipientPhone` are copied into `customerName`/`customerPhone` so
+  staff screens render; the customer response exposes only the recipient fields.
+- Stock is deducted at creation and restored on cancellation (AD-002).
+- Unknown ids and other customers' orders are both `404`, never `403`, so ownership
+  cannot be probed.
+
+`CustomerOrder`:
+
+```ts
+{
+  id: string;
+  orderNumber: string;          // e.g. "ORD-0001"
+  status: "PENDING" | "CONFIRMED" | "CANCELLED";
+  totalAmount: number;
+  items: Array<{
+    productName: string;
+    sku: string;
+    quantity: number;
+    unitPrice: number;
+    lineTotal: number;
+  }>;
+  recipientName: string | null;
+  recipientPhone: string | null;
+  shippingAddress: string | null;
+  shippingCity: string | null;
+  paymentMethod: "COD";
+  createdAt: string;
+  cancelledAt: string | null;
+}
+```
+
+Never present in a customer response: `customerId`, `createdById`, `createdBy`,
+`customerName`, `customerPhone`, the legacy scalar `notes`, internal order notes,
+`stockMovements`, audit data, product/item ids, `costPrice`, `minStock`, exact stock,
+`barcode`, supplier, `isActive` or timestamps other than `createdAt`/`cancelledAt`.
 
 ---
 
-## 5. Frontend safe assumptions
+## 7. SUPPORT — support desk and order visibility
 
-- Any response not shown here (extra fields) must be ignored by the frontend, not depended on.
-- New fields may be added to responses without a major version bump; breaking changes go to `/api/v2`.
-- Rate limiting: the global private default is 100 requests/minute; sensitive routes are stricter (registration, customer order creation, public catalog — see the endpoint sections). Treat `429` as retryable.
-- The frontend may generate mock data against this file directly; every page should be achievable with no backend running.
+SUPPORT holds `products.read`, `categories.read`, `orders.read_all`,
+`orders.cancel_pending`, `orders.notes.read`, `orders.notes.write`, `contact.read`,
+`contact.manage`. STAFF and ADMIN also hold these routes.
+
+### 7.1 Products and categories (read)
+
+| Method | Path | Query | Response | Statuses / errors |
+| --- | --- | --- | --- | --- |
+| GET | `/products` | `page`, `limit`, `search`, `categoryId`, `supplierId`, `isActive`, `stockStatus` (`in_stock`\|`low_stock`\|`out_of_stock`), `sortBy` (`name`\|`sku`\|`price`\|`quantity`\|`createdAt`), `sortOrder` | paginated `Product[]` (200; `costPrice` omitted for non-ADMIN) | 400, 401, 403 |
+| GET | `/products/:id` | — | `Product` + `category`, `supplier` (200) | 400, 401, 403, 404 |
+| GET | `/categories` | `page`, `limit`, `search`, `isActive` | paginated `Category[]` (200; active only by default) | 400, 401, 403 |
+| GET | `/categories/:id` | — | `Category` + `productCount` (200) | 400, 401, 403, 404 |
+
+- `stockStatus=low_stock` → `quantity <= minStock`; `in_stock` → `quantity > 0`;
+  `out_of_stock` → `quantity = 0`.
+- Soft-deleted rows still resolve by id (AD-001).
+- `costPrice` is omitted entirely (not `null`) for SUPPORT/STAFF.
+
+### 7.2 Orders (read, PENDING cancel, notes)
+
+| Method | Path | Query / body | Response | Statuses / errors |
+| --- | --- | --- | --- | --- |
+| GET | `/orders` | `page`, `limit`, `status`, `search` (orderNumber/customerName), `createdById` (UUID), `from`, `to` (inclusive ISO 8601), `sortBy` (`status`\|`createdAt`), `sortOrder` | paginated `Order[]` (200) | 400, 401, 403 |
+| GET | `/orders/:id` | — | `OrderDetail` (200; PII-bearing and audited for SUPPORT/STAFF) | 400, 401, 403, 404 |
+| POST | `/orders/:id/cancel` | — | `Order` + `items[]` (201) | 400, 401, 403, 404, 409 (not PENDING / double cancel) |
+| POST | `/orders/:id/notes` | `{ note }` (trimmed, 1–2000 chars) | `OrderNote` (201) | 400, 401, 403, 404 |
+| GET | `/orders/:id/notes` | — | `OrderNote[]` (200, oldest first, **not paginated**) | 400, 401, 403, 404 |
+
+`Order` (staff/SB shape):
+
+```ts
+{
+  id: string;
+  orderNumber: string;
+  status: "PENDING" | "CONFIRMED" | "CANCELLED";
+  customerName: string | null;
+  customerPhone: string | null;
+  notes: string | null;          // legacy scalar, internal
+  totalAmount: number;
+  customerId: string | null;     // set for customer orders
+  recipientName: string | null;
+  recipientPhone: string | null;
+  shippingAddress: string | null;
+  shippingCity: string | null;
+  paymentMethod: "COD";
+  createdById: string;
+  cancelledAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  items?: OrderItem[];
+}
+```
+
+`OrderDetail` adds:
+
+```ts
+{
+  items: OrderItem[];
+  createdBy: { id: string; name: string; email: string };
+  stockMovements: Array<{
+    id: string;
+    productId: string;
+    type: "SALE" | "RETURN" | "ADJUSTMENT" | "PURCHASE_RECEIPT";
+    quantityChange: number;
+    quantityAfter: number;
+    reason: string | null;
+    createdAt: string;
+  }>;
+}
+```
+
+`OrderItem`:
+
+```ts
+{
+  id: string;
+  orderId: string;
+  productId: string;
+  productName: string;  // snapshot
+  sku: string;          // snapshot
+  quantity: number;
+  unitPrice: number;    // snapshot
+  lineTotal: number;
+}
+```
+
+`OrderNote` (internal only):
+
+```ts
+{
+  id: string;
+  orderId: string;
+  authorId: string;
+  note: string;
+  author: { id: string; name: string };
+  createdAt: string;
+}
+```
+
+- `GET /orders` is newest first by `createdAt DESC` with `id ASC` as tie-breaker.
+  `status` accepts only the three order statuses. `from`/`to` are inclusive bounds on
+  `createdAt`; an invalid date or `from > to` is `400`.
+- **SUPPORT data minimization:** SUPPORT rows in `GET /orders` omit `customerPhone`,
+  `recipientPhone` and `shippingAddress`. `GET /orders/:id` returns the full order, and
+  every SUPPORT or STAFF detail view writes an `order.viewed` audit entry containing
+  only the viewer id/role and order id — never the personal data. ADMIN detail views
+  and all list calls are not audited (AD-020).
+- `POST /orders/:id/cancel` cancels **only PENDING** orders. `CONFIRMED`, `CANCELLED`
+  and every other state answer `409`. It restores stock exactly once with one `RETURN`
+  movement per line, stamps `cancelledAt`, writes `order.cancelled`, and sends the
+  best-effort notifications. It cannot confirm or perform any other transition.
+- Notes are exposed only by the two note routes. `/orders/mine` never includes them.
+
+### 7.3 Contact inbox
+
+| Method | Path | Query / body | Response | Statuses / errors |
+| --- | --- | --- | --- | --- |
+| GET | `/contact-messages` | `page`, `limit`, `status` (`NEW`\|`IN_PROGRESS`\|`RESOLVED`), `assignedToId` (UUID), `search` (name/email/subject) | paginated `ContactMessage[]` (200), newest first | 400, 401, 403 |
+| GET | `/contact-messages/:id` | — | `ContactMessage` (200) | 400, 401, 403, 404 |
+| PATCH | `/contact-messages/:id` | `{ status?, assignedToId?, internalNote? }` | `ContactMessage` (200) | 400, 401, 403, 404 |
+
+`ContactMessage`:
+
+```ts
+{
+  id: string;
+  name: string;
+  email: string;
+  subject: string;
+  message: string;
+  status: "NEW" | "IN_PROGRESS" | "RESOLVED";
+  assignedToId: string | null;
+  assignedTo: { id: string; name: string; email: string; role: string } | null;
+  internalNote: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+- `assignedToId` may be `null` to unassign. A non-null id must resolve to an **active
+  SUPPORT or ADMIN** user; unknown, inactive and wrong-role ids all answer `404` and
+  leave the row unchanged.
+- `internalNote` (≤5000) is private triage text and can be cleared with `null`.
+- Every actual status change writes `contact_message.status_changed` with the actor,
+  previous status and new status. Note/assignee-only edits are not audited.
+- The list is newest first with `id ASC` tie-break; `search` is case-insensitive over
+  name, email and subject; `status`/`assignedToId` are exact filters.
 
 ---
 
-## 6. Approval
+## 8. STAFF — operational routes
+
+STAFF holds `products.read`, `categories.read`, `suppliers.read`, `orders.create`,
+`orders.read_all`, `orders.update`, `orders.update_status`, `orders.cancel_pending`,
+`orders.notes.read`, `orders.notes.write`, `stock.read`, `stock.adjust`, `po.read`,
+`po.receive`. ADMIN also holds all of these.
+
+### 8.1 Staff orders (`POST`, edit, status)
+
+| Method | Path | Request / body | Response | Statuses / errors |
+| --- | --- | --- | --- | --- |
+| POST | `/orders` | `{ items: [{ productId, quantity }] (1–100 lines), customerName?, customerPhone?, notes? }` | `Order` + `items[]` (201) | 400, 401, 403, 404 (product), 409 (stock), 422 (inactive) |
+| PATCH | `/orders/:id` | `{ customerName?, customerPhone?, notes? }` — only while `PENDING` | `Order` (200) | 400, 401, 403, 404, 422 (not PENDING) |
+| PATCH | `/orders/:id/status` | `{ newStatus: "CONFIRMED" \| "CANCELLED" }` | `Order` + `items[]` (200) | 400, 401, 403, 404, 409 (invalid transition) |
+
+- `POST /orders` snapshots product name/SKU/price, computes `totalAmount` server-side,
+  deducts stock with one `SALE` movement per line, and writes `order.created` — all in
+  one Serializable transaction. `createdById` comes from the token.
+- `PATCH /orders/:id` edits metadata only; items and quantities cannot be changed.
+  An order in `CONFIRMED`/`CANCELLED` answers `422`.
+- `PATCH /orders/:id/status` is the **only** route that can confirm an order. Allowed
+  targets are `CONFIRMED` and `CANCELLED`; `PENDING` is a valid enum value but no
+  transition ends there, so it answers `409`. A `CANCELLED` order is terminal.
+- `PATCH /orders/:id/status` to `CONFIRMED` sends `ORDER_CONFIRMED` to the owning
+  customer when `customerId` exists. Cancellation sends `ORDER_CANCELLED` to the
+  customer in addition to the ADMIN alert.
+- `totalAmount` is always computed from item snapshots; client-sent prices are ignored
+  (unknown body fields are `400`).
+
+### 8.2 Suppliers (read)
+
+| Method | Path | Query | Response | Statuses / errors |
+| --- | --- | --- | --- | --- |
+| GET | `/suppliers` | `page`, `limit`, `search`, `isActive` | paginated `Supplier[]` (200; active only by default) | 400, 401, 403 |
+| GET | `/suppliers/:id` | — | `Supplier` + `productCount` (200) | 400, 401, 403, 404 |
+
+`Supplier`: `{ id, companyName, email, phone, address, isActive, createdAt, updatedAt }`.
+
+### 8.3 Stock
+
+| Method | Path | Query / body | Response | Statuses / errors |
+| --- | --- | --- | --- | --- |
+| GET | `/stock/movements` | `page`, `limit`, `productId`, `type`, `orderId`, `purchaseOrderId`, `from`, `to`, `sortBy` (`createdAt`\|`quantityChange`\|`type`), `sortOrder` | paginated `StockMovement[]` (200) | 400, 401, 403 |
+| GET | `/products/:id/movements` | same filters, forced to the path product | paginated `StockMovement[]` (200) | 400, 401, 403, 404 |
+| POST | `/stock/adjustments` | `{ productId, quantityChange (non-zero int), reason (1–500) }` | `{ movement: StockMovement, product: Product }` (201) | 400, 401, 403, 404, 409 (below zero), 422 (inactive) |
+| GET | `/stock/low-stock` | `page`, `limit` | paginated `Product[]` (200; `quantity <= minStock`, active only) | 400, 401, 403 |
+
+`StockMovement`:
+
+```ts
+{
+  id: string;
+  productId: string;
+  type: "PURCHASE_RECEIPT" | "SALE" | "RETURN" | "ADJUSTMENT";
+  quantityChange: number;   // signed
+  quantityAfter: number;
+  reason: string | null;
+  orderId: string | null;
+  purchaseOrderId: string | null;
+  createdById: string;
+  createdAt: string;
+  product: { id: string; name: string; sku: string };
+  createdBy: { id: string; name: string };
+}
+```
+
+- Manual adjustments always write `type: ADJUSTMENT`; `SALE`/`PURCHASE_RECEIPT`/`RETURN`
+  are system-generated.
+- `POST /stock/adjustments` is one Serializable transaction with a conditional atomic
+  update; two concurrent decreases can never push quantity below zero.
+- `quantityAfter` is computed server-side and never accepted from the client.
+
+### 8.4 Purchase orders (read/receive)
+
+| Method | Path | Query / body | Response | Statuses / errors |
+| --- | --- | --- | --- | --- |
+| GET | `/purchase-orders` | `page`, `limit`, `status`, `supplierId`, `sortBy` (`createdAt`\|`status`), `sortOrder` | paginated `PurchaseOrder[]` (200) | 400, 401, 403 |
+| GET | `/purchase-orders/:id` | — | `PurchaseOrderDetail` (200) | 400, 401, 403, 404 |
+| POST | `/purchase-orders/:id/receive` | `{ items: [{ productId, quantity }] }` (1–100 lines) | `PurchaseOrderDetail` (200) | 400, 401, 403, 404, 409 (over-receive/wrong state), 422 (inactive) |
+
+`PurchaseOrder`:
+
+```ts
+{
+  id: string;
+  orderNumber: string;   // e.g. "PO-0001"
+  supplierId: string;
+  status: "DRAFT" | "ORDERED" | "PARTIALLY_RECEIVED" | "RECEIVED" | "CANCELLED";
+  totalAmount: number;
+  expectedAt: string | null;
+  receivedAt: string | null;
+  notes: string | null;
+  createdById: string;
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+`PurchaseOrderDetail` adds:
+
+```ts
+{
+  supplier: { id: string; companyName: string };
+  items: Array<{
+    id: string;
+    purchaseOrderId: string;
+    productId: string;
+    quantityOrdered: number;
+    quantityReceived: number;
+    unitCost: number;
+    product: { id: string; name: string; sku: string };
+  }>;
+}
+```
+
+- Receiving is full or partial per line. It increments `quantityReceived`, raises
+  product stock, writes one `PURCHASE_RECEIPT` movement per line, and moves the status
+  to `PARTIALLY_RECEIVED`/`RECEIVED` — all in one transaction.
+- Over-receiving is `409`; `DRAFT`/`CANCELLED`/`RECEIVED` orders are `409`; a product
+  that is not a line of the order is `400`.
+- A committed full receipt fans a best-effort `PURCHASE_ORDER_RECEIVED` notification to
+  ADMINs.
+
+---
+
+## 9. ADMIN — management routes
+
+ADMIN holds every permission. These routes are ADMIN-only because no other role has the
+required permission.
+
+### 9.1 Admin-only auth probe
+
+| Method | Path | Response | Statuses / errors |
+| --- | --- | --- | --- |
+| GET | `/auth/admin-only` | `{ message: "Welcome, Admin!" }` (200) | 401, 403 |
+
+### 9.2 Users
+
+| Method | Path | Query / body | Response | Statuses / errors |
+| --- | --- | --- | --- | --- |
+| GET | `/users` | `page`, `limit`, `search`, `role`, `sortBy` (`name`\|`email`\|`role`\|`isActive`\|`createdAt`\|`updatedAt`), `sortOrder` | paginated `User[]` (200) | 400, 401, 403 |
+| GET | `/users/:id` | — | `User` (200) | 400 (invalid id), 401, 403, 404 |
+| POST | `/users` | `{ name (2–100), email, password (8–72 bytes), role }` | `User` (201) | 400, 401, 403, 409 |
+| PATCH | `/users/:id` | `{ name?, email?, role?, isActive? }` | `User` (200) | 400, 401, 403, 404, 409, 422 |
+| DELETE | `/users/:id` | — | 204 empty (soft delete) | 400, 401, 403, 404, 409, 422 |
+
+- `role` is one of `ADMIN`, `STAFF`, `SUPPORT`, `CUSTOMER`; an unknown value is `400`.
+- `409` when deactivating/demoting the last active ADMIN or duplicating an email.
+- `422` for self-deactivation / self-role-change through `/users/:id`.
+- Changing a role or deactivating a user revokes all of their active refresh tokens.
+- User responses never include `passwordHash`.
+
+### 9.3 Categories (write)
+
+| Method | Path | Request body | Response | Statuses / errors |
+| --- | --- | --- | --- | --- |
+| POST | `/categories` | `{ name (1–100), description? (≤5000) }` | `Category` (201) | 400, 401, 403, 409 (duplicate name) |
+| PATCH | `/categories/:id` | `{ name?, description?, isActive? }` | `Category` (200) | 400, 401, 403, 404, 409 |
+| DELETE | `/categories/:id` | — | 204 empty (soft delete) | 400, 401, 403, 404, 409 (linked products) |
+
+`Category`: `{ id, name, description, isActive, createdAt, updatedAt }`.
+
+### 9.4 Products (write and images)
+
+| Method | Path | Request body | Response | Statuses / errors |
+| --- | --- | --- | --- | --- |
+| POST | `/products` | `{ sku (≤64), name (≤200), description?, imageUrl?, barcode?, price, costPrice?, quantity?, minStock?, categoryId, supplierId? }` | `Product` (201) | 400, 401, 403, 404 (bad category/supplier), 409 (duplicate sku/barcode) |
+| PATCH | `/products/:id` | same fields, all optional; **`quantity` is not editable here** | `Product` (200) | 400, 401, 403, 404, 409 |
+| DELETE | `/products/:id` | — | 204 empty (soft delete) | 400, 401, 403, 404 |
+| POST | `/products/:id/image` | `multipart/form-data`, field `image` | `Product` (200) with new `imageUrl` | 400 (missing/unsupported), 401, 403, 404, 413 (>2 MB) |
+| DELETE | `/products/:id/image` | — | 204 empty | 400, 401, 403, 404 |
+
+`Product`:
+
+```ts
+{
+  id: string;
+  sku: string;
+  name: string;
+  description: string | null;
+  imageUrl: string | null;
+  barcode: string | null;
+  price: number;
+  costPrice?: number | null;   // ADMIN only; omitted for every other role
+  quantity: number;
+  minStock: number;
+  isActive: boolean;
+  categoryId: string;
+  supplierId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+- `price`/`costPrice` are `0..9999999999.99`; negative or over-range values are `400`.
+- Deactivation is the soft delete; the row is never removed (AD-001). Deleting a
+  product never fails because of linked order/PO items — history keeps its snapshots.
+- Product image uploads accept JPEG, PNG or WebP (magic-byte detection) up to **2 MB**.
+  `imageUrl` is `null`, an external `https://...` URL, or a relative
+  `/uploads/products/<uuid>.<jpg|png|webp>` path.
+
+### 9.5 Suppliers (write)
+
+| Method | Path | Request body | Response | Statuses / errors |
+| --- | --- | --- | --- | --- |
+| POST | `/suppliers` | `{ companyName (1–200), email?, phone?, address? }` | `Supplier` (201) | 400, 401, 403 |
+| PATCH | `/suppliers/:id` | `{ companyName?, email?, phone?, address?, isActive? }` | `Supplier` (200) | 400, 401, 403, 404 |
+| DELETE | `/suppliers/:id` | — | 204 empty (soft delete) | 400, 401, 403, 404 |
+
+### 9.6 Purchase orders (create/status)
+
+| Method | Path | Request body | Response | Statuses / errors |
+| --- | --- | --- | --- | --- |
+| POST | `/purchase-orders` | `{ supplierId, expectedAt?, notes?, items: [{ productId, quantityOrdered, unitCost }] }` (1–100 lines) | `PurchaseOrderDetail` (201, status `DRAFT`) | 400, 401, 403, 404, 409, 422 |
+| PATCH | `/purchase-orders/:id/status` | `{ newStatus: "ORDERED" \| "CANCELLED" }` | `PurchaseOrderDetail` (200) | 400, 401, 403, 404, 409 |
+
+- Manual transitions only: `DRAFT → ORDERED`, `DRAFT → CANCELLED`,
+  `ORDERED → CANCELLED`. `PARTIALLY_RECEIVED`/`RECEIVED` are receiving outcomes only;
+  targeting them is `409`. `RECEIVED`/`CANCELLED` are terminal.
+- Creating a PO touches **no stock**; missing supplier/product is `404`, inactive is
+  `422`, duplicate `productId` lines are `400`.
+- `unitCost` is client input; `totalAmount` is computed server-side with decimal math.
+
+### 9.7 Dashboard
+
+ADMIN-only via `dashboard.read`. Every route takes optional inclusive `from`/`to`
+(ISO 8601): both or neither, `from <= to`, at most 92 days — otherwise `400`. Omitted
+range = last 30 days. Day buckets are UTC and zero-filled.
+
+| Method | Path | Query | Response | Statuses / errors |
+| --- | --- | --- | --- | --- |
+| GET | `/dashboard/summary` | `from`, `to` | `{ totalProducts, totalStockUnits, stockValue, lowStockCount, outOfStockCount, ordersInPeriod, revenueInPeriod, period: { from, to } }` (200; all numeric, money as numbers) | 400, 401, 403 |
+| GET | `/dashboard/low-stock` | `page`, `limit` | paginated `Product[]` (200) | 400, 401, 403 |
+| GET | `/dashboard/sales` | `from`, `to` | `[{ date: "YYYY-MM-DD", totalSales: number, orderCount: number }]` (200) | 400, 401, 403 |
+| GET | `/dashboard/top-products` | `from`, `to`, `limit` (1–50, default 5) | `[{ productId, productName, sku, quantitySold, revenue }]` (200) | 400, 401, 403 |
+| GET | `/dashboard/stock-movements` | `from`, `to` | `[{ date: "YYYY-MM-DD", unitsIn, unitsOut }]` (200) | 400, 401, 403 |
+
+- `stockValue = SUM(quantity * costPrice)` over active products; NULL cost counts as 0.
+- Counts cover active products only.
+- `ordersInPeriod`/`revenueInPeriod`/sales/top-products exclude `CANCELLED` orders;
+  `PENDING` and `CONFIRMED` both count.
+
+### 9.8 Audit log
+
+| Method | Path | Query | Response | Statuses / errors |
+| --- | --- | --- | --- | --- |
+| GET | `/audit-logs` | `page`, `limit`, `userId`, `entityType`, `entityId`, `action`, `from`, `to`, `sortBy` (`createdAt`\|`action`), `sortOrder` | paginated `AuditLog[]` (200) | 400, 401, 403 |
+
+`AuditLog`:
+
+```ts
+{
+  id: string;
+  userId: string | null;
+  user: { id: string; name: string } | null;
+  action: string;
+  entityType: string;
+  entityId: string | null;
+  oldValues: unknown;   // opaque JSON
+  newValues: unknown;   // opaque JSON
+  createdAt: string;
+}
+```
+
+- Read-only: there is no POST/PATCH/DELETE route.
+- Actions currently written: `product.created|updated|deleted`,
+  `product.image_updated|image_deleted`, `stock.adjusted`,
+  `order.created|updated|cancelled|viewed`,
+  `purchase_order.received`, `contact_message.status_changed`,
+  `user.updated|deactivated|password_changed|avatar_updated|avatar_deleted`.
+- Sensitive keys (`password`, `*hash*`, `*token*`, `*secret*`, case-insensitive, at any
+  depth) are stripped before persisting.
+- Audit writes are best effort; a failure never aborts the operation.
+
+### 9.9 Reports (CSV)
+
+ADMIN-only via `reports.read`. Every route answers `200` with
+`Content-Type: text/csv; charset=utf-8` and
+`Content-Disposition: attachment; filename="<report>.csv"`. Exports contain every
+matching row (no pagination; `page`/`limit` are rejected as unknown query params).
+CSV is RFC-4180 escaped and text starting with `= + - @` is prefixed with `'`.
+
+| Method | Path | Query | Filename |
+| --- | --- | --- | --- |
+| GET | `/reports/inventory.csv` | `search`, `categoryId`, `supplierId`, `isActive` (default true), `stockStatus` | `inventory-YYYY-MM-DD.csv` |
+| GET | `/reports/low-stock.csv` | — | `low-stock-YYYY-MM-DD.csv` |
+| GET | `/reports/sales.csv` | `from`, `to` (both or neither; default last 30 days; max 92 days) | `sales-YYYY-MM-DD_YYYY-MM-DD.csv` |
+| GET | `/reports/stock-movements.csv` | `productId`, `type`, `orderId`, `purchaseOrderId`, `from`, `to` | `stock-movements-<range>.csv` |
+
+- **Inventory** columns: `SKU, Name, Category, Supplier, Quantity, Min Stock, Price, Cost Price, Active`.
+- **Low stock** columns: `SKU, Name, Category, Supplier, Quantity, Min Stock, Shortfall`.
+- **Sales** columns: `Order Number, Created At, Status, Customer, Phone, Items, Total, Created By`;
+  `CANCELLED` orders are excluded.
+- **Stock movements** columns: `Created At, SKU, Product, Type, Change, Quantity After, Reason, Order Number, Purchase Order Number, Created By`.
+- Empty results still return the header row.
+
+---
+
+## 10. Uploads
+
+Two multipart endpoints exist; both use the field name **`image`** and detect the real
+file type from magic bytes (never the client filename or MIME type).
+
+| Endpoint | Access | Allowed types | Max size | Stored path |
+| --- | --- | --- | --- | --- |
+| `POST /users/me/avatar` | any authenticated | JPEG, PNG, WebP | **1 MB** (`413`) | `/uploads/avatars/<uuid>.<ext>` |
+| `POST /products/:id/image` | ADMIN (`products.write`) | JPEG, PNG, WebP | **2 MB** (`413`) | `/uploads/products/<uuid>.<ext>` |
+
+- Uploaded files are **public** (no JWT) and served outside `/api/v1`. Resolve relative
+  URLs against the API origin, e.g. `http://localhost:3010/uploads/...`.
+- Replacing an image deletes the previous local file after the database update; a
+  failed database update removes the newly written file. External `https://...` URLs
+  are never deleted from disk.
+- Missing/unsupported files answer `400`; oversized files answer `413`.
+
+---
+
+## 11. Rate limits
+
+| Scope | Limit |
+| --- | --- |
+| Global private API default | 100 requests / minute / client |
+| `POST /auth/register` | 5 requests / minute / client |
+| `POST /orders/mine` | 10 requests / minute / client |
+| Public catalog (each route) | 30 requests / minute / client / route |
+| `POST /contact` | 5 requests / hour / client |
+
+Limits are enforced by `@nestjs/throttler` (`ThrottlerGuard` runs first). A rejected
+request is HTTP `429`; treat it as retryable and back off.
+
+---
+
+## 12. Request / response examples
+
+All tokens below are obviously fake placeholders. Never commit real tokens.
+
+### 12.1 Login
+
+```http
+POST /api/v1/auth/login
+Content-Type: application/json
+```
+
+```json
+{ "email": "customer@example.com", "password": "correct-horse-battery" }
+```
+
+```json
+{
+  "accessToken": "fake.access.token",
+  "refreshToken": "fake-refresh-token-000000000000000000000000",
+  "tokenType": "Bearer",
+  "expiresIn": 900,
+  "user": {
+    "id": "11111111-1111-4111-8111-111111111111",
+    "name": "Jane Doe",
+    "email": "customer@example.com",
+    "avatarUrl": null,
+    "role": "CUSTOMER"
+  }
+}
+```
+
+### 12.2 Register
+
+```http
+POST /api/v1/auth/register
+```
+
+```json
+{ "name": "Jane Doe", "email": "customer@example.com", "password": "correct-horse-battery" }
+```
+
+`201` with the same `Session` shape as login; `user.role` is always `"CUSTOMER"`.
+Sending `"role": "ADMIN"` additionally answers `400` (unknown property).
+
+### 12.3 Refresh
+
+```http
+POST /api/v1/auth/refresh
+```
+
+```json
+{ "refreshToken": "fake-refresh-token-000000000000000000000000" }
+```
+
+```json
+{
+  "accessToken": "fake.new.access.token",
+  "refreshToken": "fake-rotated-refresh-token-111111111111111111111",
+  "tokenType": "Bearer",
+  "expiresIn": 900
+}
+```
+
+The old refresh token is now revoked. Replaying it answers `401`.
+
+### 12.4 Public catalog list
+
+```http
+GET /api/v1/catalog/products?search=pen&sort=price&order=asc&page=1&limit=10
+```
+
+```json
+{
+  "data": [
+    {
+      "id": "22222222-2222-4222-8222-222222222222",
+      "sku": "OFF-PEN-002",
+      "name": "Ballpoint Pen",
+      "description": "Blue ink, 0.7 mm",
+      "price": 1.99,
+      "imageUrl": "/uploads/products/33333333-3333-4333-8333-333333333333.webp",
+      "category": { "id": "44444444-4444-4444-8444-444444444444", "name": "Stationery" },
+      "inStock": true,
+      "maxOrderable": 20
+    }
+  ],
+  "meta": { "page": 1, "limit": 10, "total": 1, "totalPages": 1 }
+}
+```
+
+### 12.5 Public catalog detail
+
+```http
+GET /api/v1/catalog/products/22222222-2222-4222-8222-222222222222
+```
+
+```json
+{
+  "id": "22222222-2222-4222-8222-222222222222",
+  "sku": "OFF-PEN-002",
+  "name": "Ballpoint Pen",
+  "description": "Blue ink, 0.7 mm",
+  "price": 1.99,
+  "imageUrl": null,
+  "category": { "id": "44444444-4444-4444-8444-444444444444", "name": "Stationery" },
+  "inStock": true,
+  "maxOrderable": 20
+}
+```
+
+Inactive products and products in inactive categories return `404` with the same body.
+
+### 12.6 Create a customer order
+
+```http
+POST /api/v1/orders/mine
+Authorization: Bearer fake.access.token
+```
+
+```json
+{
+  "items": [{ "productId": "22222222-2222-4222-8222-222222222222", "quantity": 2 }],
+  "recipientName": "Jane Doe",
+  "recipientPhone": "+201005551234",
+  "shippingAddress": "12 Nile Street, Apt 4",
+  "shippingCity": "Cairo",
+  "notes": "Please call on arrival"
+}
+```
+
+```json
+{
+  "id": "55555555-5555-4555-8555-555555555555",
+  "orderNumber": "ORD-0001",
+  "status": "PENDING",
+  "totalAmount": 3.98,
+  "items": [
+    {
+      "productName": "Ballpoint Pen",
+      "sku": "OFF-PEN-002",
+      "quantity": 2,
+      "unitPrice": 1.99,
+      "lineTotal": 3.98
+    }
+  ],
+  "recipientName": "Jane Doe",
+  "recipientPhone": "+201005551234",
+  "shippingAddress": "12 Nile Street, Apt 4",
+  "shippingCity": "Cairo",
+  "paymentMethod": "COD",
+  "createdAt": "2026-10-30T14:30:00.000Z",
+  "cancelledAt": null
+}
+```
+
+### 12.7 List my orders
+
+```http
+GET /api/v1/orders/mine?page=1&limit=20&status=PENDING
+Authorization: Bearer fake.access.token
+```
+
+```json
+{
+  "data": [
+    {
+      "id": "55555555-5555-4555-8555-555555555555",
+      "orderNumber": "ORD-0001",
+      "status": "PENDING",
+      "totalAmount": 3.98,
+      "items": [
+        {
+          "productName": "Ballpoint Pen",
+          "sku": "OFF-PEN-002",
+          "quantity": 2,
+          "unitPrice": 1.99,
+          "lineTotal": 3.98
+        }
+      ],
+      "recipientName": "Jane Doe",
+      "recipientPhone": "+201005551234",
+      "shippingAddress": "12 Nile Street, Apt 4",
+      "shippingCity": "Cairo",
+      "paymentMethod": "COD",
+      "createdAt": "2026-10-30T14:30:00.000Z",
+      "cancelledAt": null
+    }
+  ],
+  "meta": { "page": 1, "limit": 20, "total": 1, "totalPages": 1 }
+}
+```
+
+### 12.8 Order detail: staff vs customer
+
+Customer (`GET /orders/mine/:id`, CUSTOMER token) returns only the `CustomerOrder`
+allow-list shown above. It never contains internal ids, notes, staff, stock or audit
+data.
+
+Staff/SUPPORT (`GET /orders/:id`, SUPPORT/STAFF/ADMIN token) returns the operational
+order plus items, creator and stock movements:
+
+```json
+{
+  "id": "55555555-5555-4555-8555-555555555555",
+  "orderNumber": "ORD-0001",
+  "status": "PENDING",
+  "customerName": "Jane Doe",
+  "customerPhone": "+201005551234",
+  "notes": "Please call on arrival",
+  "totalAmount": 3.98,
+  "customerId": "11111111-1111-4111-8111-111111111111",
+  "recipientName": "Jane Doe",
+  "recipientPhone": "+201005551234",
+  "shippingAddress": "12 Nile Street, Apt 4",
+  "shippingCity": "Cairo",
+  "paymentMethod": "COD",
+  "createdById": "11111111-1111-4111-8111-111111111111",
+  "cancelledAt": null,
+  "createdAt": "2026-10-30T14:30:00.000Z",
+  "updatedAt": "2026-10-30T14:30:00.000Z",
+  "items": [
+    {
+      "id": "66666666-6666-4666-8666-666666666666",
+      "orderId": "55555555-5555-4555-8555-555555555555",
+      "productId": "22222222-2222-4222-8222-222222222222",
+      "productName": "Ballpoint Pen",
+      "sku": "OFF-PEN-002",
+      "quantity": 2,
+      "unitPrice": 1.99,
+      "lineTotal": 3.98
+    }
+  ],
+  "createdBy": {
+    "id": "11111111-1111-4111-8111-111111111111",
+    "name": "Jane Doe",
+    "email": "customer@example.com"
+  },
+  "stockMovements": [
+    {
+      "id": "77777777-7777-4777-8777-777777777777",
+      "productId": "22222222-2222-4222-8222-222222222222",
+      "type": "SALE",
+      "quantityChange": -2,
+      "quantityAfter": 18,
+      "reason": null,
+      "createdAt": "2026-10-30T14:30:00.000Z"
+    }
+  ]
+}
+```
+
+Differences to rely on: the customer body has no `customerId`, `createdById`,
+`createdBy`, `customerName`, `customerPhone`, `notes`, item ids/`productId`,
+`stockMovements` or `updatedAt`.
+
+### 12.9 Contact submission
+
+```http
+POST /api/v1/contact
+```
+
+```json
+{
+  "name": "Jane Doe",
+  "email": "jane@example.com",
+  "subject": "Question about my order",
+  "message": "Hello, I need help with...",
+  "honeypot": ""
+}
+```
+
+```json
+{ "received": true }
+```
+
+### 12.10 Contact inbox item (SUPPORT/ADMIN)
+
+```http
+GET /api/v1/contact-messages/88888888-8888-4888-8888-888888888888
+Authorization: Bearer fake.support.token
+```
+
+```json
+{
+  "id": "88888888-8888-4888-8888-888888888888",
+  "name": "Jane Doe",
+  "email": "jane@example.com",
+  "subject": "Question about my order",
+  "message": "Hello, I need help with...",
+  "status": "NEW",
+  "assignedToId": null,
+  "assignedTo": null,
+  "internalNote": null,
+  "createdAt": "2026-10-30T14:31:00.000Z",
+  "updatedAt": "2026-10-30T14:31:00.000Z"
+}
+```
+
+Triage (`PATCH /contact-messages/:id`):
+
+```json
+{
+  "status": "IN_PROGRESS",
+  "assignedToId": "99999999-9999-4999-8999-999999999999",
+  "internalNote": "Calling the customer back."
+}
+```
+
+### 12.11 Order notes (SUPPORT/STAFF/ADMIN)
+
+```http
+POST /api/v1/orders/55555555-5555-4555-8555-555555555555/notes
+Authorization: Bearer fake.support.token
+```
+
+```json
+{ "note": "Customer called about the delivery date." }
+```
+
+```json
+{
+  "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  "orderId": "55555555-5555-4555-8555-555555555555",
+  "authorId": "99999999-9999-4999-8999-999999999999",
+  "note": "Customer called about the delivery date.",
+  "author": { "id": "99999999-9999-4999-8999-999999999999", "name": "Sam Support" },
+  "createdAt": "2026-10-30T15:00:00.000Z"
+}
+```
+
+`GET /orders/:id/notes` returns an array of these, oldest first. These notes never
+appear in `/orders/mine` responses.
+
+### 12.12 Notifications list
+
+```http
+GET /api/v1/notifications?unread=true&type=ORDER_CONFIRMED&page=1&limit=20
+Authorization: Bearer fake.access.token
+```
+
+```json
+{
+  "data": [
+    {
+      "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      "userId": "11111111-1111-4111-8111-111111111111",
+      "type": "ORDER_CONFIRMED",
+      "title": "Order confirmed",
+      "message": "Order ORD-0001 is now CONFIRMED.",
+      "entityType": "order",
+      "entityId": "55555555-5555-4555-8555-555555555555",
+      "data": null,
+      "isRead": false,
+      "readAt": null,
+      "createdAt": "2026-10-30T15:10:00.000Z"
+    }
+  ],
+  "meta": { "page": 1, "limit": 20, "total": 1, "totalPages": 1 }
+}
+```
+
+---
+
+## 13. Statuses & transitions (reference)
+
+**Order statuses:** only `PENDING`, `CONFIRMED`, `CANCELLED` exist.
+
+```text
+PENDING ──confirm──▶ CONFIRMED
+   │                    │
+   └──────cancel────────┴──▶ CANCELLED (terminal)
+```
+
+- Confirm: `PATCH /orders/:id/status` with `newStatus: "CONFIRMED"` (STAFF/ADMIN only).
+- Cancel `PENDING`: `PATCH /orders/:id/status` with `newStatus: "CANCELLED"` or
+  `POST /orders/:id/cancel` (SUPPORT/STAFF/ADMIN) or `POST /orders/mine/:id/cancel`
+  (owner customer).
+- Cancel `CONFIRMED`: `PATCH /orders/:id/status` only (STAFF/ADMIN).
+- Every other transition, including same-status writes and anything from `CANCELLED`,
+  answers `409`. There is **no** `POST /orders/:id/confirm` route. Cancellation requests
+  have no body and no required reason.
+- Stock is deducted at `PENDING` creation and fully restored on cancellation (AD-002).
+
+**PurchaseOrder statuses:** `DRAFT`, `ORDERED`, `PARTIALLY_RECEIVED`, `RECEIVED`,
+`CANCELLED`.
+
+- Manual: `DRAFT → ORDERED`, `DRAFT → CANCELLED`, `ORDERED → CANCELLED` via
+  `PATCH /purchase-orders/:id/status`.
+- `PARTIALLY_RECEIVED`/`RECEIVED` happen only through `POST /purchase-orders/:id/receive`.
+- `RECEIVED` and `CANCELLED` are terminal.
+
+---
+
+## 14. Frontend integration notes
+
+- **Customer storefront / cart / checkout** must use `GET /catalog/products`,
+  `GET /catalog/products/:id`, `GET /catalog/categories`, `POST /orders/mine`,
+  `GET /orders/mine`, `GET /orders/mine/:id` and `POST /orders/mine/:id/cancel`.
+  Do **not** post checkout to `POST /orders` — that is the staff till and requires
+  `orders.create`.
+- **Staff till** uses `GET /products`, `POST /orders`, `GET /orders`, `GET /orders/:id`,
+  `PATCH /orders/:id`, `PATCH /orders/:id/status`, `POST/GET /orders/:id/notes`,
+  suppliers, stock and purchase-order routes.
+- **Support console** uses `GET /orders` (rows arrive without phone/address),
+  `GET /orders/:id` (full PII; audited), `POST /orders/:id/cancel` (PENDING only),
+  the order-notes routes and `/contact-messages`.
+- **Admin console** additionally uses `/users`, product/category/supplier writes,
+  product image upload, PO create/status, `/dashboard/*`, `/audit-logs` and
+  `/reports/*`.
+- **Never show customers** `customerId`, `createdById`, `createdBy`, `customerName`,
+  `customerPhone`, the legacy `notes`, internal order notes, `stockMovements`,
+  `costPrice`, `minStock`, exact `quantity`, `barcode`, `supplier`, `isActive` or audit
+  data. Render only the `CustomerOrder` allow-list.
+- **Auth:** store both tokens; send `Authorization: Bearer <accessToken>`; refresh with
+  `POST /auth/refresh` before/after `expiresIn` (900 s). Refresh rotates the token, so
+  replace the stored refresh token with the returned one. A `401` means re-login.
+- **Roles:** type all four roles. Treat `ADMIN` as a superset. Do not hard-code
+  `ADMIN`/`STAFF` only (the current frontend types still do — update them when
+  consuming this contract).
+- **Money:** all money fields are JSON numbers. Format/round in the UI; do not
+  `parseFloat` a string or append `.00` on the wire.
+- **Pagination:** read `data` and `meta`; default `page=1`, `limit=20`, max 100
+  (50 for public catalog).
+- **Uploads:** use `FormData` with field `image`; enforce the 1 MB avatar / 2 MB product
+  limit client-side for good UX, but rely on the server's `400`/`413`. Resolve relative
+  `/uploads/...` URLs against the backend origin (`http://localhost:3010` in dev), not
+  `/api/v1`.
+- **Dev proxy:** Vite runs on `5173` and proxies `/api` and `/uploads` to
+  `http://localhost:3010`. A different backend port requires updating
+  `frontend/vite.config.ts`.
+- **429 / 403:** `429` is retryable with backoff. `403` means the role lacks the
+  permission; `404` on own-order/notification routes often means "not yours" by design.
+- **Notifications:** poll `GET /notifications/unread-count`; fetch the list on demand.
+  Customer status messages carry `entityType: "order"` and `entityId`; deep-link to
+  `/orders/mine/:id`.
+
+---
+
+## 15. Frontend safe assumptions
+
+- Any response field not shown here must be ignored by the frontend, not depended on.
+- New fields may be added to responses without a major version bump; breaking changes
+  go to `/api/v2`.
+- The frontend may generate mock data against this file directly; every page should be
+  achievable with no backend running, using the shapes above.
+
+---
+
+## 16. Approval
 
 | Role     | Name | Reviewed (date) | Sign-off |
 | -------- | ---- | --------------- | -------- |
 | Backend  | —    | —               | —        |
 | Frontend | —    | —               | —        |
 
-Fill this in via PR review. Contract changes after sign-off require a new PR touching this file.
+Fill this in via PR review. Contract changes after sign-off require a new PR touching
+this file.
