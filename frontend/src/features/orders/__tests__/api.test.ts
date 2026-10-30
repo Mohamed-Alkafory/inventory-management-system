@@ -35,6 +35,31 @@ describe("realCustomerOrdersApi", () => {
     expect(page.items[0].orderNumber).toBe("ORD-0001");
   });
 
+  it("creates /orders/mine with only the documented fields", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(customerOrder, 201));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await realCustomerOrdersApi.createMyOrder({
+      items: [{ productId: "p-1", quantity: 2 }],
+      recipientName: "Cara Customer",
+      recipientPhone: "+20 100 000 0000",
+      shippingAddress: "1 Nile Street",
+      shippingCity: "Cairo",
+      notes: "Call on arrival",
+    });
+
+    expect(fetchMock.mock.calls[0][0]).toMatch(/\/orders\/mine$/);
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: "POST" });
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toEqual({
+      items: [{ productId: "p-1", quantity: 2 }],
+      recipientName: "Cara Customer",
+      recipientPhone: "+20 100 000 0000",
+      shippingAddress: "1 Nile Street",
+      shippingCity: "Cairo",
+      notes: "Call on arrival",
+    });
+  });
+
   it("reads one own order and cancels it through /orders/mine/:id", async () => {
     const fetchMock = vi
       .fn()

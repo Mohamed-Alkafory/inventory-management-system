@@ -72,6 +72,9 @@ const CATALOG: ShopProduct[] = SEED.map(([name, category, price, stock], i) => (
   maxOrderable: Math.min(stock, 20),
 }));
 
+/** Read-only catalogue for the other mock APIs (e.g. customer checkout). */
+export const MOCK_CATALOG: readonly ShopProduct[] = CATALOG;
+
 function compare(a: ShopProduct, b: ShopProduct, sort: CatalogQuery["sort"]): number {
   if (sort === "price") return a.price - b.price;
   if (sort === "name") return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });

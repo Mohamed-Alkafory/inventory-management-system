@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Role } from "../../../types/auth";
@@ -43,6 +43,9 @@ beforeEach(() => {
   mocks.role = "CUSTOMER";
   mocks.useMyOrders.mockReturnValue(queryResult([]));
   mocks.useOrders.mockReturnValue(queryResult([]));
+  mocks.cancelMy.mutateAsync.mockResolvedValue(undefined);
+  mocks.cancelStaff.mutateAsync.mockResolvedValue(undefined);
+  mocks.updateStatus.mutateAsync.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -135,5 +138,52 @@ describe("OrdersList", () => {
 
     expect(screen.queryByRole("menuitem", { name: "Confirm order" })).toBeNull();
     expect(screen.getByRole("menuitem", { name: "Cancel order" })).toBeInTheDocument();
+  });
+
+  it("customer scope filters by status through the customer query", async () => {
+    render(
+      <MemoryRouter>
+        <OrdersList scope="my" />
+      </MemoryRouter>,
+    );
+
+    fireEvent.change(screen.getByLabelText("Filter by status"), { target: { value: "PENDING" } });
+
+    await waitFor(() =>
+      expect(mocks.useMyOrders).toHaveBeenLastCalledWith(
+        expect.objectContaining({ status: "PENDING", page: 1 }),
+        { enabled: true },
+      ),
+    );
+  });
+
+  it("customer cancel goes through the confirmation dialog", async () => {
+    mocks.role = "CUSTOMER";
+    mocks.useMyOrders.mockReturnValue(
+      queryResult([
+        {
+          id: 1,
+          orderNumber: "ORD-0001",
+          status: "PENDING",
+          totalAmount: 49.98,
+          createdAt,
+          recipientName: "Cara Customer",
+        },
+      ]),
+    );
+
+    render(
+      <MemoryRouter>
+        <OrdersList scope="my" />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Actions for #ORD-0001" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Cancel order" }));
+
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel order" }));
+
+    await waitFor(() => expect(mocks.cancelMy.mutateAsync).toHaveBeenCalledWith(1));
   });
 });

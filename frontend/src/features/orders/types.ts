@@ -103,12 +103,24 @@ export interface MyOrderListParams {
   pageSize: number;
 }
 
+/** Payload for POST /orders/mine — never prices, statuses or customer ids. */
+export interface CreateMyOrderInput {
+  items: Array<{ productId: string; quantity: number }>;
+  recipientName: string;
+  recipientPhone: string;
+  shippingAddress: string;
+  shippingCity: string;
+  notes?: string;
+}
+
 export interface CustomerOrdersApi {
   listMyOrders(params: MyOrderListParams): Promise<Paged<CustomerOrder>>;
   /** A missing or foreign order both reject with ApiError(404). */
   getMyOrder(id: Id): Promise<CustomerOrder>;
   /** Rejects with ApiError(409) unless the order is owned and PENDING. */
   cancelMyOrder(id: Id): Promise<void>;
+  /** Places one order for the signed-in customer; stock failures are 409. */
+  createMyOrder(input: CreateMyOrderInput): Promise<CustomerOrder>;
 }
 
 export interface StaffOrdersApi {

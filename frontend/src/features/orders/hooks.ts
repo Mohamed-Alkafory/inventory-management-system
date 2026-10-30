@@ -4,7 +4,7 @@ import { customerOrdersApi, staffOrdersApi } from "./api";
 import { ordersApi as globalOrdersApi } from "../../api/ordersApi";
 import { productKeys } from "../../hooks/useProducts";
 import type { CreateOrderInput, CreatedOrder } from "../../types/orders";
-import type { Id, MyOrderListParams, OrderListParams } from "./types";
+import type { CreateMyOrderInput, Id, MyOrderListParams, OrderListParams } from "./types";
 
 /**
  * Both scopes live under the ["orders"] root so a new order can refresh every
@@ -55,6 +55,22 @@ export function useCancelMyOrder() {
   return useMutation({
     mutationFn: (id: Id) => customerOrdersApi.cancelMyOrder(id),
     onSettled: () => qc.invalidateQueries({ queryKey: myOrderKeys.all }),
+  });
+}
+
+/**
+ * Customer checkout: POST /orders/mine. Stock is deducted server-side, so the
+ * product catalogue and every own-order list are refreshed on success.
+ */
+export function useCreateMyOrder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (order: CreateMyOrderInput) => customerOrdersApi.createMyOrder(order),
+    onSuccess: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: productKeys.all }),
+        qc.invalidateQueries({ queryKey: myOrderKeys.all }),
+      ]),
   });
 }
 

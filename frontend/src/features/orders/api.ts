@@ -2,7 +2,14 @@ import { request } from "../../lib/http";
 import { USE_MOCK } from "../../lib/env";
 import { mockCustomerOrdersApi, mockStaffOrdersApi } from "./mockApi";
 import { normalizeCustomerOrder, normalizeStaffOrder, toCustomerOrderPage, toStaffOrderPage } from "./normalize";
-import type { CustomerOrdersApi, Id, MyOrderListParams, OrderListParams, StaffOrdersApi } from "./types";
+import type {
+  CreateMyOrderInput,
+  CustomerOrdersApi,
+  Id,
+  MyOrderListParams,
+  OrderListParams,
+  StaffOrdersApi,
+} from "./types";
 
 /**
  * One switch for the whole app: the shared `VITE_USE_MOCK` flag (lib/env).
@@ -41,6 +48,14 @@ export const realCustomerOrdersApi: CustomerOrdersApi = {
   },
   async cancelMyOrder(id) {
     await request<unknown>(`/orders/mine/${encode(id)}/cancel`, { method: "POST" });
+  },
+  async createMyOrder(input: CreateMyOrderInput) {
+    return normalizeCustomerOrder(
+      await request<unknown>("/orders/mine", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    );
   },
 };
 

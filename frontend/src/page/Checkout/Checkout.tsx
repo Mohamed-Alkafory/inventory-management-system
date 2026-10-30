@@ -1,132 +1,219 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { FaCreditCard, FaPaypal, FaTruck } from "react-icons/fa";
 import { Wallet } from "lucide-react";
-import { ApiError } from "../../api/errors";
-import { Button, Card, CardBody, CardHeader, Field, Input, useToast } from "../../components/ui";
-import { useCreateOrder } from "../../features/orders/hooks";
+import { z } from "zod";
+import { Button, Card, CardBody, CardHeader, Field, Input, Textarea, useToast } from "../../components/ui";
+import { useAuth } from "../../context/auth/useAuth";
+import { MAX_CART_PRODUCTS, MAX_LINE_QUANTITY } from "../../context/cart/cart-context";
 import { useCart } from "../../context/cart/useCart";
+import { orderPath } from "../../features/orders/format";
+import { useCreateMyOrder } from "../../features/orders/hooks";
+import type { CreateMyOrderInput } from "../../features/orders/types";
 import { formatPrice } from "../../lib/format";
-import { cn } from "../../lib/cn";
+import { ApiError } from "../../lib/http";
 
 /*
-  POST /orders knows: customerName, customerPhone, notes (free text) and the
-  item lines. Everything else this page collects — email, address, payment
-  method — is packed into the notes, so nothing the customer typed is lost.
+  POST /orders/mine knows the shipping details and the item lines. Prices,
+  totals and ownership are always computed by the server from the token.
 */
-const PAYMENT_METHODS = [
-  { value: "Cash on delivery", icon: FaTruck },
-  { value: "Credit / Debit card", icon: FaCreditCard },
-  { value: "PayPal", icon: FaPaypal },
-] as const;
-
-type PaymentMethod = (typeof PAYMENT_METHODS)[number]["value"];
-
 type CheckoutForm = {
-  fullName: string;
-  email: string;
-  phone: string;
-  country: string;
-  city: string;
-  street: string;
-  apartment: string;
-  postalCode: string;
+  recipientName: string;
+  recipientPhone: string;
+  shippingCity: string;
+  shippingAddress: string;
+  notes: string;
 };
 
 const EMPTY_FORM: CheckoutForm = {
-  fullName: "",
-  email: "",
-  phone: "",
-  country: "",
-  city: "",
-  street: "",
-  apartment: "",
-  postalCode: "",
+  recipientName: "",
+  recipientPhone: "",
+  shippingCity: "",
+  shippingAddress: "",
+  notes: "",
 };
 
-/** Required fields of the checkout form, in display order. */
-const REQUIRED: Array<{ field: keyof CheckoutForm; label: string }> = [
-  { field: "fullName", label: "Full name" },
-  { field: "phone", label: "Phone number" },
-  { field: "country", label: "Country" },
-  { field: "city", label: "City" },
-  { field: "street", label: "Street address" },
+/** Length limits mirror CreateOwnOrderDto on the backend. */
+const checkoutSchema = z.object({
+  recipientName: z
+    .string()
+    .trim()
+    .min(1, "Full name is required.")
+    .max(100, "Full name must be 100 characters or fewer."),
+  recipientPhone: z
+    .string()
+    .trim()
+    .min(1, "Phone number is required.")
+    .max(20, "Phone number must be 20 characters or fewer."),
+  shippingCity: z
+    .string()
+    .trim()
+    .min(1, "City is required.")
+    .max(100, "City must be 100 characters or fewer."),
+  shippingAddress: z
+    .string()
+    .trim()
+    .min(1, "Address is required.")
+    .max(500, "Address must be 500 characters or fewer."),
+  notes: z.string().trim().max(2000, "Notes must be 2000 characters or fewer."),
+});
+
+type FormErrors = Partial<Record<keyof CheckoutForm, string>>;
+
+const FIELD_KEYS: Array<keyof CheckoutForm> = [
+  "recipientName",
+  "recipientPhone",
+  "shippingCity",
+  "shippingAddress",
+  "notes",
 ];
 
-/** The server only knows name/phone/notes: fold the rest of the form into the notes. */
-function buildNotes(form: CheckoutForm, payment: PaymentMethod): string | undefined {
-  const lines = [
-    form.email && `Email: ${form.email.trim()}`,
-    form.street.trim() &&
-      `Shipping: ${[form.street.trim(), form.apartment.trim()].filter(Boolean).join(", ")}`,
-    form.city.trim() && `City: ${form.city.trim()}`,
-    form.country.trim() && `Country: ${form.country.trim()}`,
-    form.postalCode.trim() && `Postal code: ${form.postalCode.trim()}`,
-    `Payment: ${payment}`,
-  ];
-  const joined = lines.filter(Boolean).join("\n");
-  return joined.trim() === "" ? undefined : joined.slice(0, 2000);
+/** The 409 body is a human message that names the failing product id. */
+function stockConflictItem(error: ApiError, items: ReturnType<typeof useCart>["items"]) {
+  const message = error.serverMessage ?? error.message;
+  const productId = /product\s+([^\s]+)\s+change/i.exec(message)?.[1];
+  return productId ? items.find((row) => String(row.product.id) === productId) : undefined;
 }
 
 /**
- * Checkout: billing + shipping details, payment method and the order summary,
- * then ONE real order through POST /orders (which recomputes every price and
- * re-validates the stock server-side).
+ * Checkout: delivery details and the order summary, then ONE real order
+ * through POST /orders/mine. The server recomputes every price and validates
+ * the stock; the cart is only cleared after a successful placement.
  */
 export default function Checkout() {
   const { items, totalItems, subtotal, clear } = useCart();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const toast = useToast();
-  const placeOrder = useCreateOrder();
+  const placeOrder = useCreateMyOrder();
 
-  const [form, setForm] = useState<CheckoutForm>(EMPTY_FORM);
-  const [payment, setPayment] = useState<PaymentMethod>("Cash on delivery");
-  const [errors, setErrors] = useState<Partial<Record<keyof CheckoutForm, string>>>({});
+  const [form, setForm] = useState<CheckoutForm>(() => ({
+    ...EMPTY_FORM,
+    recipientName: user?.name ?? "",
+  }));
+  const [errors, setErrors] = useState<FormErrors>({});
   const [orderError, setOrderError] = useState<string | null>(null);
+  // After a successful order the cart is intentionally empty; don't bounce to /cart.
+  const orderPlaced = useRef(false);
+
+  // The route guards this already; keep the page safe when mounted directly.
+  useEffect(() => {
+    if (!user) {
+      navigate("/login", { replace: true, state: { from: { pathname: "/checkout" } } });
+    }
+  }, [user, navigate]);
 
   // Nothing to check out — back to the cart.
   const cartIsEmpty = items.length === 0;
   useEffect(() => {
-    if (cartIsEmpty && !placeOrder.isPending) navigate("/cart", { replace: true });
-  }, [cartIsEmpty, placeOrder.isPending, navigate]);
+    if (user && cartIsEmpty && !placeOrder.isPending && !orderPlaced.current) {
+      navigate("/cart", { replace: true });
+    }
+  }, [user, cartIsEmpty, placeOrder.isPending, navigate]);
 
-  const setField = (field: keyof CheckoutForm) => (event: React.ChangeEvent<HTMLInputElement>) => {
-    setForm((prev) => ({ ...prev, [field]: event.target.value }));
-    setErrors((prev) => ({ ...prev, [field]: undefined }));
-    setOrderError(null);
-  };
+  const tooManyProducts = items.length > MAX_CART_PRODUCTS;
+  const overQuantity = items.find((row) => row.quantity > MAX_LINE_QUANTITY);
+  const checkoutBlocked = tooManyProducts || Boolean(overQuantity);
+
+  const setField =
+    (field: keyof CheckoutForm) =>
+    (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      setForm((prev) => ({ ...prev, [field]: event.target.value }));
+      setErrors((prev) => ({ ...prev, [field]: undefined }));
+      setOrderError(null);
+    };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    const nextErrors: Partial<Record<keyof CheckoutForm, string>> = {};
-    for (const { field, label } of REQUIRED) {
-      if (!form[field].trim()) nextErrors[field] = `${label} is required.`;
+    if (tooManyProducts) {
+      setOrderError(
+        `Your cart has ${items.length} different products. Customer checkout allows at most ${MAX_CART_PRODUCTS} — remove ${items.length - MAX_CART_PRODUCTS} to continue.`,
+      );
+      return;
     }
-    setErrors(nextErrors);
-    if (Object.keys(nextErrors).length > 0) return;
+    if (overQuantity) {
+      setOrderError(
+        `You can order at most ${MAX_LINE_QUANTITY} of ${overQuantity.product.name} per order. Reduce its quantity to continue.`,
+      );
+      return;
+    }
+
+    const parsed = checkoutSchema.safeParse(form);
+    if (!parsed.success) {
+      const nextErrors: FormErrors = {};
+      for (const issue of parsed.error.issues) {
+        const field = issue.path[0];
+        if (typeof field === "string" && FIELD_KEYS.includes(field as keyof CheckoutForm)) {
+          nextErrors[field as keyof CheckoutForm] ??= issue.message;
+        }
+      }
+      setErrors(nextErrors);
+      setOrderError(null);
+      return;
+    }
+
+    setErrors({});
+    setOrderError(null);
+
+    const input: CreateMyOrderInput = {
+      items: items.map((row) => ({ productId: row.product.id, quantity: row.quantity })),
+      recipientName: parsed.data.recipientName,
+      recipientPhone: parsed.data.recipientPhone,
+      shippingAddress: parsed.data.shippingAddress,
+      shippingCity: parsed.data.shippingCity,
+      notes: parsed.data.notes || undefined,
+    };
 
     try {
-      const order = await placeOrder.mutateAsync({
-        items: items.map((row) => ({ productId: row.product.id, quantity: row.quantity })),
-        customerName: form.fullName.trim(),
-        customerPhone: form.phone.trim() || undefined,
-        notes: buildNotes(form, payment),
-      });
+      const order = await placeOrder.mutateAsync(input);
+      orderPlaced.current = true;
       clear();
       toast.success(`Order ${order.orderNumber} placed — ${formatPrice(order.totalAmount)}`);
-      navigate("/products");
+      navigate(orderPath(order.id));
     } catch (error) {
-      setOrderError(
-        error instanceof ApiError
-          ? error.status === 409
-            ? "Some items no longer have enough stock — adjust your cart and try again."
-            : error.message
-          : "Couldn't place the order. Please try again.",
-      );
+      if (error instanceof ApiError) {
+        if (error.status === 409) {
+          const item = stockConflictItem(error, items);
+          setOrderError(
+            item
+              ? `“${item.product.name}” no longer has enough stock. Adjust its quantity in the cart and try again.`
+              : "Some items no longer have enough stock — adjust your cart and try again.",
+          );
+          return;
+        }
+
+        if (error.status === 400) {
+          const nextErrors: FormErrors = {};
+          for (const field of FIELD_KEYS) {
+            const message = error.fieldErrors[field];
+            if (message) nextErrors[field] = message;
+          }
+          setErrors(nextErrors);
+          setOrderError(
+            Object.keys(nextErrors).length > 0
+              ? "Please fix the highlighted fields and try again."
+              : error.message,
+          );
+          return;
+        }
+
+        if (error.status === 429) {
+          setOrderError(
+            "You’ve placed a few orders in a short time. Please wait a minute and try again.",
+          );
+          return;
+        }
+
+        setOrderError(error.message);
+        return;
+      }
+
+      setOrderError("Couldn't place the order. Please try again.");
     }
   };
+
+  if (!user) return null;
 
   return (
     <div className="min-h-[calc(100vh-128px)] bg-surface-alt py-10 text-ink">
@@ -134,12 +221,12 @@ export default function Checkout() {
         <h1 className="text-3xl font-bold">Checkout</h1>
 
         <form className="mt-6 grid items-start gap-6 lg:grid-cols-[1fr_22rem]" onSubmit={handleSubmit} noValidate>
-          {/* Details */}
+          {/* Delivery details */}
           <div className="flex flex-col gap-6">
             <Card>
-              <CardHeader title="Billing Details" />
+              <CardHeader title="Delivery Details" />
               <CardBody className="flex flex-col gap-4">
-                <Field label="Full name" required error={errors.fullName}>
+                <Field label="Full name" required error={errors.recipientName}>
                   {(control) => (
                     <Input
                       {...control}
@@ -147,24 +234,12 @@ export default function Checkout() {
                       autoComplete="name"
                       maxLength={100}
                       placeholder="Full name"
-                      value={form.fullName}
-                      onChange={setField("fullName")}
+                      value={form.recipientName}
+                      onChange={setField("recipientName")}
                     />
                   )}
                 </Field>
-                <Field label="Email address" hint="Kept in the order notes for delivery coordination.">
-                  {(control) => (
-                    <Input
-                      {...control}
-                      type="email"
-                      autoComplete="email"
-                      placeholder="Email address"
-                      value={form.email}
-                      onChange={setField("email")}
-                    />
-                  )}
-                </Field>
-                <Field label="Phone number" required error={errors.phone}>
+                <Field label="Phone number" required error={errors.recipientPhone}>
                   {(control) => (
                     <Input
                       {...control}
@@ -172,74 +247,46 @@ export default function Checkout() {
                       autoComplete="tel"
                       maxLength={20}
                       placeholder="Phone number"
-                      value={form.phone}
-                      onChange={setField("phone")}
+                      value={form.recipientPhone}
+                      onChange={setField("recipientPhone")}
                     />
                   )}
                 </Field>
-              </CardBody>
-            </Card>
-
-            <Card>
-              <CardHeader title="Shipping Details" />
-              <CardBody className="flex flex-col gap-4">
-                <Field label="Country" required error={errors.country}>
-                  {(control) => (
-                    <Input
-                      {...control}
-                      type="text"
-                      autoComplete="country-name"
-                      placeholder="Country"
-                      value={form.country}
-                      onChange={setField("country")}
-                    />
-                  )}
-                </Field>
-                <Field label="City" required error={errors.city}>
+                <Field label="City" required error={errors.shippingCity}>
                   {(control) => (
                     <Input
                       {...control}
                       type="text"
                       autoComplete="address-level2"
+                      maxLength={100}
                       placeholder="City"
-                      value={form.city}
-                      onChange={setField("city")}
+                      value={form.shippingCity}
+                      onChange={setField("shippingCity")}
                     />
                   )}
                 </Field>
-                <Field label="Street address" required error={errors.street}>
+                <Field label="Address" required error={errors.shippingAddress}>
                   {(control) => (
                     <Input
                       {...control}
                       type="text"
                       autoComplete="street-address"
-                      placeholder="Street address"
-                      value={form.street}
-                      onChange={setField("street")}
+                      maxLength={500}
+                      placeholder="Street, building, apartment…"
+                      value={form.shippingAddress}
+                      onChange={setField("shippingAddress")}
                     />
                   )}
                 </Field>
-                <Field label="Apartment, suite, etc." hint="Optional">
+                <Field label="Order notes" hint="Optional — delivery instructions for the courier." error={errors.notes}>
                   {(control) => (
-                    <Input
+                    <Textarea
                       {...control}
-                      type="text"
-                      autoComplete="address-line2"
-                      placeholder="Apartment, suite, etc. (optional)"
-                      value={form.apartment}
-                      onChange={setField("apartment")}
-                    />
-                  )}
-                </Field>
-                <Field label="Postal code" hint="Optional">
-                  {(control) => (
-                    <Input
-                      {...control}
-                      type="text"
-                      autoComplete="postal-code"
-                      placeholder="Postal code"
-                      value={form.postalCode}
-                      onChange={setField("postalCode")}
+                      rows={3}
+                      maxLength={2000}
+                      placeholder="Anything we should know? (optional)"
+                      value={form.notes}
+                      onChange={setField("notes")}
                     />
                   )}
                 </Field>
@@ -274,6 +321,10 @@ export default function Checkout() {
                 <span className="text-muted">Shipping</span>
                 <span className="font-semibold text-ink">Free</span>
               </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted">Payment</span>
+                <span className="font-semibold text-ink">Cash on delivery</span>
+              </div>
 
               <div className="my-2 border-t border-dashed border-line" />
 
@@ -282,30 +333,17 @@ export default function Checkout() {
                 <span className="font-mono text-xl font-bold text-primary-600">{formatPrice(subtotal)}</span>
               </div>
 
-              <fieldset className="mt-2 flex flex-col gap-2">
-                <legend className="mb-1 text-sm font-bold text-ink">Payment Method</legend>
-                {PAYMENT_METHODS.map(({ value, icon: Icon }) => (
-                  <label
-                    key={value}
-                    className="flex cursor-pointer items-center gap-3 rounded-control border border-line px-3 py-2.5 text-sm transition hover:border-primary-500 hover:bg-surface-alt focus-within:outline-2 focus-within:outline-primary-500"
-                  >
-                    <input
-                      type="radio"
-                      name="payment"
-                      value={value}
-                      checked={payment === value}
-                      onChange={() => setPayment(value)}
-                      className="size-4 accent-primary-600"
-                    />
-                    <Icon className={cn("size-4 text-muted", payment === value && "text-primary-600")} aria-hidden="true" />
-                    <span
-                      className={cn("text-xs font-semibold uppercase tracking-wide", payment === value ? "text-ink" : "text-muted")}
-                    >
-                      {value}
-                    </span>
-                  </label>
-                ))}
-              </fieldset>
+              {tooManyProducts && (
+                <p className="text-xs font-medium text-danger-600" role="alert">
+                  Your cart has {items.length} different products. Customer checkout allows at most{" "}
+                  {MAX_CART_PRODUCTS} — remove {items.length - MAX_CART_PRODUCTS} to continue.
+                </p>
+              )}
+              {overQuantity && (
+                <p className="text-xs font-medium text-danger-600" role="alert">
+                  You can order at most {MAX_LINE_QUANTITY} of {overQuantity.product.name} per order.
+                </p>
+              )}
 
               {orderError && (
                 <p className="text-xs font-medium text-danger-600" role="alert">
@@ -318,6 +356,7 @@ export default function Checkout() {
                 fullWidth
                 className="mt-2"
                 loading={placeOrder.isPending}
+                disabled={checkoutBlocked}
                 leftIcon={<Wallet className="size-4" aria-hidden="true" />}
               >
                 Place order

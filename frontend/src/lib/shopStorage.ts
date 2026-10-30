@@ -9,6 +9,10 @@ import type { CartItem, ShopProduct } from "../types/shop";
 
 type Dict = Record<string, unknown>;
 
+/** Backend limits for POST /orders/mine: 30 distinct products, 50 per line. */
+export const MAX_CART_PRODUCTS = 30;
+export const MAX_LINE_QUANTITY = 50;
+
 const isDict = (v: unknown): v is Dict => typeof v === "object" && v !== null && !Array.isArray(v);
 const str = (v: unknown): string | undefined => (typeof v === "string" && v.trim() !== "" ? v : undefined);
 const num = (v: unknown): number | undefined => {
@@ -84,7 +88,10 @@ const toCartLine = (raw: unknown): CartItem | null => {
   if (!product || product.maxOrderable <= 0) return null;
 
   const quantity = Math.max(1, Math.floor(num(raw.quantity) ?? 1));
-  return { product, quantity: Math.min(quantity, product.maxOrderable) };
+  return {
+    product,
+    quantity: Math.min(quantity, product.maxOrderable, MAX_LINE_QUANTITY),
+  };
 };
 
 export const shopStorage = {

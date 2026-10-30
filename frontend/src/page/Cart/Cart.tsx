@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Minus, Package, Plus, ShoppingBag, Trash2 } from "lucide-react";
 import { Button, EmptyState } from "../../components/ui";
 import { Card, CardBody, CardHeader } from "../../components/ui/Card";
+import { MAX_CART_PRODUCTS, MAX_LINE_QUANTITY } from "../../context/cart/cart-context";
 import { useCart } from "../../context/cart/useCart";
 import { formatPrice } from "../../lib/format";
 import { resolveImageUrl } from "../../lib/imageUrl";
@@ -39,6 +40,9 @@ export default function Cart() {
   const navigate = useNavigate();
 
   const overStocked = items.filter((row) => row.product.maxOrderable < row.quantity);
+  const tooManyProducts = items.length > MAX_CART_PRODUCTS;
+  const overQuantity = items.find((row) => row.quantity > MAX_LINE_QUANTITY);
+  const checkoutBlocked = overStocked.length > 0 || tooManyProducts || Boolean(overQuantity);
 
   return (
     <div className="min-h-[calc(100vh-128px)] bg-surface-alt py-10 text-ink">
@@ -158,6 +162,18 @@ export default function Cart() {
                   </span>
                 </div>
 
+                {tooManyProducts && (
+                  <p className="text-xs font-medium text-danger-600" role="alert">
+                    Your cart has {items.length} different products. Customer checkout allows at most{" "}
+                    {MAX_CART_PRODUCTS} — remove {items.length - MAX_CART_PRODUCTS} to continue.
+                  </p>
+                )}
+                {overQuantity && (
+                  <p className="text-xs font-medium text-danger-600" role="alert">
+                    You can order at most {MAX_LINE_QUANTITY} of {overQuantity.product.name} per order. Reduce
+                    its quantity to continue.
+                  </p>
+                )}
                 {overStocked.length > 0 && (
                   <p className="text-xs font-medium text-danger-600">
                     Fix the quantity of {overStocked.length === 1 ? overStocked[0].product.name : "the marked items"} before checking out.
@@ -166,7 +182,7 @@ export default function Cart() {
 
                 <Button
                   fullWidth
-                  disabled={overStocked.length > 0}
+                  disabled={checkoutBlocked}
                   onClick={() => navigate("/checkout")}
                 >
                   Proceed to checkout
