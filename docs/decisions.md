@@ -33,7 +33,7 @@ Stock is deducted **at order creation** (status `PENDING`), not at confirmation.
 
 ## AD-003 — Order status transitions
 
-**Status:** Accepted · **Date:** 2026-10-19
+**Status:** Superseded by AD-020 (route shape) · **Date:** 2026-10-19
 
 ```text
 PENDING ──confirm──▶ CONFIRMED
@@ -48,6 +48,17 @@ PENDING ──confirm──▶ CONFIRMED
 - Reasons are **required** on `/cancel`. Also applies to purchase orders (`DRAFT|ORDERED → CANCELLED`).
 - Reopening/reinstating a `CANCELLED` order is not allowed in v1; the operator creates a fresh one and the audit log preserves what happened.
 
+> **Correction — current implementation (2026-10-30, AD-020).** The original
+> dedicated `/confirm` route was never implemented. The live contract is:
+> `PATCH /orders/:id/status` with `{ newStatus: "CONFIRMED" | "CANCELLED" }` for
+> STAFF/ADMIN transitions, plus `POST /orders/:id/cancel` as a **PENDING-only**
+> cancellation route for SUPPORT/STAFF/ADMIN. There is **no**
+> `POST /orders/:id/confirm`. Cancellation takes no body and requires no reason.
+> Customer ownership adds `POST /orders/mine/:id/cancel` (PENDING only). The state
+> machine and the terminal `CANCELLED` rule above still hold; only the route shape and
+> the “reason required” clause were superseded. Purchase orders also use
+> `PATCH /purchase-orders/:id/status` (AD-008).
+
 ## AD-004 — Who sees `costPrice`
 
 **Status:** Accepted · **Date:** 2026-10-19
@@ -56,7 +67,7 @@ PENDING ──confirm──▶ CONFIRMED
 
 - STAFF never receive the field in the JSON at all — it is **omitted, not `null`** — so the field's existence/absence is the signal, and STAFF UIs can be built without `costPrice`-awareness.
 - The rule is enforced in the serializer layer (per-role response shape), not just by hiding it in the UI.
-- Aggregates derived from cost (PO totals, supplier spend) that depend on cost data are also ADMIN-scoped in the API (e.g. `/dashboard/sales-trend` is admin; per-item revenue for STAFF uses the sale `unitPrice`, not cost).
+- Aggregates derived from cost (PO totals, supplier spend) that depend on cost data are also ADMIN-scoped in the API (e.g. the dashboard is ADMIN-only — AD-009; per-item revenue for STAFF uses the sale `unitPrice`, not cost).
 - Consequences: a STAFF role can never accidentally leak cost through the product list/detail; the STAFF product forms simply don't include the field, and any STAFF-originated write attempting to set `costPrice` is `403`.
 
 ## AD-005 — Stock writes go through the stock service (idempotent supply chain)
@@ -71,7 +82,7 @@ Every quantity change — order sale/return, adjustment, purchase receipt, recei
 
 ## AD-006 — Roles
 
-**Status:** Accepted · **Date:** 2026-10-19
+**Status:** Superseded by AD-016 (role set) · **Date:** 2026-10-19
 
 Two roles in v1: `ADMIN` and `STAFF` (no MANAGER/WATCHER). ADMIN is a superset of STAFF. Only ADMIN creates users and manages other users' `role`, `isActive`. Notable STAFF mappings:
 
@@ -80,7 +91,11 @@ Two roles in v1: `ADMIN` and `STAFF` (no MANAGER/WATCHER). ADMIN is a superset o
 
 A finer-grained permission matrix is out of scope for v1; revisit if a third role is ever needed.
 
-**Amended by AD-016:** the role set is now `ADMIN`, `STAFF`, `SUPPORT` and `CUSTOMER`; the permission matrix in AD-015 still defines ADMIN/STAFF and AD-016 adds the new roles.
+> **Superseded by AD-016 and AD-017.** The live role set is `ADMIN`, `STAFF`,
+> `SUPPORT` and `CUSTOMER`. AD-015 defines the permission mechanism, AD-016 adds
+> SUPPORT/CUSTOMER, AD-017 adds the customer-owned order routes, and AD-020 adds
+> pending-only cancellation and internal order notes. The current authoritative
+> matrix is the role-permission table in `docs/api-contract.md` §3.
 
 ## AD-007 — Notifications are a best-effort, ADMIN-directed side effect (issue #31)
 
@@ -180,14 +195,14 @@ Authenticated users can upload/replace their own avatar through `POST /users/me/
 
 ## AD-015 — Authorization is deny-by-default with a permission map
 
-**Status:** Accepted — **Date:** 2026-10-29
+**Status:** Accepted — amended by AD-016, AD-017, AD-019, AD-020 — **Date:** 2026-10-29
 
 `RolesGuard` is replaced by a global `PermissionsGuard` in the same position (`ThrottlerGuard` → `JwtAuthGuard` → `PermissionsGuard`). Every route must declare exactly one access mode: `@Public()`, `@AnyAuthenticated()`, or `@RequirePermission(...)`. A handler with no access metadata is rejected with `403 FORBIDDEN` in the standard error shape, so a forgotten decorator can no longer leave an endpoint open to every logged-in user.
 
 - **Source of truth:** `backend/src/auth/permissions.ts` defines `Permission` and `ROLE_PERMISSIONS`. `ADMIN` holds every permission; `STAFF` holds the operational subset below. Any role missing from the map (including an unexpected database value) holds no permissions.
 - **Evaluation:** the role comes from the database user loaded by `JwtAuthGuard`, never from the token claim. `@RequirePermission` requires **all** listed permissions. Method metadata overrides class metadata via `getAllAndOverride`.
 - **Own-account routes** are `@AnyAuthenticated()`: `GET/PATCH/DELETE /auth/me`, `POST /auth/change-password`, `POST /auth/logout`, `POST/DELETE /users/me/avatar`, and all `/notifications` routes (ownership is enforced in the service).
-- **Public routes:** `POST /auth/login`, `POST /auth/register`, `POST /auth/refresh`, `GET /health`, and the read-only `GET /catalog/products`, `GET /catalog/products/:id`, `GET /catalog/categories` (AD-018).
+- **Public routes:** `POST /auth/login`, `POST /auth/register`, `POST /auth/refresh`, `GET /health`, `POST /contact` (AD-019), and the read-only `GET /catalog/products`, `GET /catalog/products/:id`, `GET /catalog/categories` (AD-018).
 
 | Permission | ADMIN | STAFF | Routes |
 | --- | --- | --- | --- |
@@ -201,6 +216,9 @@ Authenticated users can upload/replace their own avatar through `POST /users/me/
 | `orders.read_all` | yes | yes | `GET /orders`, `GET /orders/:id` |
 | `orders.update` | yes | yes | `PATCH /orders/:id` |
 | `orders.update_status` | yes | yes | `PATCH /orders/:id/status` |
+| `orders.create_own` | yes | no | `POST /orders/mine` (CUSTOMER holds it; added by AD-017) |
+| `orders.read_own` | yes | no | `GET /orders/mine`, `GET /orders/mine/:id` (CUSTOMER holds it; added by AD-017) |
+| `orders.cancel_own` | yes | no | `POST /orders/mine/:id/cancel` (CUSTOMER holds it; added by AD-017) |
 | `orders.cancel_pending` | yes | yes | `POST /orders/:id/cancel` (SUPPORT and ADMIN as well; PENDING only — added by AD-020) |
 | `orders.notes.read` | yes | yes | `GET /orders/:id/notes` (SUPPORT and ADMIN as well — added by AD-020) |
 | `orders.notes.write` | yes | yes | `POST /orders/:id/notes` (SUPPORT and ADMIN as well — added by AD-020) |
@@ -220,14 +238,21 @@ Authenticated users can upload/replace their own avatar through `POST /users/me/
 
 This preserves the existing role split (AD-006, AD-008, AD-009) while making the 403 boundary explicit and testable. `costPrice` remains ADMIN-only in product responses (AD-004) independently of `products.read`.
 
+> **Current matrix:** the table above is the original ADMIN/STAFF matrix with later
+> additions called out per row. AD-016 adds SUPPORT and CUSTOMER, AD-017 adds the three
+> customer-owned order permissions, AD-019 adds the contact inbox, and AD-020 adds
+> pending-only cancellation and order notes. See `docs/api-contract.md` §3 for the full
+> five-column (anonymous/CUSTOMER/SUPPORT/STAFF/ADMIN) matrix generated from
+> `backend/src/auth/permissions.ts`.
+
 ## AD-016 — CUSTOMER and SUPPORT roles
 
-**Status:** Accepted — **Date:** 2026-10-29
+**Status:** Accepted — amended by AD-017 and AD-020 — **Date:** 2026-10-29
 
 The `UserRole` enum now has four values: `ADMIN`, `STAFF`, `SUPPORT` and `CUSTOMER` (additive migration `20261029010000_add_customer_support_roles`). ADMIN remains a superset of every other role; STAFF keeps the operational permissions from AD-015.
 
-- **CUSTOMER** has no business permissions (`ROLE_PERMISSIONS.CUSTOMER = []`). A customer can only use `@AnyAuthenticated()` own-account routes: `GET/PATCH/DELETE /auth/me`, `POST /auth/change-password`, `POST /auth/logout`, `POST/DELETE /users/me/avatar` and the `/notifications` routes (ownership is enforced in the service). Later issues extend this role.
-- **SUPPORT** reads shop data and every order (`products.read`, `categories.read`, `orders.read_all`), may cancel **PENDING** orders only (`orders.cancel_pending`), and may read/write internal order notes (`orders.notes.read`, `orders.notes.write`), plus the support inbox later added by AD-019. It cannot create, edit, confirm or otherwise change an order, adjust stock, read stock movements, receive purchase orders, manage users, read the audit log/dashboard/reports, or see cost data. AD-020 refines this role and adds PII minimization and detail-view auditing.
+- **CUSTOMER** originally had no business permissions (`ROLE_PERMISSIONS.CUSTOMER = []`). AD-017 extended the role with `orders.create_own`, `orders.read_own` and `orders.cancel_own` (`POST/GET /orders/mine`, `GET /orders/mine/:id`, `POST /orders/mine/:id/cancel`). It also keeps the `@AnyAuthenticated()` own-account routes: `GET/PATCH/DELETE /auth/me`, `POST /auth/change-password`, `POST /auth/logout`, `POST/DELETE /users/me/avatar` and the `/notifications` routes (ownership is enforced in the service). It holds no other business permission.
+- **SUPPORT** reads shop data and every order (`products.read`, `categories.read`, `orders.read_all`), may cancel **PENDING** orders only (`orders.cancel_pending`), and may read/write internal order notes (`orders.notes.read`, `orders.notes.write`), plus the support inbox later added by AD-019. It cannot create, edit or confirm an order, perform any status change other than PENDING cancellation, adjust stock, read stock movements, receive purchase orders, manage users, read the audit log/dashboard/reports, or see cost data. AD-020 refines this role and adds PII minimization and detail-view auditing.
 - **Registration:** public `POST /auth/register` always creates a `CUSTOMER`. The DTO has no `role` field, and the global `ValidationPipe` (`whitelist` + `forbidNonWhitelisted`) rejects a client-supplied `role` with `400`.
 - **User management:** only `users.manage` (ADMIN) can create or update users. `CreateUserDto.role` and `UpdateUserDto.role` use `@IsEnum(UserRole)`, so an unknown role is a `400`.
 - **Last-admin safety:** an operation that would leave zero active ADMINs is rejected with `409 CONFLICT` (`At least one active ADMIN must remain`). This covers admin-managed updates/deactivation and self-deactivation via `DELETE /auth/me`. The count and write share one transaction and the users API uses Serializable isolation with one `P2034` retry. Self-role-change and self-deactivation through `/users/:id` remain `422` when another active admin exists.
@@ -241,17 +266,20 @@ The `UserRole` enum now has four values: `ADMIN`, `STAFF`, `SUPPORT` and `CUSTOM
 | `orders.cancel_pending` | yes | yes | yes | no |
 | `orders.notes.read` | yes | yes | yes | no |
 | `orders.notes.write` | yes | yes | yes | no |
+| `orders.create_own` (AD-017) | yes | no | no | yes |
+| `orders.read_own` (AD-017) | yes | no | no | yes |
+| `orders.cancel_own` (AD-017) | yes | no | no | yes |
 | all other permissions (AD-015) | yes | STAFF subset | no | no |
 | `@AnyAuthenticated()` own-account routes | yes | yes | yes | yes |
 
 ## AD-017 — CUSTOMER-owned orders and shipping details
 
-**Status:** Accepted — **Date:** 2026-10-30
+**Status:** Accepted — amended by AD-020 — **Date:** 2026-10-30
 
 Customers can now place and manage their own orders without touching the staff till contract. The database change is one additive migration (`20261030000000_add_customer_orders`): `orders.customer_id` (nullable FK to `users`, `ON DELETE SET NULL`), `recipient_name`, `recipient_phone`, `shipping_address`, `shipping_city`, a `PaymentMethod` enum with only `COD` and `payment_method` defaulting to `COD`, plus the `(customer_id, created_at)` index. Existing rows stay valid because every new column except `payment_method` is nullable and `payment_method` has a default.
 
 - **Explicit relations:** `Order.createdBy`/`User.createdOrders` and `Order.customer`/`User.customerOrders` are named relations, so the two user links cannot be confused by Prisma or by a future migration.
-- **Permissions:** three new permissions keep ownership routes separate from staff routes: `orders.create_own`, `orders.read_own`, `orders.cancel_own`. CUSTOMER holds exactly those; ADMIN remains a superset and therefore also holds them. STAFF keeps the till permissions (`orders.create`, `orders.read_all`, `orders.update`, `orders.update_status`) and gains none of the own-order permissions. SUPPORT gains `orders.read_all` only, so it can read every order but can never create, edit, confirm or cancel one (superseded by AD-020: SUPPORT later gained pending-only cancellation and internal-note permissions).
+- **Permissions:** three new permissions keep ownership routes separate from staff routes: `orders.create_own`, `orders.read_own`, `orders.cancel_own`. CUSTOMER holds exactly those; ADMIN remains a superset and therefore also holds them. STAFF keeps the till permissions (`orders.create`, `orders.read_all`, `orders.update`, `orders.update_status`) and gains none of the own-order permissions. SUPPORT gains `orders.read_all` only here, so it can read every order but cannot create, edit or confirm one; AD-020 later adds `orders.cancel_pending` (PENDING-only) and the internal-note permissions.
 - **Shared creation transaction:** `POST /orders/mine` and `POST /orders` both call the same private creation pipeline (`createOrderRecord`): duplicate-line validation, one Serializable transaction, server-side decimal pricing, one atomic guarded decrement and `SALE` movement per line, sequential `orderNumber`, audit entry and best-effort admin/low-stock notifications. The customer path only adds `customerId`, recipient/shipping fields and copies the recipient into `customerName`/`customerPhone` so existing staff screens keep rendering. The staff endpoint's behaviour and body are unchanged.
 - **Ownership semantics:** `GET /orders/mine` always filters `customerId = token user`; `GET /orders/mine/:id` and `POST /orders/mine/:id/cancel` use `findFirst`/conditional writes scoped to the owner. A missing order and a foreign order are indistinguishable (`404`, never `403`) so ownership cannot be probed through status codes.
 - **Cancellation:** the customer cancel reuses the staff status-transition transaction with an ownership scope. Only `PENDING` orders can be cancelled; `CONFIRMED`/`CANCELLED` and same-status writes are `409`. The status-conditional `updateMany` (also scoped to `customerId`) is the race backstop, so a double cancel can never restore stock twice, and `P2034`/`P2002` retries keep the existing concurrency safety.
