@@ -74,11 +74,10 @@ export function extractFieldErrors(body: unknown): Record<string, string> {
   return out;
 }
 
-/** Login / register / Google / refresh / logout failures must never trigger a refresh attempt. */
+/** Login / register / refresh / logout failures must never trigger a refresh attempt. */
 const AUTH_PATHS: string[] = [
   AUTH_ENDPOINTS.login,
   AUTH_ENDPOINTS.register,
-  AUTH_ENDPOINTS.google,
   AUTH_ENDPOINTS.refresh,
   AUTH_ENDPOINTS.logout,
 ];

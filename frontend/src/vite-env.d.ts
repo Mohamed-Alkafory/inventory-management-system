@@ -5,8 +5,6 @@ interface ImportMetaEnv {
   readonly VITE_API_URL?: string;
   /** "true" → use the in-browser mock API instead of the backend. */
   readonly VITE_USE_MOCK?: string;
-  /** Google OAuth client ID for "Continue with Google". */
-  readonly VITE_GOOGLE_CLIENT_ID?: string;
 }
 
 interface ImportMeta {

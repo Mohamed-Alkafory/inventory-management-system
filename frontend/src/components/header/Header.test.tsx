@@ -1,12 +1,14 @@
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { productsApi } from "../../api/productsApi";
 import { tokenStorage } from "../../api/tokenStorage";
 import AuthProvider from "../../context/auth/AuthProvider";
 import CartProvider from "../../context/cart/CartProvider";
 import FavoritesProvider from "../../context/favorites/FavoritesProvider";
+import type { Role } from "../../types/auth";
 import type { InventoryProduct } from "../../types/inventory";
 import Header from "./Header";
 
@@ -15,7 +17,7 @@ vi.mock("../../api/authApi", () => ({
 }));
 
 vi.mock("../../api/productsApi", () => ({
-  productsApi: { list: vi.fn(), categories: vi.fn().mockResolvedValue([]) },
+  productsApi: { list: vi.fn(), get: vi.fn(), categories: vi.fn().mockResolvedValue([]) },
 }));
 
 function renderHeader() {
@@ -35,6 +37,13 @@ function renderHeader() {
   );
 }
 
+const signIn = (role: Role) =>
+  tokenStorage.setSession({
+    accessToken: "t",
+    refreshToken: "r",
+    user: { id: "1", name: "Test User", email: "test@prodexa.com", role },
+  });
+
 const cartProduct = (id: string): InventoryProduct => ({
   id,
   name: `Product ${id}`,
@@ -47,8 +56,11 @@ const cartProduct = (id: string): InventoryProduct => ({
   status: "in_stock",
 });
 
+const categoriesMock = vi.mocked(productsApi.categories);
+
 beforeEach(() => {
   localStorage.clear();
+  categoriesMock.mockClear();
 });
 
 afterEach(() => {
@@ -75,12 +87,8 @@ describe("Header mobile menu", () => {
     expect(nav.className).not.toContain("is-open");
   });
 
-  it("keeps the user's name out of the header and counts the cart as a badge", () => {
-    tokenStorage.setSession({
-      accessToken: "t",
-      refreshToken: "r",
-      user: { id: "1", name: "Test User", email: "test@prodexa.com", role: "STAFF" },
-    });
+  it("keeps the user's name out of the header and counts the cart as a badge for customers", () => {
+    signIn("CUSTOMER");
     localStorage.setItem(
       "prodexa.cart.v1",
       JSON.stringify([{ product: cartProduct("1"), quantity: 3 }]),
@@ -94,5 +102,73 @@ describe("Header mobile menu", () => {
     expect(screen.getAllByRole("link", { name: /your profile/i }).length).toBeGreaterThan(0);
     // Cart count badge.
     expect(screen.getByText("3")).toBeInTheDocument();
+  });
+});
+
+describe("Header shop icons", () => {
+  it("shows cart and favorites to signed-out visitors", () => {
+    renderHeader();
+    expect(screen.getByRole("link", { name: "Favorites" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Cart" })).toBeInTheDocument();
+  });
+
+  it("shows cart and favorites to CUSTOMER only", () => {
+    signIn("CUSTOMER");
+    renderHeader();
+    expect(screen.getByRole("link", { name: "Favorites" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Cart" })).toBeInTheDocument();
+  });
+
+  it.each(["ADMIN", "STAFF", "SUPPORT"] as const)("hides cart and favorites for %s", (role) => {
+    signIn(role);
+    renderHeader();
+    expect(screen.queryByRole("link", { name: "Favorites" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Cart" })).not.toBeInTheDocument();
+  });
+});
+
+describe("Header area links", () => {
+  it.each([
+    ["ADMIN", "/admin"],
+    ["STAFF", "/staff"],
+    ["SUPPORT", "/support"],
+  ] as const)("gives %s a link to %s", (role, href) => {
+    signIn(role);
+    renderHeader();
+    const links = screen.getAllByRole("link", { name: "Dashboard" });
+    expect(links.length).toBeGreaterThan(0);
+    expect(links[0]).toHaveAttribute("href", href);
+  });
+
+  it("gives CUSTOMER a My orders link instead", () => {
+    signIn("CUSTOMER");
+    renderHeader();
+    const links = screen.getAllByRole("link", { name: "My orders" });
+    expect(links[0]).toHaveAttribute("href", "/orders");
+    expect(screen.queryByRole("link", { name: "Dashboard" })).not.toBeInTheDocument();
+  });
+});
+
+describe("Header category menu", () => {
+  it("does not call the authenticated categories endpoint for guests or CUSTOMER", () => {
+    renderHeader();
+    expect(categoriesMock).not.toHaveBeenCalled();
+    cleanup();
+
+    signIn("CUSTOMER");
+    renderHeader();
+    expect(categoriesMock).not.toHaveBeenCalled();
+  });
+
+  it("loads categories for staff roles", async () => {
+    signIn("ADMIN");
+    renderHeader();
+    await waitFor(() => expect(categoriesMock).toHaveBeenCalled());
+  });
+
+  it("keeps the dropdown usable when the fetch is skipped", () => {
+    renderHeader();
+    fireEvent.click(screen.getByRole("button", { name: /browse category/i }));
+    expect(screen.getByRole("menuitem", { name: "Browse all products" })).toBeInTheDocument();
   });
 });

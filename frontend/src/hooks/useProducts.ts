@@ -49,11 +49,12 @@ export function useProducts(query: ProductQuery) {
   });
 }
 
-export function useProductCategories() {
+export function useProductCategories(enabled = true) {
   return useQuery({
     queryKey: productKeys.categories,
     queryFn: () => productsApi.categories(),
     staleTime: 5 * 60_000,
+    enabled,
   });
 }
 

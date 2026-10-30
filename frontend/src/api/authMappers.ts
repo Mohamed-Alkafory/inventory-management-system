@@ -1,4 +1,5 @@
 import type { AuthSession, AuthTokens, Role, User } from "../types/auth";
+import { isRole } from "../types/auth";
 import { ApiError } from "./errors";
 
 /*
@@ -19,7 +20,8 @@ function badShape(what: string): never {
 
 export function toRole(value: unknown): Role {
   const role = typeof value === "string" ? value.toUpperCase().replace(/^ROLE_/, "") : "";
-  if (role === "ADMIN" || role === "STAFF") return role;
+  if (isRole(role)) return role;
+  // Never coerce an unknown role to a known one: fail the session instead.
   return badShape("role");
 }
 

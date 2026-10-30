@@ -2,9 +2,11 @@ import { Link } from "react-router-dom";
 import { ShieldAlert } from "lucide-react";
 import { buttonClass } from "../../components/ui/buttonClass";
 import { useAuth } from "../../context/auth/useAuth";
+import { homePathForRole } from "../../routes/redirect";
 
 export default function Forbidden() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, role } = useAuth();
+  const home = isAuthenticated ? homePathForRole(role) : "/";
 
   return (
     <main className="flex min-h-[calc(100vh-128px)] items-center justify-center bg-[#FDFDFC] px-4 text-center text-ink">
@@ -19,8 +21,8 @@ export default function Forbidden() {
           administrator.
         </p>
         <div className="mt-8 flex justify-center gap-3">
-          <Link to={isAuthenticated ? "/dashboard" : "/"} className={buttonClass("primary", "md")}>
-            {isAuthenticated ? "Back to dashboard" : "Back to home"}
+          <Link to={home} className={buttonClass("primary", "md")}>
+            {isAuthenticated ? "Back to your area" : "Back to home"}
           </Link>
         </div>
       </div>

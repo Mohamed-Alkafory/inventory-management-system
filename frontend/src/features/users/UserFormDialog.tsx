@@ -3,6 +3,14 @@ import { ApiError } from "../../lib/http";
 import { Button, Input, Modal, useToast } from "../../components/ui";
 import { useCreateUser, useUpdateUser } from "./hooks";
 import type { AdminUser, UserRole } from "./types";
+import { ROLES, ROLE_LABELS } from "../../types/auth";
+
+const ROLE_HINTS: Record<UserRole, string> = {
+  ADMIN: "Full control + users",
+  STAFF: "Products, orders, inventory",
+  SUPPORT: "Support workspace",
+  CUSTOMER: "Shop, cart and own orders",
+};
 /**
  * Create/edit user (ADMIN). Creation sets name, email, the initial
  * password and a role; editing updates name/email/role (passwords change
@@ -37,7 +45,9 @@ export default function UserFormDialog({ user, onClose }: { user: AdminUser | nu
     setFormError(null);
     try {
       if (editing) {
-        await update.mutateAsync({ id: user.id, patch: { name: name.trim(), email: email.trim(), role } });
+        // Only send the role when the admin actually changed it.
+        const patch = { name: name.trim(), email: email.trim(), ...(role !== user.role ? { role } : {}) };
+        await update.mutateAsync({ id: user.id, patch });
         toast.success("User updated", `${name.trim()} was saved.`);
       } else {
         const created = await create.mutateAsync({ name: name.trim(), email: email.trim(), role, password });
@@ -105,21 +115,19 @@ export default function UserFormDialog({ user, onClose }: { user: AdminUser | nu
 
         <div>
           <span className="mb-1 block text-[11px] font-semibold text-[#374151]">Role *</span>
-          <div className="flex gap-2">
-            {(["STAFF", "ADMIN"] as UserRole[]).map((r) => (
+          <div className="grid grid-cols-2 gap-2">
+            {ROLES.map((r) => (
               <button
                 key={r}
                 type="button"
                 aria-pressed={role === r}
                 onClick={() => setRole(r)}
-                className={`flex-1 rounded-lg border px-3 py-2 text-left text-[13px] transition ${
+                className={`rounded-lg border px-3 py-2 text-left text-[13px] transition ${
                   role === r ? "border-[#FF5615] bg-[#FFF1EB] text-[#111827]" : "border-[#E5E7EB] bg-white text-[#374151] hover:border-[#FCA98E]"
                 }`}
               >
-                <span className="block font-semibold">{r === "ADMIN" ? "Admin" : "Staff"}</span>
-                <span className="block text-[11px] text-[#6B7280]">
-                  {r === "ADMIN" ? "Full control + users" : "Products, orders, inventory"}
-                </span>
+                <span className="block font-semibold">{ROLE_LABELS[r]}</span>
+                <span className="block text-[11px] text-[#6B7280]">{ROLE_HINTS[r]}</span>
               </button>
             ))}
           </div>

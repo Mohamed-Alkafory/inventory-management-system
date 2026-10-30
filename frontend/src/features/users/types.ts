@@ -1,4 +1,7 @@
-export type UserRole = "ADMIN" | "STAFF";
+import type { Role } from "../../types/auth";
+
+/** Same four roles as the auth model — one shared union. */
+export type UserRole = Role;
 export type Id = string;
 
 /** §3.1 `User` shape — the API never returns password hashes. */
