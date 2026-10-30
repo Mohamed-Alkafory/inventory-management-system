@@ -1,28 +1,27 @@
 import { Link } from "react-router-dom";
+import { Mail, MapPin, Phone } from "lucide-react";
 import { FaFacebookF, FaInstagram, FaXTwitter, FaYoutube } from "react-icons/fa6";
-import { FaEnvelope, FaMapMarkerAlt, FaPhone } from "react-icons/fa";
-import Container from "../ui/Container";
 import ProdexaLogo from "../Logo";
+import { BRAND } from "../../lib/brand";
 
 const SHOP_LINKS = [
-  { label: "Products", href: "/products" },
-  { label: "Categories", href: "/products" },
-  { label: "Stores", href: "#" },
-  { label: "Sellers", href: "#" },
-  { label: "New arrivals", href: "#" },
+  { label: "Home", to: "/" },
+  { label: "Products", to: "/products" },
+  { label: "About us", to: "/about" },
+  { label: "Contact", to: "/contact" },
 ];
 
-const SERVICE_LINKS = [
-  { label: "My Cart", href: "#" },
-  { label: "Favorites", href: "#" },
-  { label: "About Us", href: "/about" },
-  { label: "Contact", href: "/contact" },
+const ACCOUNT_LINKS = [
+  { label: "My profile", to: "/profile" },
+  { label: "My orders", to: "/orders" },
+  { label: "Favorites", to: "/favorites" },
+  { label: "Cart", to: "/cart" },
+  { label: "Settings", to: "/settings" },
 ];
 
 const CONTACT_ROWS = [
-  { icon: FaEnvelope, text: "support@prodexa.com", href: "mailto:support@prodexa.com" },
-  { icon: FaPhone, text: "+1 (555) 123-4567", href: "tel:+15551234567" },
-  { icon: FaMapMarkerAlt, text: "123 Market Street", href: "#" },
+  { icon: Mail, text: "support@prodexa.com", href: "mailto:support@prodexa.com" },
+  { icon: Phone, text: "+1 (555) 123-4567", href: "tel:+15551234567" },
 ];
 
 const SOCIALS = [
@@ -32,108 +31,116 @@ const SOCIALS = [
   { icon: FaYoutube, label: "YouTube", href: "#" },
 ];
 
-const FOOTER_HEADING =
-  "mb-4 text-xs font-bold uppercase tracking-[0.18em] text-blue-200";
-
+const FOOTER_HEADING = "text-xs font-bold uppercase tracking-[0.18em] text-ink";
 const FOOTER_LINK =
-  "text-sm text-blue-100/90 transition hover:text-white focus-visible:outline-2 focus-visible:outline-blue-300";
+  "text-sm text-muted transition-colors hover:text-primary-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-500";
 
 /**
- * Site-wide footer: brand block with masthead + tagline + socials on the
- * left, link columns and contact details on the right.
+ * Storefront footer. Sits on the same 1650px rail as the header so the brand,
+ * columns and bottom row line up with the logo and nav above. Light surfaces
+ * and orange accents keep it in the app's palette. Rendered only on public
+ * pages (see SiteFooter).
  */
 export default function Footer() {
+  const year = new Date().getFullYear();
+
   return (
-    <footer id="contact" className="scroll-mt-20 bg-[#FF6B35] text-white">
-      <Container className="grid gap-10 py-14 sm:grid-cols-2 lg:grid-cols-4">
-        {/* Brand */}
-        <div>
-          <div className="flex items-center gap-3">
-            <span className="flex size-11 items-center justify-center rounded-xl bg-white">
-              <ProdexaLogo size={34} showWordmark={false} />
-            </span>
-            <p className="text-2xl font-bold tracking-[0.08em] text-white">
-              PRODEXA
+    <footer className="bg-linear-to-b from-surface-alt to-[#E9EDF2] text-ink">
+      {/* Same horizontal rail as the header: max-w-1650 + 24px outer, 40px inner. */}
+      <div className="mx-auto w-full max-w-[1650px] px-6">
+        <div className="grid gap-12 px-4 py-14 sm:px-10 lg:grid-cols-[1.6fr_1fr_1fr_1.2fr]">
+          {/* Brand */}
+          <div className="max-w-sm">
+            <Link
+              to="/"
+              className="inline-flex items-center gap-2.5 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary-500"
+            >
+              <span className="flex size-11 items-center justify-center rounded-xl border border-line bg-white shadow-sm">
+                <ProdexaLogo size={34} showWordmark={false} />
+              </span>
+              <span className="text-2xl font-extrabold tracking-[0.08em] text-ink">
+                PRODEX<span className="text-primary-600">A</span>
+              </span>
+            </Link>
+
+            <p className="mt-5 max-w-64 text-sm leading-relaxed text-muted">
+              Quality electronics and accessories, delivered with care — with the inventory insight to keep every shelf
+              stocked.
+            </p>
+
+            <div className="mt-6 flex gap-3">
+              {SOCIALS.map(({ icon: Icon, label, href }) => (
+                <a
+                  key={label}
+                  href={href}
+                  aria-label={label}
+                  className="flex size-9 items-center justify-center rounded-lg border border-line bg-white text-muted transition hover:-translate-y-0.5 hover:border-primary-500 hover:bg-primary-50 hover:text-primary-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-500"
+                >
+                  <Icon className="size-4" aria-hidden="true" />
+                </a>
+              ))}
+            </div>
+          </div>
+
+          {/* Shop */}
+          <nav aria-label="Shop" className="min-w-0">
+            <h2 className={FOOTER_HEADING}>Shop</h2>
+            <ul className="mt-4 space-y-3">
+              {SHOP_LINKS.map((link) => (
+                <li key={link.label}>
+                  <Link to={link.to} className={FOOTER_LINK}>
+                    {link.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </nav>
+
+          {/* Account */}
+          <nav aria-label="Account" className="min-w-0">
+            <h2 className={FOOTER_HEADING}>Account</h2>
+            <ul className="mt-4 space-y-3">
+              {ACCOUNT_LINKS.map((link) => (
+                <li key={link.label}>
+                  <Link to={link.to} className={FOOTER_LINK}>
+                    {link.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </nav>
+
+          {/* Contact */}
+          <div className="min-w-0">
+            <h2 className={FOOTER_HEADING}>Contact</h2>
+            <ul className="mt-4 space-y-3">
+              {CONTACT_ROWS.map(({ icon: Icon, text, href }) => (
+                <li key={text}>
+                  <a href={href} className={`${FOOTER_LINK} inline-flex items-center gap-2.5`}>
+                    <Icon className="size-4 shrink-0 text-primary-600" aria-hidden="true" />
+                    {text}
+                  </a>
+                </li>
+              ))}
+              <li className="flex items-center gap-2.5 text-sm text-muted">
+                <MapPin className="size-4 shrink-0 text-primary-600" aria-hidden="true" />
+                123 Market Street
+              </li>
+            </ul>
+
+            <p className="mt-5 text-xs leading-relaxed text-muted">
+              Real-time stock levels, orders and suppliers — all in one place.
             </p>
           </div>
+        </div>
+      </div>
 
-          <p className="mt-5 max-w-64 text-sm leading-relaxed text-white">
-            Quality electronics and accessories, delivered with care.
+      <div className="border-t border-line/70">
+        <div className="mx-auto flex w-full max-w-[1650px] flex-col items-center justify-between gap-2 px-6 py-5 text-sm text-muted sm:flex-row">
+          <p>
+            © {year} {BRAND}. All rights reserved.
           </p>
-
-          <div className="mt-6 flex gap-3">
-            {SOCIALS.map(({ icon: Icon, label, href }) => (
-              <a
-                key={label}
-                href={href}
-                aria-label={label}
-                className="flex size-9 items-center justify-center rounded-lg border border-white text-white transition hover:border-blue-200 hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-blue-300"
-              >
-                <Icon className="size-4" aria-hidden="true" />
-              </a>
-            ))}
-          </div>
-        </div>
-
-        {/* Shop */}
-        <nav aria-label="Shop">
-          <h4 className={FOOTER_HEADING}>Shop</h4>
-          <ul className="space-y-3">
-            {SHOP_LINKS.map((l) => (
-              <li key={l.label}>
-                {l.href.startsWith("/") ? (
-                  <Link to={l.href} className={FOOTER_LINK}>
-                    {l.label}
-                  </Link>
-                ) : (
-                  <a href={l.href} className={FOOTER_LINK}>
-                    {l.label}
-                  </a>
-                )}
-              </li>
-            ))}
-          </ul>
-        </nav>
-
-        {/* Customer service */}
-        <nav aria-label="Customer service">
-          <h4 className={FOOTER_HEADING}>Customer Service</h4>
-          <ul className="space-y-3">
-            {SERVICE_LINKS.map((l) => (
-              <li key={l.label}>
-                {l.href.startsWith("/") ? (
-                  <Link to={l.href} className={FOOTER_LINK}>
-                    {l.label}
-                  </Link>
-                ) : (
-                  <a href={l.href} className={FOOTER_LINK}>
-                    {l.label}
-                  </a>
-                )}
-              </li>
-            ))}
-          </ul>
-        </nav>
-
-        {/* Contact */}
-        <div>
-          <h4 className={FOOTER_HEADING}>Contact</h4>
-          <ul className="space-y-3">
-            {CONTACT_ROWS.map(({ icon: Icon, text, href }) => (
-              <li key={text}>
-                <a href={href} className={`inline-flex items-center gap-2.5 ${FOOTER_LINK}`}>
-                  <Icon className="size-4 shrink-0 text-white" aria-hidden="true" />
-                  {text}
-                </a>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </Container>
-
-      <div className="mx-auto w-full max-w-6xl px-4 sm:px-6">
-        <div className="border-t border-white/20 py-5 text-sm text-blue-100/60">
-          © {new Date().getFullYear()} Prodexa. All rights reserved.
+          <p>Inventory &amp; order management, simplified.</p>
         </div>
       </div>
     </footer>
