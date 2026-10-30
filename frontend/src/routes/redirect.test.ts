@@ -22,7 +22,7 @@ describe("homePathForRole", () => {
 describe("canRoleAccessPath", () => {
   it("lets every role use public, catalogue and profile pages", () => {
     for (const role of ["ADMIN", "STAFF", "SUPPORT", "CUSTOMER"] as const) {
-      for (const path of ["/", "/about", "/contact", "/forbidden", "/products", "/products/42", "/profile"]) {
+      for (const path of ["/", "/about", "/contact", "/forbidden", "/products", "/products/42", "/profile", "/settings"]) {
         expect(canRoleAccessPath(role, path)).toBe(true);
       }
     }

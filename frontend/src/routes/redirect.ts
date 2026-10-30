@@ -34,7 +34,7 @@ export function canRoleAccessPath(role: Role, path: string): boolean {
   if (PUBLIC_PATHS.has(p) || p === "/products" || p.startsWith("/products/")) return true;
 
   // Any signed-in role.
-  if (p === "/profile" || p === "/dashboard" || p === "/notifications") return true;
+  if (p === "/profile" || p === "/settings" || p === "/dashboard" || p === "/notifications") return true;
 
   if (p === "/admin" || p.startsWith("/admin/")) return role === "ADMIN";
   if (p === "/staff" || p.startsWith("/staff/")) return role === "ADMIN" || role === "STAFF";

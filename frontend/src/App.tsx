@@ -35,6 +35,7 @@ import ProtectedRoute from "./routes/ProtectedRoute";
 import RoleHomeRedirect from "./routes/RoleHomeRedirect";
 import RoleRoute from "./routes/RoleRoute";
 import Profile from "./page/Profile/Profile";
+import Settings from "./page/app/Settings";
 import StaffLayout from "./staff/layouts/StaffLayout";
 import StaffDashboard from "./staff/pages/Dashboard/StaffDashboard";
 import StaffInventory from "./staff/pages/Inventory/Inventory";
@@ -80,6 +81,7 @@ export function AppRoutes() {
       <Route element={<ProtectedRoute />}>
         <Route path="/dashboard" element={<RoleHomeRedirect />} />
         <Route path="/profile" element={<Profile />} />
+        <Route path="/settings" element={<Settings />} />
         <Route path="/notifications" element={<NotificationsPage />} />
 
         {/* CUSTOMER only — shopping and own orders */}

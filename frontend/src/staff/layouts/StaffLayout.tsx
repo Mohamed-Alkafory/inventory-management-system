@@ -1,4 +1,4 @@
-import { Bell, Boxes, ClipboardList, LayoutDashboard, Package, PlusCircle, ShoppingBag } from "lucide-react";
+import { Bell, Boxes, ClipboardList, LayoutDashboard, Package, PlusCircle, Settings, ShoppingBag } from "lucide-react";
 import AreaLayout from "../../components/layout/AreaLayout";
 import type { AreaNavItem } from "../../components/layout/AreaLayout";
 
@@ -10,6 +10,7 @@ const NAV: AreaNavItem[] = [
   { to: "/staff/purchase-orders", label: "Purchase orders", icon: ClipboardList },
   { to: "/staff/products", label: "Products", icon: Package },
   { to: "/notifications", label: "Notifications", icon: Bell },
+  { to: "/settings", label: "Settings", icon: Settings },
 ];
 
 /** Shell for /staff/* (ADMIN and STAFF). */

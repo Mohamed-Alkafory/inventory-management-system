@@ -1,4 +1,4 @@
-import { Bell, LayoutDashboard, Mail, ShoppingBag } from "lucide-react";
+import { Bell, LayoutDashboard, Mail, Settings, ShoppingBag } from "lucide-react";
 import AreaLayout from "../../components/layout/AreaLayout";
 import type { AreaNavItem } from "../../components/layout/AreaLayout";
 
@@ -7,6 +7,7 @@ const NAV: AreaNavItem[] = [
   { to: "/support/messages", label: "Messages", icon: Mail },
   { to: "/support/orders", label: "Orders", icon: ShoppingBag },
   { to: "/notifications", label: "Notifications", icon: Bell },
+  { to: "/settings", label: "Settings", icon: Settings },
 ];
 
 /** Shell for /support/* (ADMIN and SUPPORT). */
