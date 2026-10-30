@@ -17,6 +17,7 @@ import {
 } from "../../components/ui";
 import { useAuth } from "../../context/auth/useAuth";
 import NotificationPreferences from "../../features/notifications/NotificationPreferences";
+import { useArea } from "../../routes/useArea";
 import { ApiError } from "../../lib/http";
 
 const nameSchema = z.object({
@@ -56,6 +57,8 @@ export default function Settings() {
   const { user, updateProfile, deleteAccount } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
+  // Inside a dashboard shell the layout owns the page background and padding.
+  const inArea = useArea() !== null;
 
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -133,7 +136,7 @@ export default function Settings() {
   };
 
   return (
-    <div className="min-h-[calc(100vh-128px)] bg-surface-alt py-10 text-ink">
+    <div className={inArea ? undefined : "min-h-[calc(100vh_-_var(--header-h))] bg-surface-alt py-10 text-ink"}>
       <div className="mx-auto w-full max-w-3xl space-y-6 px-4 sm:px-6">
         <div>
           <h1 className="text-2xl font-extrabold sm:text-3xl">Settings</h1>

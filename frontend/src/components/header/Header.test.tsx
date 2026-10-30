@@ -15,11 +15,11 @@ vi.mock("../../api/authApi", () => ({
   authApi: { login: vi.fn(), logout: vi.fn().mockResolvedValue(undefined), me: vi.fn().mockImplementation(() => new Promise(() => {})) },
 }));
 
-function renderHeader() {
+function renderHeader(path = "/") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[path]}>
         <AuthProvider>
           <CartProvider>
             <FavoritesProvider>
@@ -130,12 +130,73 @@ describe("Header area links", () => {
     expect(links[0]).toHaveAttribute("href", href);
   });
 
-  it("gives CUSTOMER a My orders link instead", () => {
+  it("gives CUSTOMER a Dashboard link to their own area", () => {
     signIn("CUSTOMER");
     renderHeader();
-    const links = screen.getAllByRole("link", { name: "My orders" });
-    expect(links[0]).toHaveAttribute("href", "/orders");
-    expect(screen.queryByRole("link", { name: "Dashboard" })).not.toBeInTheDocument();
+    const links = screen.getAllByRole("link", { name: "Dashboard" });
+    expect(links[0]).toHaveAttribute("href", "/dashboard");
+  });
+});
+
+describe("Header stays inside the current dashboard", () => {
+  it("maps Dashboard and Products to the admin area when inside /admin", () => {
+    signIn("ADMIN");
+    renderHeader("/admin/orders");
+
+    expect(screen.getAllByRole("link", { name: "Dashboard" })[0]).toHaveAttribute("href", "/admin");
+    const products = screen.getAllByRole("link", { name: "Products" });
+    expect(products.some((link) => link.getAttribute("href") === "/admin/products")).toBe(true);
+    expect(screen.getAllByRole("link", { name: "Your profile" })[0]).toHaveAttribute(
+      "href",
+      "/admin/profile",
+    );
+  });
+
+  it.each([
+    ["STAFF", "/staff/orders", "/staff/products"],
+    ["SUPPORT", "/support/messages", "/support/products"],
+  ] as const)(
+    "keeps %s inside its dashboard (%s → %s)",
+    (role, path, productsHref) => {
+      signIn(role);
+      renderHeader(path);
+
+      const products = screen.getAllByRole("link", { name: "Products" });
+      expect(products.some((link) => link.getAttribute("href") === productsHref)).toBe(true);
+    },
+  );
+
+  it.each([
+    ["ADMIN", "/admin/products"],
+    ["STAFF", "/staff/products"],
+    ["SUPPORT", "/support/products"],
+    ["CUSTOMER", "/dashboard/products"],
+  ] as const)(
+    "opens Products in the %s dashboard even from the storefront",
+    (role, href) => {
+      signIn(role);
+      renderHeader("/");
+
+      const products = screen.getAllByRole("link", { name: "Products" });
+      expect(products.some((link) => link.getAttribute("href") === href)).toBe(true);
+    },
+  );
+
+  it("opens Products, Settings and Profile inside the customer dashboard", () => {
+    signIn("CUSTOMER");
+    renderHeader("/dashboard/orders");
+
+    const products = screen.getAllByRole("link", { name: "Products" });
+    expect(products.some((link) => link.getAttribute("href") === "/dashboard/products")).toBe(true);
+    expect(screen.getAllByRole("link", { name: "Dashboard" })[0]).toHaveAttribute("href", "/dashboard");
+    expect(screen.getAllByRole("link", { name: "Settings" })[0]).toHaveAttribute(
+      "href",
+      "/dashboard/settings",
+    );
+    expect(screen.getAllByRole("link", { name: "Your profile" })[0]).toHaveAttribute(
+      "href",
+      "/dashboard/profile",
+    );
   });
 });
 

@@ -156,7 +156,7 @@ export default function Products({ embedded = false }: { embedded?: boolean }) {
   const showExtraCategory = Boolean(query.category) && !categoryOptions.some((c) => c.id === query.category);
 
   return (
-    <div className={embedded ? "text-ink" : "min-h-[calc(100vh-128px)] bg-surface-alt py-10 text-ink"}>
+    <div className={embedded ? "text-ink" : "min-h-[calc(100vh_-_var(--header-h))] bg-surface-alt py-10 text-ink"}>
       <div className={embedded ? "mx-auto w-full max-w-7xl" : "mx-auto w-full max-w-7xl px-4 sm:px-6"}>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>

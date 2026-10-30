@@ -8,6 +8,7 @@ import { useCart } from "../../context/cart/useCart";
 import { useFavorites } from "../../context/favorites/useFavorites";
 import { useCatalogCategories, useCatalogProducts } from "../../hooks/useCatalog";
 import { cn } from "../../lib/cn";
+import { useArea } from "../../routes/useArea";
 import type { ShopProduct } from "../../types/shop";
 import { catalogErrorMessage } from "./catalogError";
 import { SHOP_PAGE_SIZES } from "./shopQuery";
@@ -28,6 +29,12 @@ export default function ShopProducts() {
   const navigate = useNavigate();
   const cart = useCart();
   const favorites = useFavorites();
+  // Inside a dashboard shell the layout owns the page background and padding,
+  // and product/cart links stay in that shell.
+  const area = useArea();
+  const inArea = area !== null;
+  const productBase = area === "customer" ? "/dashboard/products" : "/products";
+  const cartPath = area === "customer" ? "/dashboard/cart" : "/cart";
 
   const { query, update, clearFilters, hasFilters } = useShopFilters();
 
@@ -85,7 +92,7 @@ export default function ShopProducts() {
 
   const handleOrder = (product: ShopProduct) => {
     cart.addToCart(product);
-    navigate("/cart");
+    navigate(cartPath);
   };
 
   const errorMessage = isError ? catalogErrorMessage(error) : null;
@@ -94,7 +101,7 @@ export default function ShopProducts() {
   const showExtraCategory = Boolean(query.category) && !categoryOptions.some((c) => c.id === query.category);
 
   return (
-    <div className="min-h-[calc(100vh-128px)] bg-surface-alt py-10 text-ink">
+    <div className={inArea ? undefined : "min-h-[calc(100vh_-_var(--header-h))] bg-surface-alt py-10 text-ink"}>
       <div className="mx-auto w-full max-w-7xl px-4 sm:px-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -177,7 +184,7 @@ export default function ShopProducts() {
                     product={product}
                     isFavorite={favorites.has(product.id)}
                     disabled={isPlaceholderData}
-                    onOpen={(product) => navigate(`/products/${product.id}`)}
+                    onOpen={(product) => navigate(`${productBase}/${product.id}`)}
                     onOrder={handleOrder}
                     onToggleFavorite={favorites.toggle}
                   />

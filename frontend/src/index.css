@@ -146,3 +146,20 @@
     }
   }
 }
+
+/*
+  Base: the app should always fill the viewport. Pages size themselves with
+  `min-h-[calc(100vh - var(--header-h))]`; this is a safety net so any short
+  page blends into the app's surface tone instead of showing the white canvas.
+*/
+@layer base {
+  /* Fallback so dashboard shells size correctly even before header.css loads. */
+  :root {
+    --header-h: 68px;
+  }
+
+  body {
+    min-height: 100vh;
+    background-color: var(--color-surface-alt);
+  }
+}

@@ -7,6 +7,7 @@ import { useFavorites } from "../../context/favorites/useFavorites";
 import { useCatalogProduct } from "../../hooks/useCatalog";
 import { cn } from "../../lib/cn";
 import { formatPrice } from "../../lib/format";
+import { useArea } from "../../routes/useArea";
 import { ProductThumb } from "../../components/shop/ProductCard";
 import { catalogErrorMessage, isNotFound } from "./catalogError";
 
@@ -70,12 +71,18 @@ export default function ProductDetail() {
 
   const cart = useCart();
   const favorites = useFavorites();
+  // Inside a dashboard shell the layout owns the page background and padding,
+  // and product/cart links stay in that shell.
+  const area = useArea();
+  const inArea = area !== null;
+  const productBase = area === "customer" ? "/dashboard/products" : "/products";
+  const cartPath = area === "customer" ? "/dashboard/cart" : "/cart";
 
   const [quantity, setQuantity] = useState(1);
 
   if (isPending) {
     return (
-      <div className="min-h-[calc(100vh-128px)] bg-surface-alt py-10 text-ink">
+      <div className={inArea ? undefined : "min-h-[calc(100vh_-_var(--header-h))] bg-surface-alt py-10 text-ink"}>
         <div className="mx-auto w-full max-w-7xl px-4 sm:px-6">
           <DetailSkeleton />
         </div>
@@ -86,7 +93,7 @@ export default function ProductDetail() {
   if (isError || !product) {
     const missing = isNotFound(error);
     return (
-      <div className="min-h-[calc(100vh-128px)] bg-surface-alt py-10 text-ink">
+      <div className={inArea ? undefined : "min-h-[calc(100vh_-_var(--header-h))] bg-surface-alt py-10 text-ink"}>
         <div className="mx-auto w-full max-w-7xl px-4 sm:px-6">
           <EmptyState
             icon={<Package className="size-6" aria-hidden="true" />}
@@ -99,7 +106,7 @@ export default function ProductDetail() {
                     Try again
                   </Button>
                 )}
-                <Link to="/products">
+                <Link to={productBase}>
                   <Button>All products</Button>
                 </Link>
               </div>
@@ -125,11 +132,11 @@ export default function ProductDetail() {
   };
 
   return (
-    <div className="min-h-[calc(100vh-128px)] bg-surface-alt py-10 text-ink">
+    <div className={inArea ? undefined : "min-h-[calc(100vh_-_var(--header-h))] bg-surface-alt py-10 text-ink"}>
       <div className="mx-auto w-full max-w-7xl px-4 sm:px-6">
         {/* Breadcrumb */}
         <nav aria-label="Breadcrumb" className="flex items-center gap-1 text-sm text-muted">
-          <Link to="/products" className="flex items-center gap-1 transition hover:text-ink">
+          <Link to={productBase} className="flex items-center gap-1 transition hover:text-ink">
             <ArrowLeft className="size-4" aria-hidden="true" />
             Products
           </Link>
@@ -204,7 +211,7 @@ export default function ProductDetail() {
 
             <button
               type="button"
-              onClick={() => navigate("/cart")}
+              onClick={() => navigate(cartPath)}
               className="mt-4 text-sm font-semibold text-primary-600 underline-offset-4 transition hover:underline"
             >
               Go to cart →

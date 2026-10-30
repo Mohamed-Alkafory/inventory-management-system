@@ -7,6 +7,7 @@ import { MAX_CART_PRODUCTS, MAX_LINE_QUANTITY } from "../../context/cart/cart-co
 import { useCart } from "../../context/cart/useCart";
 import { formatPrice } from "../../lib/format";
 import { resolveImageUrl } from "../../lib/imageUrl";
+import { useArea } from "../../routes/useArea";
 
 /** Item row picture; falls back to an icon when there is none. */
 function LineThumb({ imageUrl, name }: { imageUrl?: string; name: string }) {
@@ -38,6 +39,8 @@ function LineThumb({ imageUrl, name }: { imageUrl?: string; name: string }) {
 export default function Cart() {
   const { items, totalItems, subtotal, setQuantity, remove } = useCart();
   const navigate = useNavigate();
+  // Inside a dashboard shell the layout owns the page background and padding.
+  const inArea = useArea() !== null;
 
   const overStocked = items.filter((row) => row.product.maxOrderable < row.quantity);
   const tooManyProducts = items.length > MAX_CART_PRODUCTS;
@@ -45,7 +48,7 @@ export default function Cart() {
   const checkoutBlocked = overStocked.length > 0 || tooManyProducts || Boolean(overQuantity);
 
   return (
-    <div className="min-h-[calc(100vh-128px)] bg-surface-alt py-10 text-ink">
+    <div className={inArea ? undefined : "min-h-[calc(100vh_-_var(--header-h))] bg-surface-alt py-10 text-ink"}>
       <div className="mx-auto w-full max-w-7xl px-4 sm:px-6">
         <h1 className="text-3xl font-bold">
           Shopping Cart{" "}

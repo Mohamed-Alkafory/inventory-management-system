@@ -10,7 +10,7 @@ export default function NotFound() {
   const home = isAuthenticated ? homePathForRole(role) : "/";
 
   return (
-    <main className="flex min-h-[calc(100vh-128px)] items-center justify-center bg-[#FDFDFC] px-4 text-center text-ink">
+    <main className="flex min-h-[calc(100vh_-_var(--header-h))] items-center justify-center bg-[#FDFDFC] px-4 text-center text-ink">
       <div className="max-w-md">
         <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary-50 text-primary-600">
           <Compass className="h-8 w-8" aria-hidden="true" />

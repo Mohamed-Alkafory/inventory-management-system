@@ -9,7 +9,7 @@ import { formatPrice } from "../../lib/format";
  * Read-only staff product detail from the private products API.
  * No edit/delete actions and no cost price (stripped for non-ADMIN roles).
  */
-export default function StaffProductDetails() {
+export default function StaffProductDetails({ basePath = "/staff" }: { basePath?: string }) {
   const { id = "" } = useParams();
   const { data: product, isPending, isError, refetch } = useProduct(id);
 
@@ -36,7 +36,7 @@ export default function StaffProductDetails() {
             <button type="button" onClick={() => void refetch()} className="rounded-lg border border-[#E5E7EB] bg-white px-4 py-2 text-sm font-semibold text-[#374151] hover:bg-[#F9FAFB]">
               Try again
             </button>
-            <Link to="/staff/products" className="rounded-lg bg-[#FF5615] px-4 py-2 text-sm font-semibold text-white hover:bg-[#E84A0E]">
+            <Link to={`${basePath}/products`} className="rounded-lg bg-[#FF5615] px-4 py-2 text-sm font-semibold text-white hover:bg-[#E84A0E]">
               All products
             </Link>
           </div>
@@ -49,7 +49,7 @@ export default function StaffProductDetails() {
 
   return (
     <div className="text-ink">
-      <Link to="/staff/products" className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#6B7280] hover:text-[#FF5615]">
+      <Link to={`${basePath}/products`} className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#6B7280] hover:text-[#FF5615]">
         <ArrowLeft className="h-4 w-4" aria-hidden="true" />
         All products
       </Link>

@@ -74,7 +74,7 @@ afterEach(cleanup);
 
 describe("route access matrix", () => {
   it("sends anonymous visitors on protected routes to /login", () => {
-    for (const path of ["/admin", "/admin/reports", "/staff", "/support", "/cart", "/orders", "/orders/new", "/notifications", "/profile"]) {
+    for (const path of ["/admin", "/admin/reports", "/staff", "/support", "/dashboard", "/cart", "/orders", "/orders/new", "/notifications", "/profile"]) {
       const view = renderAt(path);
       expect(login()).toBeInTheDocument();
       view.unmount();
@@ -115,6 +115,12 @@ describe("route access matrix", () => {
       ["/support/messages/m-1", "Support message details page"],
       ["/support/orders", "Support orders page"],
       ["/support/orders/o-1", "Support order details page"],
+      ["/support/products", "Staff products page"],
+      ["/support/products/p-1", "Staff product details page"],
+      ["/admin/notifications", "Notifications page"],
+      ["/admin/profile", "Profile page"],
+      ["/staff/notifications", "Notifications page"],
+      ["/support/notifications", "Notifications page"],
       ["/notifications", "Notifications page"],
       ["/profile", "Profile page"],
     ];
@@ -133,6 +139,17 @@ describe("route access matrix", () => {
     expect(within(nav).getByRole("link", { name: "Orders" })).toHaveAttribute("href", "/admin/orders");
     expect(within(nav).getByRole("link", { name: "Reports" })).toHaveAttribute("href", "/admin/reports");
     expect(within(nav).getByRole("link", { name: "Support" })).toHaveAttribute("href", "/support/messages");
+  });
+
+  it("shows a Products link in the support sidebar", () => {
+    signIn("SUPPORT");
+    renderAt("/support");
+
+    const nav = screen.getByRole("navigation", { name: "Support" });
+    expect(within(nav).getByRole("link", { name: "Products" })).toHaveAttribute(
+      "href",
+      "/support/products",
+    );
   });
 
   it("redirects the old /orders/new URL to /staff/orders/new for ADMIN and STAFF", async () => {
@@ -179,6 +196,8 @@ describe("route access matrix", () => {
       ["/support/messages/m-1", "Support message details page"],
       ["/support/orders", "Support orders page"],
       ["/support/orders/o-1", "Support order details page"],
+      ["/support/products", "Staff products page"],
+      ["/support/products/p-1", "Staff product details page"],
       ["/notifications", "Notifications page"],
     ];
     for (const [path, text] of allowed) {
@@ -194,14 +213,28 @@ describe("route access matrix", () => {
     }
   });
 
-  it("CUSTOMER may open /cart and /orders but not staff or admin areas", () => {
+  it("CUSTOMER gets their own dashboard at /dashboard and legacy URLs redirect into it", async () => {
     signIn("CUSTOMER");
-    let view = renderAt("/cart");
+
+    let view = renderAt("/dashboard");
+    expect(await screen.findByText("Products page")).toBeInTheDocument();
+    view.unmount();
+
+    view = renderAt("/dashboard/cart");
     expect(screen.getByText("Cart page")).toBeInTheDocument();
     view.unmount();
 
+    view = renderAt("/dashboard/products/p-1");
+    expect(screen.getByText("Product detail page")).toBeInTheDocument();
+    view.unmount();
+
+    // Old top-level customer URLs now redirect inside the dashboard.
+    view = renderAt("/cart");
+    expect(await screen.findByText("Cart page")).toBeInTheDocument();
+    view.unmount();
+
     view = renderAt("/orders");
-    expect(screen.getByText("My orders page")).toBeInTheDocument();
+    expect(await screen.findByText("My orders page")).toBeInTheDocument();
     view.unmount();
 
     view = renderAt("/notifications");
@@ -217,22 +250,26 @@ describe("route access matrix", () => {
 });
 
 describe("role home redirects", () => {
-  it.each([
-    ["ADMIN", "Admin dashboard page"],
-    ["STAFF", "Staff dashboard"],
-    ["SUPPORT", "Support dashboard"],
-    ["CUSTOMER", "Home page"],
-  ] as const)("sends %s from /dashboard to its own area", (role, text) => {
-    signIn(role);
+  it("shows the customer dashboard at /dashboard for CUSTOMER", async () => {
+    signIn("CUSTOMER");
     renderAt("/dashboard");
-    expect(screen.getByText(text)).toBeInTheDocument();
+    expect(await screen.findByText("Products page")).toBeInTheDocument();
   });
+
+  it.each(["ADMIN", "STAFF", "SUPPORT"] as const)(
+    "sends %s away from the customer /dashboard to /forbidden",
+    (role) => {
+      signIn(role);
+      renderAt("/dashboard");
+      expect(forbidden()).toBeInTheDocument();
+    },
+  );
 
   it.each([
     ["ADMIN", "Admin dashboard page"],
     ["STAFF", "Staff dashboard"],
     ["SUPPORT", "Support dashboard"],
-    ["CUSTOMER", "Home page"],
+    ["CUSTOMER", "Products page"],
   ] as const)("sends a signed-in %s away from /login to its own area", (role, text) => {
     signIn(role);
     renderAt("/login");

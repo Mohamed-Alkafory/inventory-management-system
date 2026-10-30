@@ -19,7 +19,14 @@ const DROPDOWN_PAGE_SIZE = 6;
  * and support top bars. Shows the unread badge, polls the count while signed
  * in and visible, and opens a keyboard-accessible dropdown of recent rows.
  */
-export default function NotificationBell({ className }: { className?: string }) {
+export default function NotificationBell({
+  className,
+  viewAllPath = "/notifications",
+}: {
+  className?: string;
+  /** Where "View all" points — area-aware so it stays inside the current dashboard. */
+  viewAllPath?: string;
+}) {
   const { isAuthenticated, role } = useAuth();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -175,7 +182,7 @@ export default function NotificationBell({ className }: { className?: string }) 
 
           <div className="border-t border-[#E3EDF9] px-4 py-2.5 text-center">
             <Link
-              to="/notifications"
+              to={viewAllPath}
               role="menuitem"
               onClick={close}
               className="text-sm font-semibold text-[#FF5A26] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF5A26]"
