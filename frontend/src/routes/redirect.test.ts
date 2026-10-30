@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canRoleAccessPath, getPostLoginTarget, homePathForRole } from "./redirect";
+import { areaForPath, canRoleAccessPath, getPostLoginTarget, homePathForRole } from "./redirect";
 
 const from = (pathname: string, search = "", hash = "") => ({ from: { pathname, search, hash } });
 
@@ -8,7 +8,7 @@ describe("homePathForRole", () => {
     ["ADMIN", "/admin"],
     ["STAFF", "/staff"],
     ["SUPPORT", "/support"],
-    ["CUSTOMER", "/"],
+    ["CUSTOMER", "/dashboard"],
   ] as const)("maps %s to %s", (role, path) => {
     expect(homePathForRole(role)).toBe(path);
   });
@@ -16,6 +16,25 @@ describe("homePathForRole", () => {
   it("falls back to / when the role is missing", () => {
     expect(homePathForRole(null)).toBe("/");
     expect(homePathForRole(undefined)).toBe("/");
+  });
+});
+
+describe("areaForPath", () => {
+  it.each([
+    ["/admin", "admin"],
+    ["/admin/products", "admin"],
+    ["/staff/orders/new", "staff"],
+    ["/support/messages/m-1", "support"],
+    ["/dashboard", "customer"],
+    ["/dashboard/orders/o-1", "customer"],
+  ] as const)("maps %s to the %s area", (path, area) => {
+    expect(areaForPath(path)).toBe(area);
+  });
+
+  it("returns null on the storefront and for near-miss prefixes", () => {
+    for (const path of ["/", "/products", "/products/1", "/cart", "/orders", "/profile", "/adminish", "/dashboardx"]) {
+      expect(areaForPath(path)).toBeNull();
+    }
   });
 });
 
@@ -37,6 +56,8 @@ describe("canRoleAccessPath", () => {
     expect(canRoleAccessPath("ADMIN", "/admin/users")).toBe(true);
     expect(canRoleAccessPath("STAFF", "/staff")).toBe(true);
     expect(canRoleAccessPath("SUPPORT", "/support")).toBe(true);
+    expect(canRoleAccessPath("CUSTOMER", "/dashboard")).toBe(true);
+    expect(canRoleAccessPath("CUSTOMER", "/dashboard/orders/o-1")).toBe(true);
     expect(canRoleAccessPath("CUSTOMER", "/cart")).toBe(true);
     expect(canRoleAccessPath("CUSTOMER", "/orders")).toBe(true);
     expect(canRoleAccessPath("STAFF", "/orders/new")).toBe(true);
@@ -45,6 +66,7 @@ describe("canRoleAccessPath", () => {
     expect(canRoleAccessPath("SUPPORT", "/staff")).toBe(false);
     expect(canRoleAccessPath("CUSTOMER", "/orders/new")).toBe(false);
     expect(canRoleAccessPath("ADMIN", "/cart")).toBe(false);
+    expect(canRoleAccessPath("ADMIN", "/dashboard")).toBe(false);
   });
 
   it("ignores query strings and hashes", () => {
@@ -71,12 +93,12 @@ describe("getPostLoginTarget", () => {
   });
 
   it("never returns to /login or /register", () => {
-    expect(getPostLoginTarget(from("/login"), "CUSTOMER")).toBe("/");
+    expect(getPostLoginTarget(from("/login"), "CUSTOMER")).toBe("/dashboard");
     expect(getPostLoginTarget(from("/register"), "ADMIN")).toBe("/admin");
   });
 
   it("rejects protocol-relative and malformed locations", () => {
-    expect(getPostLoginTarget(from("//evil.example"), "CUSTOMER")).toBe("/");
-    expect(getPostLoginTarget({ from: { pathname: "relative" } }, "CUSTOMER")).toBe("/");
+    expect(getPostLoginTarget(from("//evil.example"), "CUSTOMER")).toBe("/dashboard");
+    expect(getPostLoginTarget({ from: { pathname: "relative" } }, "CUSTOMER")).toBe("/dashboard");
   });
 });

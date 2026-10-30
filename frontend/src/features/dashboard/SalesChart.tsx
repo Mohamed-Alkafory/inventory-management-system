@@ -70,25 +70,30 @@ function SalesBars({ data }: { data: SalesDay[] }) {
       </svg>
 
       {data.length > 0 && (
-        <table className="sr-only">
-          <caption>Daily sales</caption>
-          <thead>
-            <tr>
-              <th>Day</th>
-              <th>Sales</th>
-              <th>Orders</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.map((d) => (
-              <tr key={d.date}>
-                <td>{formatDay(d.date)}</td>
-                <td>{formatMoney(d.totalSales)}</td>
-                <td>{formatInt(d.orderCount)}</td>
+        // sr-only goes on a wrapper: a <table> ignores the 1px height, so
+        // applying it to the table itself leaves a tall off-screen box that
+        // adds phantom white space below the dashboard.
+        <div className="sr-only">
+          <table>
+            <caption>Daily sales</caption>
+            <thead>
+              <tr>
+                <th>Day</th>
+                <th>Sales</th>
+                <th>Orders</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {data.map((d) => (
+                <tr key={d.date}>
+                  <td>{formatDay(d.date)}</td>
+                  <td>{formatMoney(d.totalSales)}</td>
+                  <td>{formatInt(d.orderCount)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );

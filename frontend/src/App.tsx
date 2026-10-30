@@ -16,6 +16,7 @@ import ToastProvider from "./components/ui/toast/ToastProvider";
 import AuthProvider from "./context/auth/AuthProvider";
 import CartProvider from "./context/cart/CartProvider";
 import FavoritesProvider from "./context/favorites/FavoritesProvider";
+import CustomerLayout from "./customer/layouts/CustomerLayout";
 import About from "./page/About/About";
 import Cart from "./page/Cart/Cart";
 import Checkout from "./page/Checkout/Checkout";
@@ -32,8 +33,8 @@ import MyOrders from "./page/Orders/MyOrders";
 import OrderDetails from "./page/Orders/OrderDetails";
 import QueryProvider from "./providers/QueryProvider";
 import GuestRoute from "./routes/GuestRoute";
+import LegacyRedirect from "./routes/LegacyRedirect";
 import ProtectedRoute from "./routes/ProtectedRoute";
-import RoleHomeRedirect from "./routes/RoleHomeRedirect";
 import RoleRoute from "./routes/RoleRoute";
 import Profile from "./page/Profile/Profile";
 import Settings from "./page/app/Settings";
@@ -80,18 +81,33 @@ export function AppRoutes() {
 
       {/* Any signed-in user */}
       <Route element={<ProtectedRoute />}>
-        <Route path="/dashboard" element={<RoleHomeRedirect />} />
+        {/* Top-level shared pages (standalone — no dashboard shell). */}
         <Route path="/profile" element={<Profile />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/notifications" element={<NotificationsPage />} />
 
-        {/* CUSTOMER only — shopping and own orders */}
+        {/* CUSTOMER only — their own dashboard shell at /dashboard. */}
         <Route element={<RoleRoute allow={["CUSTOMER"]} />}>
-          <Route path="/cart" element={<Cart />} />
-          <Route path="/checkout" element={<Checkout />} />
-          <Route path="/favorites" element={<Favorites />} />
-          <Route path="/orders" element={<MyOrders />} />
-          <Route path="/orders/:id" element={<OrderDetails />} />
+          <Route path="/dashboard" element={<CustomerLayout />}>
+            <Route index element={<Navigate to="products" replace />} />
+            <Route path="products" element={<ShopProducts />} />
+            <Route path="products/:id" element={<ProductDetail />} />
+            <Route path="orders" element={<MyOrders />} />
+            <Route path="orders/:id" element={<OrderDetails />} />
+            <Route path="favorites" element={<Favorites />} />
+            <Route path="cart" element={<Cart />} />
+            <Route path="checkout" element={<Checkout />} />
+            <Route path="notifications" element={<NotificationsPage />} />
+            <Route path="profile" element={<Profile />} />
+            <Route path="settings" element={<Settings />} />
+          </Route>
+
+          {/* Legacy top-level customer URLs now open inside the dashboard. */}
+          <Route path="/cart" element={<LegacyRedirect to="/dashboard/cart" />} />
+          <Route path="/checkout" element={<LegacyRedirect to="/dashboard/checkout" />} />
+          <Route path="/favorites" element={<LegacyRedirect to="/dashboard/favorites" />} />
+          <Route path="/orders" element={<LegacyRedirect to="/dashboard/orders" />} />
+          <Route path="/orders/:id" element={<LegacyRedirect to="/dashboard/orders/:id" />} />
         </Route>
 
         {/* STAFF + ADMIN — staff workspace (admin can use it too) */}
@@ -108,6 +124,9 @@ export function AppRoutes() {
             <Route path="purchase-orders/:id" element={<StaffPurchaseOrderDetails />} />
             <Route path="products" element={<StaffProducts />} />
             <Route path="products/:id" element={<StaffProductDetails />} />
+            <Route path="notifications" element={<NotificationsPage />} />
+            <Route path="profile" element={<Profile />} />
+            <Route path="settings" element={<Settings />} />
           </Route>
         </Route>
 
@@ -119,6 +138,11 @@ export function AppRoutes() {
             <Route path="messages/:id" element={<SupportMessageDetails />} />
             <Route path="orders" element={<SupportOrders />} />
             <Route path="orders/:id" element={<SupportOrderDetails />} />
+            <Route path="products" element={<StaffProducts basePath="/support" />} />
+            <Route path="products/:id" element={<StaffProductDetails basePath="/support" />} />
+            <Route path="notifications" element={<NotificationsPage />} />
+            <Route path="profile" element={<Profile />} />
+            <Route path="settings" element={<Settings />} />
           </Route>
         </Route>
 
@@ -139,6 +163,9 @@ export function AppRoutes() {
             <Route path="reports" element={<Reports />} />
             <Route path="users" element={<Users />} />
             <Route path="audit-logs" element={<Audit />} />
+            <Route path="notifications" element={<NotificationsPage />} />
+            <Route path="profile" element={<Profile />} />
+            <Route path="settings" element={<Settings />} />
           </Route>
         </Route>
       </Route>

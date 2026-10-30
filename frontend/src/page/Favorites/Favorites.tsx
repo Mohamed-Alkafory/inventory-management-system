@@ -4,6 +4,7 @@ import { Button, EmptyState } from "../../components/ui";
 import { ProductCard } from "../../components/shop/ProductCard";
 import { useCart } from "../../context/cart/useCart";
 import { useFavorites } from "../../context/favorites/useFavorites";
+import { useArea } from "../../routes/useArea";
 import type { ShopProduct } from "../../types/shop";
 
 /**
@@ -14,6 +15,8 @@ export default function Favorites() {
   const favorites = useFavorites();
   const cart = useCart();
   const navigate = useNavigate();
+  // Inside a dashboard shell the layout owns the page background and padding.
+  const inArea = useArea() !== null;
 
   /** Order click → put the product in the cart, then jump to the Cart page. */
   const handleOrder = (product: ShopProduct) => {
@@ -22,7 +25,7 @@ export default function Favorites() {
   };
 
   return (
-    <div className="min-h-[calc(100vh-128px)] bg-surface-alt py-10 text-ink">
+    <div className={inArea ? undefined : "min-h-[calc(100vh_-_var(--header-h))] bg-surface-alt py-10 text-ink"}>
       <div className="mx-auto w-full max-w-7xl px-4 sm:px-6">
         <h1 className="text-3xl font-bold">
           Favorites{" "}

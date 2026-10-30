@@ -31,6 +31,7 @@ function renderLogin() {
               <Route path="/admin" element={<p>Admin page</p>} />
               <Route path="/staff" element={<p>Staff page</p>} />
               <Route path="/support" element={<p>Support page</p>} />
+              <Route path="/dashboard" element={<p>Customer dashboard</p>} />
               <Route path="/" element={<p>Home page</p>} />
             </Routes>
           </AuthProvider>
@@ -82,7 +83,7 @@ describe("Login page", () => {
     ["ADMIN", "Admin page"],
     ["STAFF", "Staff page"],
     ["SUPPORT", "Support page"],
-    ["CUSTOMER", "Home page"],
+    ["CUSTOMER", "Customer dashboard"],
   ] as const)("redirects a signed-in %s to its role home", async (role, text) => {
     signInAs(role);
     renderLogin();

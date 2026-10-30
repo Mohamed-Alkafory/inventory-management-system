@@ -34,7 +34,7 @@ const SEARCH_DEBOUNCE_MS = 300;
  * create/edit/delete controls and never renders cost price (the data layer
  * strips it for non-ADMIN roles).
  */
-export default function StaffProducts() {
+export default function StaffProducts({ basePath = "/staff" }: { basePath?: string }) {
   const { query, update, clearFilters, hasFilters } = useProductFilters();
   const { data, isPending, isError, refetch, isPlaceholderData } = useProducts(query);
   const categories = useProductCategories();
@@ -182,7 +182,7 @@ export default function StaffProducts() {
                     <td className="px-4 py-3">
                       <div className="flex justify-end">
                         <Link
-                          to={`/staff/products/${product.id}`}
+                          to={`${basePath}/products/${product.id}`}
                           className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-[#FF5615] hover:bg-[#FFF3EC]"
                         >
                           <Eye className="size-3.5" aria-hidden="true" />

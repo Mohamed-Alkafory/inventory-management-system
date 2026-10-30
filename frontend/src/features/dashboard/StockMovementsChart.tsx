@@ -99,25 +99,30 @@ function MovementBars({ data }: { data: StockMovementDay[] }) {
       </svg>
 
       {data.length > 0 && (
-        <table className="sr-only">
-          <caption>Stock movements</caption>
-          <thead>
-            <tr>
-              <th>Day</th>
-              <th>Units in</th>
-              <th>Units out</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.map((d) => (
-              <tr key={d.date}>
-                <td>{formatDay(d.date)}</td>
-                <td>{formatInt(d.unitsIn)}</td>
-                <td>{formatInt(d.unitsOut)}</td>
+        // sr-only goes on a wrapper: a <table> ignores the 1px height, so
+        // applying it to the table itself leaves a tall off-screen box that
+        // adds phantom white space below the dashboard.
+        <div className="sr-only">
+          <table>
+            <caption>Stock movements</caption>
+            <thead>
+              <tr>
+                <th>Day</th>
+                <th>Units in</th>
+                <th>Units out</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {data.map((d) => (
+                <tr key={d.date}>
+                  <td>{formatDay(d.date)}</td>
+                  <td>{formatInt(d.unitsIn)}</td>
+                  <td>{formatInt(d.unitsOut)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );

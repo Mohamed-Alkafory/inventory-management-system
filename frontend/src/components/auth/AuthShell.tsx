@@ -15,7 +15,7 @@ export default function AuthShell({ badge, heading, text, highlights, children }
   const BadgeIcon = badge.icon;
 
   return (
-    <main className="grid min-h-[calc(100vh-128px)] w-full bg-[#FDFDFC] font-sans text-ink lg:grid-cols-2">
+    <main className="grid min-h-[calc(100vh_-_var(--header-h))] w-full bg-[#FDFDFC] font-sans text-ink lg:grid-cols-2">
       <section className="relative isolate hidden overflow-hidden bg-linear-to-br from-primary-600 via-primary-500 to-[#FF8A3D] p-12 text-white lg:flex lg:flex-col lg:justify-center">
         <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10">
           <div className="absolute -left-16 -top-20 h-80 w-80 animate-blob rounded-full bg-white/15 blur-3xl motion-reduce:animate-none" />

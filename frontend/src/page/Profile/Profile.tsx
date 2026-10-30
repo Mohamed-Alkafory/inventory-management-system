@@ -22,6 +22,7 @@ import { formatDate, formatMoney, formatNumber, orderPath } from "../../features
 import type { MyOrderListParams } from "../../features/orders/types";
 import ImageUploadField from "../../features/products/ImageUploadField";
 import { AVATAR_RULES } from "../../features/users/avatar";
+import { useArea } from "../../routes/useArea";
 import EditProfileDialog from "./EditProfileDialog";
 
 /** Shared row dimensions for the order-history list. */
@@ -82,6 +83,8 @@ export default function Profile() {
   const navigate = useNavigate();
   const isAdmin = hasRole("ADMIN");
   const isCustomer = hasRole("CUSTOMER");
+  // Inside a dashboard shell the layout owns the page background and padding.
+  const inArea = useArea() !== null;
 
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -160,7 +163,7 @@ export default function Profile() {
   const orders = ordersQuery.data?.items ?? [];
 
   return (
-    <div className="min-h-[calc(100vh-128px)] bg-surface-alt py-10 text-ink">
+    <div className={inArea ? undefined : "min-h-[calc(100vh_-_var(--header-h))] bg-surface-alt py-10 text-ink"}>
       <div className="mx-auto w-full max-w-3xl px-4 sm:px-6">
         <Card className="overflow-hidden">
           {/* Hero band — name over the brand gradient, avatar overlapping. */}
@@ -256,7 +259,7 @@ export default function Profile() {
                 </Button>
               </Link>
               {isCustomer && (
-                <Link to="/orders" className="inline-flex">
+                <Link to="/dashboard/orders" className="inline-flex">
                   <Button variant="secondary" leftIcon={<ReceiptText className="size-4" aria-hidden="true" />}>
                     My orders
                   </Button>
@@ -293,7 +296,7 @@ export default function Profile() {
                         key={String(order.id)}
                         className="rounded-control border border-line bg-surface-alt px-4 py-3 transition hover:border-primary-300"
                       >
-                        <Link to={orderPath(order.id)} className="flex flex-wrap items-center justify-between gap-3">
+                        <Link to={orderPath(order.id, "/dashboard/orders")} className="flex flex-wrap items-center justify-between gap-3">
                           <div className="min-w-0">
                             <p className="font-mono text-sm font-bold text-ink">{formatNumber(order.orderNumber)}</p>
                             <p className="text-xs text-muted">{formatDate(order.createdAt)}</p>

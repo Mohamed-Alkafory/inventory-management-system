@@ -1,23 +1,16 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { FaBars, FaSignOutAlt, FaTimes, FaUser } from "react-icons/fa";
 import { Heart, Settings as SettingsIcon, ShoppingCart } from "lucide-react";
 import { useAuth } from "../../context/auth/useAuth";
 import { useCart } from "../../context/cart/useCart";
 import { useFavorites } from "../../context/favorites/useFavorites";
-import { homePathForRole } from "../../routes/redirect";
+import { AREA_HOME, areaForPath, homePathForRole } from "../../routes/redirect";
 import NotificationBell from "../../features/notifications/NotificationBell";
 import ProdexaLogo from "../Logo";
 import UserAvatar from "../user/UserAvatar";
 import "./header.css";
-
-const NAV_LINKS = [
-  { label: "Home", href: "/" },
-  { label: "Products", href: "/products" },
-  { label: "About", href: "/about" },
-  { label: "Contact", href: "/contact" },
-];
 
 /** Icon + orange count badge; guests are sent to sign in first. */
 function IconLink({
@@ -57,16 +50,42 @@ export default function Header() {
   const isCustomer = role === "CUSTOMER";
   const showShopIcons = !isAuthenticated || isCustomer;
   const navigate = useNavigate();
+  const { pathname } = useLocation();
 
-  // Signed-in staff/admin get a shortcut to their area; customers get their orders.
-  const areaLink = role && !isCustomer ? { label: "Dashboard", href: homePathForRole(role) } : null;
-  const ordersLink = isCustomer ? { label: "My orders", href: "/orders" } : null;
-  const extraLinks = [areaLink, ordersLink].filter(
-    (link): link is { label: string; href: string } => link !== null,
-  );
-  const navLinks = extraLinks.length > 0
-    ? [NAV_LINKS[0], ...extraLinks, ...NAV_LINKS.slice(1)]
-    : NAV_LINKS;
+  // Stay inside the dashboard the user is browsing: inside an area, links point
+  // at that area (Products → /admin/products, Dashboard → /admin) instead of
+  // dropping them back on the storefront.
+  const area = areaForPath(pathname);
+
+  // Products always opens inside a dashboard for signed-in users: the current
+  // area when they are in one, otherwise their role's dashboard. Only guests
+  // get the public storefront catalogue.
+  const productsHref = area
+    ? `${AREA_HOME[area]}/products`
+    : isAuthenticated
+      ? `${homePathForRole(role)}/products`
+      : "/products";
+
+  // Dashboard shortcut: the current area when inside one, else the role's home.
+  const dashboardHref = area ? AREA_HOME[area] : isAuthenticated ? homePathForRole(role) : null;
+
+  const settingsHref = area ? `${AREA_HOME[area]}/settings` : "/settings";
+  const profileHref = area ? `${AREA_HOME[area]}/profile` : "/profile";
+  const notificationsHref = area ? `${AREA_HOME[area]}/notifications` : "/notifications";
+  const cartHref = isAuthenticated ? (area === "customer" ? "/dashboard/cart" : "/cart") : "/login";
+  const favoritesHref = isAuthenticated
+    ? area === "customer"
+      ? "/dashboard/favorites"
+      : "/favorites"
+    : "/login";
+
+  const navLinks = [
+    { label: "Home", href: "/" },
+    ...(dashboardHref ? [{ label: "Dashboard", href: dashboardHref }] : []),
+    { label: "Products", href: productsHref },
+    { label: "About", href: "/about" },
+    { label: "Contact", href: "/contact" },
+  ];
 
   const closeMenu = () => setOpen(false);
 
@@ -114,18 +133,18 @@ export default function Header() {
           {/* Icons + account (right) */}
           <div className="header__right">
             <div className="header__icons">
-              {isAuthenticated && <NotificationBell />}
+              {isAuthenticated && <NotificationBell viewAllPath={notificationsHref} />}
               {showShopIcons && (
                 <>
                   <IconLink
-                    to={isAuthenticated ? "/favorites" : "/login"}
+                    to={favoritesHref}
                     label="Favorites"
                     count={isAuthenticated ? favorites.length : 0}
                   >
                     <Heart className="size-5" aria-hidden="true" />
                   </IconLink>
                   <IconLink
-                    to={isAuthenticated ? "/cart" : "/login"}
+                    to={cartHref}
                     label="Cart"
                     count={isAuthenticated ? totalItems : 0}
                   >
@@ -142,10 +161,10 @@ export default function Header() {
                     <FaSignOutAlt aria-hidden="true" />
                     Log out
                   </button>
-                  <Link to="/settings" className="icon-btn" aria-label="Settings">
+                  <Link to={settingsHref} className="icon-btn" aria-label="Settings">
                     <SettingsIcon className="size-5" aria-hidden="true" />
                   </Link>
-                  <Link to="/profile" className="icon-btn" aria-label="Your profile">
+                  <Link to={profileHref} className="icon-btn" aria-label="Your profile">
                     <UserAvatar name={user?.name} src={user?.avatarUrl} size="sm" />
                   </Link>
                 </>
@@ -174,11 +193,11 @@ export default function Header() {
                     <FaSignOutAlt aria-hidden="true" style={{ marginRight: 8 }} />
                     Log out
                   </button>
-                  <Link to="/settings" className="btn btn--ghost" onClick={closeMenu}>
+                  <Link to={settingsHref} className="btn btn--ghost" onClick={closeMenu}>
                     <SettingsIcon className="size-4" aria-hidden="true" style={{ marginRight: 8 }} />
                     Settings
                   </Link>
-                  <Link to="/profile" className="btn btn--primary" onClick={closeMenu}>
+                  <Link to={profileHref} className="btn btn--primary" onClick={closeMenu}>
                     <FaUser aria-hidden="true" style={{ marginRight: 8 }} />
                     My profile
                   </Link>

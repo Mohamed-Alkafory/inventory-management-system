@@ -6,15 +6,39 @@ const ROLE_HOME: Record<Role, string> = {
   ADMIN: "/admin",
   STAFF: "/staff",
   SUPPORT: "/support",
-  CUSTOMER: "/",
+  CUSTOMER: "/dashboard",
 };
 
 export const DEFAULT_AFTER_LOGIN = "/";
 export const ADMIN_AFTER_LOGIN = ROLE_HOME.ADMIN;
 
+/** A dashboard area: each one is a shell with its own sidebar. */
+export type AppArea = "admin" | "staff" | "support" | "customer";
+
+/** Home page of each area shell. */
+export const AREA_HOME: Record<AppArea, string> = {
+  admin: "/admin",
+  staff: "/staff",
+  support: "/support",
+  customer: "/dashboard",
+};
+
 /** Home path for a signed-in role; "/" when the role is missing. */
 export function homePathForRole(role?: Role | null): string {
   return role ? ROLE_HOME[role] : DEFAULT_AFTER_LOGIN;
+}
+
+/**
+ * Which dashboard shell a path belongs to, or null on the public storefront.
+ * Lets the global header (and shared pages) adapt to the area the user is in,
+ * so links never kick them out of the dashboard they are browsing.
+ */
+export function areaForPath(pathname: string): AppArea | null {
+  if (pathname === "/admin" || pathname.startsWith("/admin/")) return "admin";
+  if (pathname === "/staff" || pathname.startsWith("/staff/")) return "staff";
+  if (pathname === "/support" || pathname.startsWith("/support/")) return "support";
+  if (pathname === "/dashboard" || pathname.startsWith("/dashboard/")) return "customer";
+  return null;
 }
 
 /** Paths that never require a role (login/register are handled separately: guests only). */
@@ -34,11 +58,12 @@ export function canRoleAccessPath(role: Role, path: string): boolean {
   if (PUBLIC_PATHS.has(p) || p === "/products" || p.startsWith("/products/")) return true;
 
   // Any signed-in role.
-  if (p === "/profile" || p === "/settings" || p === "/dashboard" || p === "/notifications") return true;
+  if (p === "/profile" || p === "/settings" || p === "/notifications") return true;
 
   if (p === "/admin" || p.startsWith("/admin/")) return role === "ADMIN";
   if (p === "/staff" || p.startsWith("/staff/")) return role === "ADMIN" || role === "STAFF";
   if (p === "/support" || p.startsWith("/support/")) return role === "ADMIN" || role === "SUPPORT";
+  if (p === "/dashboard" || p.startsWith("/dashboard/")) return role === "CUSTOMER";
 
   if (p === "/orders/new") return role === "ADMIN" || role === "STAFF";
 

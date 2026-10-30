@@ -12,6 +12,7 @@ import { useCreateMyOrder } from "../../features/orders/hooks";
 import type { CreateMyOrderInput } from "../../features/orders/types";
 import { formatPrice } from "../../lib/format";
 import { ApiError } from "../../lib/http";
+import { useArea } from "../../routes/useArea";
 
 /*
   POST /orders/mine knows the shipping details and the item lines. Prices,
@@ -86,6 +87,8 @@ export default function Checkout() {
   const navigate = useNavigate();
   const toast = useToast();
   const placeOrder = useCreateMyOrder();
+  // Inside a dashboard shell the layout owns the page background and padding.
+  const inArea = useArea() !== null;
 
   const [form, setForm] = useState<CheckoutForm>(() => ({
     ...EMPTY_FORM,
@@ -216,7 +219,7 @@ export default function Checkout() {
   if (!user) return null;
 
   return (
-    <div className="min-h-[calc(100vh-128px)] bg-surface-alt py-10 text-ink">
+    <div className={inArea ? undefined : "min-h-[calc(100vh_-_var(--header-h))] bg-surface-alt py-10 text-ink"}>
       <div className="mx-auto w-full max-w-7xl px-4 sm:px-6">
         <h1 className="text-3xl font-bold">Checkout</h1>
 

@@ -4,7 +4,6 @@ import type { LucideIcon } from "lucide-react";
 import { Menu, X } from "lucide-react";
 import { useAuth } from "../../context/auth/useAuth";
 import { cn } from "../../lib/cn";
-import NotificationBell from "../../features/notifications/NotificationBell";
 import UserAvatar from "../user/UserAvatar";
 
 export type AreaNavItem = {
@@ -57,10 +56,10 @@ export default function AreaLayout({ title, menuLabel, ariaLabel, navItems }: Pr
   );
 
   return (
-    <div className="min-h-[calc(100vh-128px)] bg-surface-alt text-ink lg:grid lg:grid-cols-[16rem_1fr]">
+    <div className="flex min-h-[calc(100dvh_-_var(--header-h))] flex-col bg-surface-alt text-ink lg:grid lg:grid-cols-[16rem_1fr]">
       {/* Desktop sidebar */}
       <aside className="hidden border-r border-line bg-surface lg:block">
-        <div className="sticky top-[128px] p-4">
+        <div className="sticky top-[var(--header-h)] p-4">
           <p className="px-3 pb-3 text-xs font-semibold uppercase tracking-wide text-muted">{title}</p>
           {links}
           <div className="mt-6 rounded-control border border-line bg-surface-alt px-3 py-3 text-xs text-muted">
@@ -90,11 +89,8 @@ export default function AreaLayout({ title, menuLabel, ariaLabel, navItems }: Pr
         {open && <div className="border-t border-line p-3">{links}</div>}
       </div>
 
-      <main className="min-w-0">
-        <div className="flex h-14 items-center justify-end border-b border-line bg-surface px-4 sm:px-6 lg:px-8">
-          <NotificationBell />
-        </div>
-        <div className="px-4 py-8 sm:px-6 lg:px-8">
+      <main className="flex min-w-0 flex-1 flex-col bg-surface-alt">
+        <div className="flex-1 px-4 py-8 sm:px-6 lg:px-8">
           <Outlet />
         </div>
       </main>

@@ -3,6 +3,7 @@ import { ChevronLeft } from "lucide-react";
 import { useAuth } from "../../context/auth/useAuth";
 import { USE_MOCK } from "../../features/orders/api";
 import OrdersList from "../../features/orders/OrdersList";
+import { useArea } from "../../routes/useArea";
 
 /**
  * "My orders" — the signed-in customer's own orders (GET /orders/mine).
@@ -11,14 +12,16 @@ import OrdersList from "../../features/orders/OrdersList";
  */
 export default function MyOrders() {
   const { user } = useAuth();
+  // Inside a dashboard shell the layout owns the page background and padding.
+  const inArea = useArea() !== null;
 
   if (!user) return null;
 
   return (
-    <div className="min-h-[calc(100vh-128px)] bg-surface-alt py-10 text-ink">
+    <div className={inArea ? undefined : "min-h-[calc(100vh_-_var(--header-h))] bg-surface-alt py-10 text-ink"}>
       <div className="mx-auto w-full max-w-5xl px-4 sm:px-6">
         <Link
-          to="/profile"
+          to="/dashboard/profile"
           className="inline-flex items-center gap-1.5 text-sm font-semibold text-muted transition hover:text-primary-600"
         >
           <ChevronLeft className="size-4" aria-hidden="true" />
@@ -34,7 +37,7 @@ export default function MyOrders() {
         )}
 
         <div className="mt-6">
-          <OrdersList scope="my" />
+          <OrdersList scope="my" basePath="/dashboard/orders" />
         </div>
       </div>
     </div>

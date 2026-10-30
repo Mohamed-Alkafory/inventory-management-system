@@ -11,6 +11,7 @@ import {
   Settings,
   ShoppingBag,
   Truck,
+  UserRound,
   Users as UsersIcon,
 } from "lucide-react";
 import AreaLayout from "../../components/layout/AreaLayout";
@@ -27,8 +28,9 @@ const NAV: AreaNavItem[] = [
   { to: "/admin/suppliers", label: "Suppliers", icon: Truck },
   { to: "/admin/users", label: "Users", icon: UsersIcon },
   { to: "/admin/audit-logs", label: "Audit Log", icon: ScrollText },
-  { to: "/notifications", label: "Notifications", icon: Bell },
-  { to: "/settings", label: "Settings", icon: Settings },
+  { to: "/admin/notifications", label: "Notifications", icon: Bell },
+  { to: "/admin/profile", label: "Profile", icon: UserRound },
+  { to: "/admin/settings", label: "Settings", icon: Settings },
   { to: "/support/messages", label: "Support", icon: LifeBuoy },
 ];
 
