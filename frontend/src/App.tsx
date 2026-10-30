@@ -42,6 +42,7 @@ import StaffPurchaseOrderDetails from "./staff/pages/PurchaseOrders/PurchaseOrde
 import StaffOrderDetailsPage from "./features/orders/StaffOrderDetailsPage";
 import StaffOrdersPage from "./features/orders/StaffOrdersPage";
 import NewOrderFlow from "./features/orders/create/NewOrderFlow";
+import { ADMIN_ORDERS_PATH } from "./features/orders/format";
 import StaffProducts from "./features/products/StaffProducts";
 import StaffProductDetails from "./features/products/StaffProductDetails";
 import SupportLayout from "./support/layouts/SupportLayout";
@@ -125,6 +126,10 @@ export function AppRoutes() {
             <Route path="suppliers" element={<Suppliers />} />
             <Route path="purchase-orders" element={<PurchaseOrders />} />
             <Route path="purchase-orders/:id" element={<PurchaseOrderDetails />} />
+            {/* Same staff-scope order screens, mounted under the admin area. */}
+            <Route path="orders" element={<StaffOrdersPage basePath={ADMIN_ORDERS_PATH} newOrderPath={`${ADMIN_ORDERS_PATH}/new`} />} />
+            <Route path="orders/new" element={<NewOrderFlow basePath={ADMIN_ORDERS_PATH} />} />
+            <Route path="orders/:id" element={<StaffOrderDetailsPage basePath={ADMIN_ORDERS_PATH} />} />
             <Route path="users" element={<Users />} />
             <Route path="audit-logs" element={<Audit />} />
           </Route>

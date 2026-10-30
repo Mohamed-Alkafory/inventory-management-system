@@ -26,7 +26,8 @@ const ALIASES: Record<string, keyof CustomerFormValues> = {
   note: "notes",
 };
 
-export default function NewOrderFlow() {
+/** Shared order builder; the admin area mounts it under its own base path. */
+export default function NewOrderFlow({ basePath = STAFF_ORDERS_PATH }: { basePath?: string }) {
   const navigate = useNavigate();
   const create = useCreateOrder();
 
@@ -81,7 +82,7 @@ export default function NewOrderFlow() {
         notes: customer.notes,
         items: lines.map((l) => ({ productId: l.product.id, quantity: l.quantity })),
       });
-      navigate(created.id !== null ? orderPath(created.id, STAFF_ORDERS_PATH) : STAFF_ORDERS_PATH, { replace: true });
+      navigate(created.id !== null ? orderPath(created.id, basePath) : basePath, { replace: true });
     } catch (err) {
       if (!(err instanceof ApiError)) return setSummaryError("Something went wrong. Please try again.");
 
@@ -118,7 +119,7 @@ export default function NewOrderFlow() {
 
   return (
     <div>
-      <Link to={STAFF_ORDERS_PATH} className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#6B7280] hover:text-[#FF5615]">
+      <Link to={basePath} className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#6B7280] hover:text-[#FF5615]">
         <ArrowLeft className="h-4 w-4" />
         Back to orders
       </Link>

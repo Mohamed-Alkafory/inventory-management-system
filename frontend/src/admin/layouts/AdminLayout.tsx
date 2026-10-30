@@ -3,8 +3,10 @@ import {
   ClipboardList,
   FolderTree,
   LayoutDashboard,
+  LifeBuoy,
   Package,
   ScrollText,
+  ShoppingBag,
   Truck,
   Users as UsersIcon,
 } from "lucide-react";
@@ -16,10 +18,12 @@ const NAV: AreaNavItem[] = [
   { to: "/admin/products", label: "Products", icon: Package },
   { to: "/admin/inventory", label: "Inventory", icon: Boxes },
   { to: "/admin/purchase-orders", label: "Purchase Orders", icon: ClipboardList },
+  { to: "/admin/orders", label: "Orders", icon: ShoppingBag },
   { to: "/admin/categories", label: "Categories", icon: FolderTree },
   { to: "/admin/suppliers", label: "Suppliers", icon: Truck },
   { to: "/admin/users", label: "Users", icon: UsersIcon },
   { to: "/admin/audit-logs", label: "Audit Log", icon: ScrollText },
+  { to: "/support/messages", label: "Support", icon: LifeBuoy },
 ];
 
 /** Shell for every /admin page (ADMIN only). Same markup as before, built on AreaLayout. */
