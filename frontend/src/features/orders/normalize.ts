@@ -5,6 +5,7 @@ import type {
   CustomerOrderItem,
   MyOrderListParams,
   OrderListParams,
+  OrderNote,
   OrderStatus,
   Paged,
   StaffOrder,
@@ -149,6 +150,22 @@ export function normalizeStaffOrder(raw: unknown): StaffOrder {
       : undefined,
     createdBy: readCreatedBy(createdBy),
     stockMovements: normalizeMovements(r.stockMovements ?? r.stock_movements),
+  };
+}
+
+/** GET/POST /orders/:id/notes — one internal note with its author snapshot. */
+export function normalizeOrderNote(raw: unknown): OrderNote {
+  const r: Obj = isObject(raw) ? raw : {};
+  const author = isObject(r.author) ? r.author : {};
+  const authorId = str(r.authorId) ?? str(r.author_id) ?? str(author.id);
+  const authorName = str(author.name) ?? str(r.authorName) ?? str(r.author_name);
+  return {
+    id: String(idOf(r.id) ?? ""),
+    orderId: String(idOf(r.orderId) ?? idOf(r.order_id) ?? ""),
+    authorId,
+    note: str(r.note) ?? str(r.body) ?? "",
+    author: authorId || authorName ? { id: authorId ?? "", name: authorName ?? "" } : undefined,
+    createdAt: str(r.createdAt) ?? str(r.created_at) ?? "",
   };
 }
 

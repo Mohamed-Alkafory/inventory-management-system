@@ -15,6 +15,8 @@ const mocks = vi.hoisted(() => {
     cancelMy: mutation(),
     cancelStaff: mutation(),
     updateStatus: mutation(),
+    useOrderNotes: vi.fn(),
+    addNote: mutation(),
   };
 });
 
@@ -24,6 +26,8 @@ vi.mock("../hooks", () => ({
   useCancelMyOrder: () => mocks.cancelMy,
   useCancelOrder: () => mocks.cancelStaff,
   useUpdateOrderStatus: () => mocks.updateStatus,
+  useOrderNotes: mocks.useOrderNotes,
+  useAddOrderNote: () => mocks.addNote,
 }));
 
 vi.mock("../../../context/auth/useAuth", () => ({
@@ -62,9 +66,11 @@ beforeEach(() => {
   mocks.role = "CUSTOMER";
   mocks.useMyOrder.mockReturnValue(queryResult(undefined));
   mocks.useOrder.mockReturnValue(queryResult(undefined));
+  mocks.useOrderNotes.mockReturnValue(queryResult([]));
   mocks.cancelMy.mutateAsync.mockResolvedValue(undefined);
   mocks.cancelStaff.mutateAsync.mockResolvedValue(undefined);
   mocks.updateStatus.mutateAsync.mockResolvedValue(undefined);
+  mocks.addNote.mutateAsync.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -124,6 +130,26 @@ describe("OrderDetailsView", () => {
     expect(screen.queryByRole("button", { name: "Confirm order" })).toBeNull();
   });
 
+  it("SUPPORT cancels a PENDING order only after the confirmation dialog", async () => {
+    mocks.role = "SUPPORT";
+    mocks.useOrder.mockReturnValue(queryResult(staffOrder("PENDING")));
+
+    render(
+      <MemoryRouter>
+        <OrderDetailsView id="1" scope="staff" />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel order" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/cancel this order/i)).toBeInTheDocument();
+
+    expect(mocks.cancelStaff.mutateAsync).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel order" }));
+    await waitFor(() => expect(mocks.cancelStaff.mutateAsync).toHaveBeenCalledWith(1));
+    expect(mocks.updateStatus.mutateAsync).not.toHaveBeenCalled();
+  });
+
   it("shows no actions on a terminal CANCELLED order", () => {
     mocks.role = "ADMIN";
     mocks.useOrder.mockReturnValue(queryResult(staffOrder("CANCELLED")));
@@ -175,5 +201,59 @@ describe("OrderDetailsView", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("Order not found");
     expect(screen.queryByText("Cara Customer")).toBeNull();
     expect(screen.queryByText("Water Bottle")).toBeNull();
+  });
+
+  it("shows internal notes and the audit notice only in the staff scope", () => {
+    mocks.role = "SUPPORT";
+    mocks.useOrder.mockReturnValue(queryResult(staffOrder("PENDING")));
+    mocks.useOrderNotes.mockReturnValue(
+      queryResult([
+        { id: "n-1", orderId: "1", note: "Courier called back", author: { id: "u-2", name: "Sami Staff" }, createdAt: "2026-01-02T09:00:00.000Z" },
+      ]),
+    );
+
+    const view = render(
+      <MemoryRouter>
+        <OrderDetailsView id="1" scope="staff" />
+      </MemoryRouter>,
+    );
+
+    const notes = screen.getByRole("heading", { name: "Internal notes" }).closest("section");
+    expect(notes).not.toBeNull();
+    expect(screen.getByRole("heading", { name: "Internal notes" })).toBeInTheDocument();
+    expect(screen.getByText("Courier called back")).toBeInTheDocument();
+    expect(within(notes as HTMLElement).getByText("Sami Staff")).toBeInTheDocument();
+    expect(screen.getByRole("note")).toHaveTextContent(/opening this order is recorded/i);
+    view.unmount();
+
+    mocks.role = "CUSTOMER";
+    mocks.useMyOrder.mockReturnValue(queryResult(customerOrder("PENDING")));
+    render(
+      <MemoryRouter>
+        <OrderDetailsView id="1" scope="my" />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByRole("heading", { name: "Internal notes" })).toBeNull();
+    expect(screen.queryByRole("note")).toBeNull();
+    expect(screen.queryByText("Courier called back")).toBeNull();
+  });
+
+  it("lets SUPPORT add a note capped at 2000 characters", async () => {
+    mocks.role = "SUPPORT";
+    mocks.useOrder.mockReturnValue(queryResult(staffOrder("PENDING")));
+
+    render(
+      <MemoryRouter>
+        <OrderDetailsView id="1" scope="staff" />
+      </MemoryRouter>,
+    );
+
+    const input = screen.getByLabelText("Add a note");
+    expect(input).toHaveAttribute("maxLength", "2000");
+    fireEvent.change(input, { target: { value: "Please call the customer" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add note" }));
+
+    await waitFor(() => expect(mocks.addNote.mutateAsync).toHaveBeenCalledWith("Please call the customer"));
   });
 });

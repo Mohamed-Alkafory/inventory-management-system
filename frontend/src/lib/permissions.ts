@@ -10,6 +10,10 @@ import type { Role } from "../types/auth";
  *   orders.cancelPending  → orders.cancel_pending (PENDING only)
  *   orders.cancelConfirmed→ orders.update_status (CONFIRMED → CANCELLED)
  *   orders.cancelOwn      → orders.cancel_own (CUSTOMER, own PENDING order)
+ *   orders.notes.read     → orders.notes.read (SUPPORT/STAFF/ADMIN)
+ *   orders.notes.write    → orders.notes.write (SUPPORT/STAFF/ADMIN)
+ *   contact.read          → contact.read (SUPPORT/ADMIN)
+ *   contact.manage        → contact.manage (SUPPORT/ADMIN)
  *   stock.adjust          → stock.adjust
  *   po.receive            → purchase_orders.receive
  *   po.create             → purchase_orders.create
@@ -22,6 +26,10 @@ export type Capability =
   | "orders.cancelPending"
   | "orders.cancelConfirmed"
   | "orders.cancelOwn"
+  | "orders.notes.read"
+  | "orders.notes.write"
+  | "contact.read"
+  | "contact.manage"
   | "stock.adjust"
   | "po.receive"
   | "po.create"
@@ -35,6 +43,10 @@ const CAPABILITIES: Record<Role, readonly Capability[]> = {
     "orders.cancelPending",
     "orders.cancelConfirmed",
     "orders.cancelOwn",
+    "orders.notes.read",
+    "orders.notes.write",
+    "contact.read",
+    "contact.manage",
     "stock.adjust",
     "po.receive",
     "po.create",
@@ -42,8 +54,16 @@ const CAPABILITIES: Record<Role, readonly Capability[]> = {
     "products.write",
     "suppliers.write",
   ],
-  STAFF: ["orders.confirm", "orders.cancelPending", "orders.cancelConfirmed", "stock.adjust", "po.receive"],
-  SUPPORT: ["orders.cancelPending"],
+  STAFF: [
+    "orders.confirm",
+    "orders.cancelPending",
+    "orders.cancelConfirmed",
+    "orders.notes.read",
+    "orders.notes.write",
+    "stock.adjust",
+    "po.receive",
+  ],
+  SUPPORT: ["orders.cancelPending", "orders.notes.read", "orders.notes.write", "contact.read", "contact.manage"],
   CUSTOMER: ["orders.cancelOwn"],
 };
 

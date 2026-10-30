@@ -8,9 +8,12 @@ import { STAFF_ORDERS_PATH } from "./format";
 export default function StaffOrdersPage({
   basePath = STAFF_ORDERS_PATH,
   newOrderPath = `${STAFF_ORDERS_PATH}/new`,
+  showNewOrder = true,
 }: {
   basePath?: string;
   newOrderPath?: string;
+  /** SUPPORT can read orders but must not be offered the staff till. */
+  showNewOrder?: boolean;
 }) {
   return (
     <div>
@@ -24,13 +27,15 @@ export default function StaffOrdersPage({
             </p>
           )}
         </div>
-        <Link
-          to={newOrderPath}
-          className="inline-flex items-center gap-2 rounded-lg bg-[#FF5615] px-4 py-2.5 text-sm font-semibold text-white shadow-md shadow-[#FF5615]/25 hover:bg-[#E84A0E] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF5615] focus-visible:ring-offset-2"
-        >
-          <Plus className="h-4 w-4" />
-          New order
-        </Link>
+        {showNewOrder && (
+          <Link
+            to={newOrderPath}
+            className="inline-flex items-center gap-2 rounded-lg bg-[#FF5615] px-4 py-2.5 text-sm font-semibold text-white shadow-md shadow-[#FF5615]/25 hover:bg-[#E84A0E] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF5615] focus-visible:ring-offset-2"
+          >
+            <Plus className="h-4 w-4" />
+            New order
+          </Link>
+        )}
       </div>
       <div className="mt-6">
         <OrdersList scope="staff" basePath={basePath} />

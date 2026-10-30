@@ -124,4 +124,35 @@ describe("realStaffOrdersApi", () => {
     expect(fetchMock.mock.calls[0][0]).toMatch(/\/orders\/o-1$/);
     expect(order.customerName).toBe("Ahmed");
   });
+
+  it("lists and posts internal notes through /orders/:id/notes", async () => {
+    const note = {
+      id: "n-1",
+      orderId: "o-1",
+      authorId: "u-2",
+      note: "Called the customer",
+      author: { id: "u-2", name: "Sami Staff" },
+      createdAt: "2026-01-02T09:00:00.000Z",
+    };
+    const fetchMock = vi.fn().mockResolvedValueOnce(jsonResponse([note])).mockResolvedValueOnce(jsonResponse(note, 201));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const notes = await realStaffOrdersApi.listNotes("o-1");
+    await realStaffOrdersApi.addNote("o-1", "Called the customer");
+
+    expect(fetchMock.mock.calls[0][0]).toMatch(/\/orders\/o-1\/notes$/);
+    expect((fetchMock.mock.calls[0][1] as RequestInit | undefined)?.method ?? "GET").toBe("GET");
+    expect(notes).toEqual([
+      {
+        id: "n-1",
+        orderId: "o-1",
+        authorId: "u-2",
+        note: "Called the customer",
+        author: { id: "u-2", name: "Sami Staff" },
+        createdAt: "2026-01-02T09:00:00.000Z",
+      },
+    ]);
+    expect(fetchMock.mock.calls[1][0]).toMatch(/\/orders\/o-1\/notes$/);
+    expect(fetchMock.mock.calls[1][1]).toMatchObject({ method: "POST", body: JSON.stringify({ note: "Called the customer" }) });
+  });
 });

@@ -1,7 +1,13 @@
 import { request } from "../../lib/http";
 import { USE_MOCK } from "../../lib/env";
 import { mockCustomerOrdersApi, mockStaffOrdersApi } from "./mockApi";
-import { normalizeCustomerOrder, normalizeStaffOrder, toCustomerOrderPage, toStaffOrderPage } from "./normalize";
+import {
+  normalizeCustomerOrder,
+  normalizeOrderNote,
+  normalizeStaffOrder,
+  toCustomerOrderPage,
+  toStaffOrderPage,
+} from "./normalize";
 import type {
   CreateMyOrderInput,
   CustomerOrdersApi,
@@ -75,6 +81,18 @@ export const realStaffOrdersApi: StaffOrdersApi = {
   },
   async cancelOrder(id) {
     await request<unknown>(`/orders/${encode(id)}/cancel`, { method: "POST" });
+  },
+  async listNotes(id) {
+    const body = await request<unknown>(`/orders/${encode(id)}/notes`);
+    return (Array.isArray(body) ? body : []).map(normalizeOrderNote);
+  },
+  async addNote(id, note) {
+    return normalizeOrderNote(
+      await request<unknown>(`/orders/${encode(id)}/notes`, {
+        method: "POST",
+        body: JSON.stringify({ note }),
+      }),
+    );
   },
 };
 

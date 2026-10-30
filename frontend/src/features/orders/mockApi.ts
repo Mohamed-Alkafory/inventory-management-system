@@ -8,6 +8,7 @@ import type {
   CustomerOrder,
   CustomerOrdersApi,
   Id,
+  OrderNote,
   OrderStatus,
   StaffOrder,
   StaffOrdersApi,
@@ -123,6 +124,26 @@ function build(row: (typeof SEED)[number], idx: number): MockOrder {
 }
 
 let db: MockOrder[] = SEED.map(build);
+
+/** Internal notes are a separate thread; they never appear in customer responses. */
+let notesDb: OrderNote[] = [
+  {
+    id: "note-1",
+    orderId: "1",
+    authorId: "2",
+    note: "Customer asked us to call before delivery.",
+    author: { id: "2", name: "Sami Staff" },
+    createdAt: new Date(now - 8 * HOUR).toISOString(),
+  },
+  {
+    id: "note-2",
+    orderId: "2",
+    authorId: "1",
+    note: "Confirmed by phone. Courier booked.",
+    author: { id: "1", name: "Amira Admin" },
+    createdAt: new Date(now - 6 * HOUR).toISOString(),
+  },
+];
 
 const totalOf = (o: MockOrder) => r2(o.items.reduce((sum, line) => sum + line.lineTotal, 0));
 
@@ -337,6 +358,32 @@ export const mockStaffOrdersApi: StaffOrdersApi = {
     if (!order) throw notFound();
     if (order.status !== "PENDING") throw conflict(order, "cancel");
     updateStatus(id, "CANCELLED");
+  },
+  async listNotes(id) {
+    await sleep(LATENCY);
+    if (!find(id)) throw notFound();
+    return notesDb
+      .filter((note) => note.orderId === String(id))
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  },
+  async addNote(id, note) {
+    await sleep(LATENCY);
+    if (!find(id)) throw notFound();
+    const trimmed = note.trim();
+    if (trimmed.length < 1 || trimmed.length > 2000) {
+      throw badRequest("note must be between 1 and 2000 characters");
+    }
+    const user = tokenStorage.getSession()?.user;
+    const created: OrderNote = {
+      id: `note-${notesDb.length + 1}`,
+      orderId: String(id),
+      authorId: user?.id ?? "support",
+      note: trimmed,
+      author: { id: user?.id ?? "support", name: user?.name ?? "Support user" },
+      createdAt: new Date().toISOString(),
+    };
+    notesDb = [...notesDb, created];
+    return created;
   },
 };
 

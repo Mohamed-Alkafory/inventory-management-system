@@ -30,6 +30,11 @@ vi.mock("../staff/pages/Dashboard/StaffDashboard", () => ({ default: () => <p>St
 vi.mock("../staff/pages/Inventory/Inventory", () => ({ default: () => <p>Staff inventory page</p> }));
 vi.mock("../staff/pages/PurchaseOrders/PurchaseOrders", () => ({ default: () => <p>Staff purchase orders page</p> }));
 vi.mock("../staff/pages/PurchaseOrders/PurchaseOrderDetails", () => ({ default: () => <p>Staff purchase order details page</p> }));
+vi.mock("../support/pages/Dashboard/SupportDashboard", () => ({ default: () => <p>Support dashboard</p> }));
+vi.mock("../support/pages/Messages/Messages", () => ({ default: () => <p>Support messages page</p> }));
+vi.mock("../support/pages/Messages/MessageDetails", () => ({ default: () => <p>Support message details page</p> }));
+vi.mock("../support/pages/Orders/Orders", () => ({ default: () => <p>Support orders page</p> }));
+vi.mock("../support/pages/Orders/OrderDetails", () => ({ default: () => <p>Support order details page</p> }));
 
 // Never hit the network: the provider re-validates the stored session through authApi.me().
 vi.mock("../api/authApi", () => ({
@@ -99,6 +104,10 @@ describe("route access matrix", () => {
       ["/staff/purchase-orders", "Staff purchase orders page"],
       ["/staff/products", "Staff products page"],
       ["/support", "Support workspace"],
+      ["/support/messages", "Support messages page"],
+      ["/support/messages/m-1", "Support message details page"],
+      ["/support/orders", "Support orders page"],
+      ["/support/orders/o-1", "Support order details page"],
       ["/profile", "Profile page"],
     ];
     for (const [path, text] of cases) {
@@ -136,21 +145,30 @@ describe("route access matrix", () => {
       view.unmount();
     }
 
-    for (const path of ["/admin", "/support", "/cart", "/orders"]) {
+    for (const path of ["/admin", "/support", "/support/messages", "/support/orders", "/cart", "/orders"]) {
       const view = renderAt(path);
       expect(forbidden()).toBeInTheDocument();
       view.unmount();
     }
   });
 
-  it("SUPPORT may open /support but not /staff, /admin, /orders/new or customer pages", () => {
+  it("SUPPORT may open every /support page but not /staff, /admin, /orders/new or customer pages", () => {
     signIn("SUPPORT");
-    let view = renderAt("/support");
-    expect(screen.getByText("Support workspace")).toBeInTheDocument();
-    view.unmount();
+    const allowed: Array<[string, string]> = [
+      ["/support", "Support workspace"],
+      ["/support/messages", "Support messages page"],
+      ["/support/messages/m-1", "Support message details page"],
+      ["/support/orders", "Support orders page"],
+      ["/support/orders/o-1", "Support order details page"],
+    ];
+    for (const [path, text] of allowed) {
+      const view = renderAt(path);
+      expect(screen.getByText(text)).toBeInTheDocument();
+      view.unmount();
+    }
 
     for (const path of ["/admin", "/staff", "/staff/orders", "/staff/inventory", "/orders/new", "/cart", "/orders"]) {
-      view = renderAt(path);
+      const view = renderAt(path);
       expect(forbidden()).toBeInTheDocument();
       view.unmount();
     }
@@ -166,7 +184,7 @@ describe("route access matrix", () => {
     expect(screen.getByText("My orders page")).toBeInTheDocument();
     view.unmount();
 
-    for (const path of ["/admin", "/staff", "/staff/orders", "/staff/products", "/support", "/orders/new"]) {
+    for (const path of ["/admin", "/staff", "/staff/orders", "/staff/products", "/support", "/support/messages", "/support/orders", "/orders/new"]) {
       view = renderAt(path);
       expect(forbidden()).toBeInTheDocument();
       view.unmount();
