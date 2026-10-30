@@ -1,28 +1,53 @@
+import type { Role } from "../../types/auth";
 import type { OrderAction, OrderStatus } from "./types";
 
-export const STATUSES: OrderStatus[] = ["pending", "processing", "shipped", "delivered", "cancelled"];
+export const STATUSES: OrderStatus[] = ["PENDING", "CONFIRMED", "CANCELLED"];
 
 export const STATUS_LABEL: Record<OrderStatus, string> = {
-  pending: "Pending",
-  processing: "Processing",
-  shipped: "Shipped",
-  delivered: "Delivered",
-  cancelled: "Cancelled",
+  PENDING: "Pending",
+  CONFIRMED: "Confirmed",
+  CANCELLED: "Cancelled",
+};
+
+/** Tailwind classes for <StatusBadge>. Kept here with the labels. */
+export const STATUS_TONE: Record<OrderStatus, string> = {
+  PENDING: "bg-[#FFEAB6] text-[#B7791F]",
+  CONFIRMED: "bg-[#DDF5EA] text-[#1F8F6B]",
+  CANCELLED: "bg-[#FFD6D8] text-[#C53030]",
+};
+
+/** Action labels and the status each one produces. */
+export const ACTION_RULES: Record<OrderAction, { to: OrderStatus; label: string }> = {
+  confirm: { to: "CONFIRMED", label: "Confirm order" },
+  cancel: { to: "CANCELLED", label: "Cancel order" },
 };
 
 /**
- * ► THE ONLY PLACE THAT DEFINES VALID TRANSITIONS.
- *   An action is offered only when the order's current status is in `from`.
- *   (If the API sends `allowedActions` for an order, that wins over this table.)
+ * ► THE ONLY PLACE THAT DECIDES WHO MAY DO WHAT.
+ *
+ * Mirrors the backend permission map and transitions:
+ *   CUSTOMER  orders.cancel_own     → cancel own PENDING only
+ *   SUPPORT   orders.cancel_pending → cancel PENDING only (never confirms)
+ *   STAFF     orders.update_status  → confirm PENDING; cancel PENDING/CONFIRMED
+ *   ADMIN     every permission      → same as STAFF for orders
+ *
+ * Components must call this with the signed-in role instead of deriving
+ * actions from the status alone.
  */
-export const ACTION_RULES: Record<OrderAction, { from: OrderStatus[]; to: OrderStatus; label: string }> = {
-  confirm: { from: ["pending"], to: "processing", label: "Confirm order" },
-  cancel: { from: ["pending", "processing"], to: "cancelled", label: "Cancel order" },
-};
+export function getOrderActions(role: Role | null | undefined, order: { status: OrderStatus }): OrderAction[] {
+  if (!role) return [];
 
-const ACTIONS = Object.keys(ACTION_RULES) as OrderAction[];
-
-export function allowedActions(o: { status: OrderStatus; allowedActions?: OrderAction[] }): OrderAction[] {
-  if (o.allowedActions) return ACTIONS.filter((a) => o.allowedActions!.includes(a));
-  return ACTIONS.filter((a) => ACTION_RULES[a].from.includes(o.status));
+  switch (role) {
+    case "CUSTOMER":
+    case "SUPPORT":
+      return order.status === "PENDING" ? ["cancel"] : [];
+    case "STAFF":
+    case "ADMIN":
+      return [
+        ...(order.status === "PENDING" ? (["confirm"] as const) : []),
+        ...(order.status === "PENDING" || order.status === "CONFIRMED" ? (["cancel"] as const) : []),
+      ];
+    default:
+      return [];
+  }
 }

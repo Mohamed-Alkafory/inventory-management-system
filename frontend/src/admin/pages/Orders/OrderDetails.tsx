@@ -3,5 +3,5 @@ import OrderDetailsView from "../../../features/orders/OrderDetailsView";
 
 export default function OrderDetails() {
   const { id = "" } = useParams();
-  return <OrderDetailsView id={id} />;
+  return <OrderDetailsView id={id} scope="staff" />;
 }

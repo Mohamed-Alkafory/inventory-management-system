@@ -13,12 +13,13 @@ import {
   ReceiptText,
   Upload,
 } from "lucide-react";
-import { Badge, Button, Card, ConfirmDialog, IconBadge, StatusBadge, useToast } from "../../components/ui";
+import { Badge, Button, Card, ConfirmDialog, IconBadge, useToast } from "../../components/ui";
 import UserAvatar from "../../components/user/UserAvatar";
 import { useAuth } from "../../context/auth/useAuth";
-import { useOrders } from "../../features/orders/hooks";
+import { useMyOrders } from "../../features/orders/hooks";
+import OrderStatusBadge from "../../features/orders/StatusBadge";
 import { formatDate, formatMoney, formatNumber, orderPath } from "../../features/orders/format";
-import type { OrderListParams } from "../../features/orders/types";
+import type { MyOrderListParams } from "../../features/orders/types";
 import ImageUploadField from "../../features/products/ImageUploadField";
 import { AVATAR_RULES } from "../../features/users/avatar";
 import EditProfileDialog from "./EditProfileDialog";
@@ -80,6 +81,7 @@ export default function Profile() {
   const toast = useToast();
   const navigate = useNavigate();
   const isAdmin = hasRole("ADMIN");
+  const isCustomer = hasRole("CUSTOMER");
 
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -90,11 +92,11 @@ export default function Profile() {
   const [avatarRemoving, setAvatarRemoving] = useState(false);
 
   // Stable param object — the query key embeds it.
-  const orderParams = useMemo<OrderListParams>(
-    () => ({ ...{ search: "", status: "", from: "", to: "" }, page: 1, pageSize: RECENT_ORDERS_PAGE_SIZE }),
+  const orderParams = useMemo<MyOrderListParams>(
+    () => ({ status: "", page: 1, pageSize: RECENT_ORDERS_PAGE_SIZE }),
     [],
   );
-  const ordersQuery = useOrders({ ...orderParams, createdById: user?.id });
+  const ordersQuery = useMyOrders(orderParams, { enabled: isCustomer });
 
   const handleDelete = async () => {
     setDeleting(true);
@@ -253,53 +255,59 @@ export default function Profile() {
                   My products
                 </Button>
               </Link>
-              <Link to="/orders" className="inline-flex">
-                <Button variant="secondary" leftIcon={<ReceiptText className="size-4" aria-hidden="true" />}>
-                  My orders
-                </Button>
-              </Link>
+              {isCustomer && (
+                <Link to="/orders" className="inline-flex">
+                  <Button variant="secondary" leftIcon={<ReceiptText className="size-4" aria-hidden="true" />}>
+                    My orders
+                  </Button>
+                </Link>
+              )}
               <Button variant="ghost" className="text-danger-600 hover:text-danger-700" leftIcon={<LogOut className="size-4 " aria-hidden="true"  />} onClick={() => void handleLogout()}>
                 Log out
               </Button>
             </div>
 
-            <h2 className="mt-9 text-lg font-bold">Order history</h2>
-            <div className="mt-1.5 h-px bg-line" />
+            {isCustomer && (
+              <>
+                <h2 className="mt-9 text-lg font-bold">Order history</h2>
+                <div className="mt-1.5 h-px bg-line" />
 
-            {ordersQuery.isPending ? (
-              <ul className="mt-5 space-y-3" aria-hidden="true">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <li key={i} className="h-14 animate-pulse rounded-control border border-line bg-surface-alt" />
-                ))}
-              </ul>
-            ) : ordersQuery.isError ? (
-              <div className="mt-5 rounded-control border border-dashed border-danger-600/30 bg-danger-50 px-4 py-8 text-center text-sm text-danger-700">
-                Couldn't load your orders. Please try again later.
-              </div>
-            ) : orders.length === 0 ? (
-              <div className="mt-5 rounded-control border border-dashed border-line bg-surface-alt px-4 py-10 text-center text-sm text-muted">
-                No orders found.
-              </div>
-            ) : (
-              <ul className="mt-5 space-y-3">
-                {orders.map((order) => (
-                  <li
-                    key={String(order.id)}
-                    className="rounded-control border border-line bg-surface-alt px-4 py-3 transition hover:border-primary-300"
-                  >
-                    <Link to={orderPath(order.id)} className="flex flex-wrap items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="font-mono text-sm font-bold text-ink">{formatNumber(order.number)}</p>
-                        <p className="text-xs text-muted">{formatDate(order.createdAt)}</p>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-sm font-semibold text-ink">{formatMoney(order.total)}</span>
-                        <StatusBadge status={order.status} />
-                      </div>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
+                {ordersQuery.isPending ? (
+                  <ul className="mt-5 space-y-3" aria-hidden="true">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <li key={i} className="h-14 animate-pulse rounded-control border border-line bg-surface-alt" />
+                    ))}
+                  </ul>
+                ) : ordersQuery.isError ? (
+                  <div className="mt-5 rounded-control border border-dashed border-danger-600/30 bg-danger-50 px-4 py-8 text-center text-sm text-danger-700">
+                    Couldn't load your orders. Please try again later.
+                  </div>
+                ) : orders.length === 0 ? (
+                  <div className="mt-5 rounded-control border border-dashed border-line bg-surface-alt px-4 py-10 text-center text-sm text-muted">
+                    No orders found.
+                  </div>
+                ) : (
+                  <ul className="mt-5 space-y-3">
+                    {orders.map((order) => (
+                      <li
+                        key={String(order.id)}
+                        className="rounded-control border border-line bg-surface-alt px-4 py-3 transition hover:border-primary-300"
+                      >
+                        <Link to={orderPath(order.id)} className="flex flex-wrap items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="font-mono text-sm font-bold text-ink">{formatNumber(order.orderNumber)}</p>
+                            <p className="text-xs text-muted">{formatDate(order.createdAt)}</p>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="text-sm font-semibold text-ink">{formatMoney(order.totalAmount)}</span>
+                            <OrderStatusBadge status={order.status} />
+                          </div>
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
             )}
 
             {/* Destructive zone — kept visually apart, guarded by a confirm dialog. */}

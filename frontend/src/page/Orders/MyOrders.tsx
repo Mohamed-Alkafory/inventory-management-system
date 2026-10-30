@@ -5,10 +5,9 @@ import { USE_MOCK } from "../../features/orders/api";
 import OrdersList from "../../features/orders/OrdersList";
 
 /**
- * "My orders" — an orders list scoped to the signed-in user (createdById).
- * Reached from the profile page; the shared OrdersList handles search,
- * filters, pagination and confirm/cancel actions the same way the admin
- * list does.
+ * "My orders" — the signed-in customer's own orders (GET /orders/mine).
+ * The shared OrdersList handles the status filter, pagination and the
+ * customer-scoped cancel action.
  */
 export default function MyOrders() {
   const { user } = useAuth();
@@ -27,7 +26,7 @@ export default function MyOrders() {
         </Link>
 
         <h1 className="mt-3 text-3xl font-bold">My orders</h1>
-        <p className="mt-1 text-sm text-muted">Orders you created, with search, filters and pagination.</p>
+        <p className="mt-1 text-sm text-muted">Orders you placed, with status filters and pagination.</p>
         {USE_MOCK && (
           <p className="mt-2 inline-block rounded-full bg-primary-50 px-2.5 py-1 text-[11px] font-semibold text-primary-700">
             Demo data (mock API)
@@ -35,7 +34,7 @@ export default function MyOrders() {
         )}
 
         <div className="mt-6">
-          <OrdersList createdById={user.id} />
+          <OrdersList scope="my" />
         </div>
       </div>
     </div>

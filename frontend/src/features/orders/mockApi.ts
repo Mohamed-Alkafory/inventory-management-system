@@ -1,12 +1,26 @@
+import { tokenStorage } from "../../api/tokenStorage";
 import { ApiError } from "../../lib/http";
-import { filterOrders, paginate } from "./filters";
-import { ACTION_RULES, STATUS_LABEL, allowedActions } from "./status";
-import type { Id, OrderDetails, OrdersApi, OrderStatus } from "./types";
+import { filterMyOrders, filterOrders, paginate } from "./filters";
+import { STATUS_LABEL } from "./status";
+import type {
+  CustomerOrder,
+  CustomerOrdersApi,
+  Id,
+  OrderStatus,
+  StaffOrder,
+  StaffOrdersApi,
+} from "./types";
 
 /*
-  In-memory stand-in for the backend, used until the real API is merged.
-  Filters, pagination, details, status history, and 409 on invalid transitions
-  behave like the real one should. Data resets on page reload.
+  In-memory stand-in for the backend, used until the real API is merged
+  (VITE_USE_MOCK=true). It keeps BOTH response shapes and mirrors the exact
+  permission/transition rules:
+
+    customer  /orders/mine*      own orders only; a foreign order is 404
+    staff     /orders*           all orders; PENDING cancel only on /cancel,
+                                 PATCH status for CONFIRMED/CANCELLED
+
+  Data resets on page reload.
 */
 
 const CATALOG = {
@@ -25,71 +39,177 @@ const r2 = (n: number) => Math.round(n * 100) / 100;
 const HOUR = 3_600_000;
 const now = Date.now();
 
-// number, customer, email, createdById, createdBy, status, items, shipping, tax rate
-// (mock account ids: "1" = Amira Admin, "2" = Sami Staff — see api/mock/authMock.ts)
-const SEED: Array<[string, string, string, string, string, OrderStatus, Array<[Key, number]>, number, number]> = [
-  ["ORD-1001", "Ahmed Mohamed", "ahmed.mohamed@example.com", "2", "Sara Ali", "pending", [["headphones", 1], ["bottle", 2]], 9.99, 0],
-  ["ORD-1002", "Sarah Ali", "sarah.ali@example.com", "1", "Demo Admin", "processing", [["watch", 1], ["backpack", 1]], 0, 0.08],
-  ["ORD-1003", "Omar Hassan", "omar.hassan@example.com", "2", "Sara Ali", "shipped", [["tshirt", 2], ["shoes", 1]], 0, 0],
-  ["ORD-1004", "Fatima Ahmed", "fatima.ahmed@example.com", "1", "Demo Admin", "delivered", [["coffee", 1], ["lamp", 2]], 0, 0.08],
-  ["ORD-1005", "Khaled Salem", "khaled.salem@example.com", "1", "Demo Admin", "cancelled", [["bottle", 3], ["lamp", 1]], 9.99, 0],
-  ["ORD-1006", "Layla Mostafa", "layla.mostafa@example.com", "2", "Sara Ali", "processing", [["shoes", 2], ["tshirt", 1]], 0, 0],
-  ["ORD-1007", "Youssef Khaled", "youssef.khaled@example.com", "1", "Demo Admin", "pending", [["lamp", 2]], 9.99, 0],
-  ["ORD-1008", "Nada Hassan", "nada.hassan@example.com", "2", "Sara Ali", "delivered", [["headphones", 2]], 0, 0.08],
-  ["ORD-1009", "Mona Fathy", "mona.fathy@example.com", "1", "Demo Admin", "shipped", [["coffee", 2], ["bottle", 1]], 0, 0],
-  ["ORD-1010", "Hany Samir", "hany.samir@example.com", "2", "Sara Ali", "pending", [["backpack", 2], ["tshirt", 3]], 0, 0],
-  ["ORD-1011", "Dina Adel", "dina.adel@example.com", "1", "Demo Admin", "cancelled", [["watch", 1]], 0, 0],
-  ["ORD-1012", "Tarek Wahba", "tarek.wahba@example.com", "2", "Sara Ali", "delivered", [["shoes", 1], ["lamp", 1]], 9.99, 0],
+interface MockLine {
+  productName: string;
+  sku: string;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
+}
+
+interface MockOrder {
+  id: number;
+  orderNumber: string;
+  status: OrderStatus;
+  customerId?: string;
+  customerName: string;
+  customerPhone: string;
+  recipientName: string;
+  recipientPhone: string;
+  shippingAddress: string;
+  shippingCity: string;
+  paymentMethod: string;
+  notes: string;
+  createdById: string;
+  createdByName: string;
+  createdByEmail: string;
+  createdAt: string;
+  cancelledAt: string | null;
+  items: MockLine[];
+}
+
+const OWN_CUSTOMER = "4"; // Cara Customer — see api/mock/authMock.ts
+
+// number, customer, phone, customerId, createdBy, status, lines, shipping
+const SEED: Array<
+  [string, string, string, string, string, OrderStatus, Array<[Key, number]>, number]
+> = [
+  ["ORD-1001", "Ahmed Mohamed", "+20 101 300 1000", OWN_CUSTOMER, "Sami Staff", "PENDING", [["headphones", 1], ["bottle", 2]], 9.99],
+  ["ORD-1002", "Sarah Ali", "+20 102 317 1113", OWN_CUSTOMER, "Amira Admin", "CONFIRMED", [["watch", 1], ["backpack", 1]], 0],
+  ["ORD-1003", "Omar Hassan", "+20 103 334 1226", OWN_CUSTOMER, "Sami Staff", "CONFIRMED", [["tshirt", 2], ["shoes", 1]], 0],
+  ["ORD-1004", "Fatima Ahmed", "+20 104 351 1339", OWN_CUSTOMER, "Amira Admin", "CONFIRMED", [["coffee", 1], ["lamp", 2]], 0],
+  ["ORD-1005", "Khaled Salem", "+20 105 368 1452", OWN_CUSTOMER, "Amira Admin", "CANCELLED", [["bottle", 3], ["lamp", 1]], 9.99],
+  ["ORD-1006", "Layla Mostafa", "+20 106 385 1565", OWN_CUSTOMER, "Sami Staff", "PENDING", [["shoes", 2], ["tshirt", 1]], 0],
+  ["ORD-1007", "Youssef Khaled", "+20 107 402 1678", OWN_CUSTOMER, "Amira Admin", "CANCELLED", [["lamp", 2]], 9.99],
+  ["ORD-1008", "Nada Hassan", "+20 108 419 1791", OWN_CUSTOMER, "Sami Staff", "CONFIRMED", [["headphones", 2]], 0],
+  ["ORD-1009", "Mona Fathy", "+20 109 436 1804", OWN_CUSTOMER, "Amira Admin", "PENDING", [["coffee", 2], ["bottle", 1]], 0],
+  // Not owned by the built-in customer — /orders/mine/:id must answer 404 for these.
+  ["ORD-1010", "Hany Samir", "+20 110 453 1917", "u-other", "Sami Staff", "PENDING", [["backpack", 2], ["tshirt", 3]], 0],
+  ["ORD-1011", "Dina Adel", "+20 111 470 2030", "u-other", "Amira Admin", "CANCELLED", [["watch", 1]], 0],
+  ["ORD-1012", "Tarek Wahba", "+20 112 487 2143", "u-other", "Sami Staff", "CONFIRMED", [["shoes", 1], ["lamp", 1]], 9.99],
 ];
 
-function build(row: (typeof SEED)[number], idx: number): OrderDetails {
-  const [number, customerName, customerEmail, createdById, createdBy, status, lines, shipping, taxRate] = row;
-  const items = lines.map(([k, quantity]) => ({ productId: null, name: CATALOG[k].name, sku: CATALOG[k].sku, quantity, unitPrice: CATALOG[k].price }));
-  const subtotal = r2(items.reduce((s, i) => s + i.quantity * i.unitPrice, 0));
-  const tax = r2(subtotal * taxRate);
+function build(row: (typeof SEED)[number], idx: number): MockOrder {
+  const [orderNumber, customerName, customerPhone, customerId, createdByName, status, lines] = row;
+  const items: MockLine[] = lines.map(([k, quantity]) => {
+    const lineTotal = r2(CATALOG[k].price * quantity);
+    return { productName: CATALOG[k].name, sku: CATALOG[k].sku, quantity, unitPrice: CATALOG[k].price, lineTotal };
+  });
   const created = now - (2 + idx * 30) * HOUR; // 30h apart → every order is on its own calendar day
   const iso = (h: number) => new Date(created + h * HOUR).toISOString();
 
-  const history = [{ status: "pending" as OrderStatus, at: iso(0), by: createdBy, note: "Order placed" }];
-  if (status !== "pending") {
-    if (status === "cancelled") history.push({ status, at: iso(3), by: "Demo Admin", note: "Order cancelled" });
-    else {
-      history.push({ status: "processing", at: iso(2), by: "Demo Admin", note: "Order confirmed" });
-      if (status === "shipped" || status === "delivered") history.push({ status: "shipped", at: iso(20), by: "Sara Ali", note: "Handed to courier" });
-      if (status === "delivered") history.push({ status: "delivered", at: iso(70), by: "Sara Ali", note: "Delivered to customer" });
-    }
-  }
   return {
-    id: idx + 1, number, customerName, customerEmail, createdById, createdBy, status, createdAt: iso(0),
-    customerPhone: `+20 10${idx % 10} ${String(300 + idx * 17).padStart(3, "0")} ${String(1000 + idx * 113)}`,
+    id: idx + 1,
+    orderNumber,
+    status,
+    customerId,
+    customerName,
+    customerPhone,
+    recipientName: customerName,
+    recipientPhone: customerPhone,
+    shippingAddress: `${100 + idx} Nile Street`,
+    shippingCity: ["Cairo", "Giza", "Alexandria"][idx % 3],
+    paymentMethod: "COD",
     notes: idx % 3 === 0 ? "Please call before delivery" : "",
-    items, subtotal, shipping, tax, discount: 0, total: r2(subtotal + shipping + tax), history,
+    createdById: createdByName === "Amira Admin" ? "1" : "2",
+    createdByName,
+    createdByEmail: createdByName === "Amira Admin" ? "admin@prodexa.com" : "staff@prodexa.com",
+    createdAt: iso(0),
+    cancelledAt: status === "CANCELLED" ? iso(3) : null,
+    items,
   };
 }
 
-let db: OrderDetails[] = SEED.map(build);
+let db: MockOrder[] = SEED.map(build);
 
-/** Used by the "create order" mock so a new order shows up in the list and its details page. */
+const totalOf = (o: MockOrder) => r2(o.items.reduce((sum, line) => sum + line.lineTotal, 0));
+
+function toCustomerOrder(o: MockOrder): CustomerOrder {
+  return {
+    id: o.id,
+    orderNumber: o.orderNumber,
+    status: o.status,
+    totalAmount: totalOf(o),
+    items: o.items.map((line) => ({ ...line })),
+    recipientName: o.recipientName || undefined,
+    recipientPhone: o.recipientPhone || undefined,
+    shippingAddress: o.shippingAddress || undefined,
+    shippingCity: o.shippingCity || undefined,
+    paymentMethod: o.paymentMethod || undefined,
+    createdAt: o.createdAt,
+    cancelledAt: o.cancelledAt ?? undefined,
+  };
+}
+
+function toStaffOrder(o: MockOrder, detail: boolean): StaffOrder {
+  const base: StaffOrder = {
+    id: o.id,
+    orderNumber: o.orderNumber,
+    status: o.status,
+    customerName: o.customerName || undefined,
+    customerPhone: o.customerPhone || undefined,
+    notes: o.notes || undefined,
+    totalAmount: totalOf(o),
+    customerId: o.customerId,
+    recipientName: o.recipientName || undefined,
+    recipientPhone: o.recipientPhone || undefined,
+    shippingAddress: o.shippingAddress || undefined,
+    shippingCity: o.shippingCity || undefined,
+    paymentMethod: o.paymentMethod || undefined,
+    createdById: o.createdById,
+    cancelledAt: o.cancelledAt ?? undefined,
+    createdAt: o.createdAt,
+    updatedAt: o.createdAt,
+  };
+  if (!detail) return base;
+  return {
+    ...base,
+    items: o.items.map((line, n) => ({ id: `${o.id}-${n + 1}`, ...line })),
+    createdBy: { id: o.createdById, name: o.createdByName, email: o.createdByEmail },
+    stockMovements: [],
+  };
+}
+
+/** Used by the "create order" mock so a new order shows up in the staff list and details. */
 export function addMockOrder(input: {
   customerName: string;
   customerPhone: string;
   notes: string;
   items: Array<{ name: string; sku: string; quantity: number; unitPrice: number }>;
 }): { id: number; number: string } {
-  const id = Math.max(0, ...db.map((o) => Number(o.id) || 0)) + 1;
-  const number = `ORD-${1000 + id}`;
+  const id = Math.max(0, ...db.map((o) => o.id)) + 1;
+  const orderNumber = `ORD-${1000 + id}`;
   const at = new Date().toISOString();
-  const items = input.items.map((i) => ({ productId: null, ...i }));
-  const subtotal = r2(items.reduce((s, i) => s + i.quantity * i.unitPrice, 0));
+  const items: MockLine[] = input.items.map((i) => ({
+    productName: i.name,
+    sku: i.sku,
+    quantity: i.quantity,
+    unitPrice: i.unitPrice,
+    lineTotal: r2(i.quantity * i.unitPrice),
+  }));
   db = [
     ...db,
     {
-      id, number, customerName: input.customerName, customerEmail: "", customerPhone: input.customerPhone, notes: input.notes,
-      createdById: "1", createdBy: "Demo Admin", status: "pending", createdAt: at, items, subtotal, shipping: 0, tax: 0, discount: 0, total: subtotal,
-      history: [{ status: "pending", at, by: "Demo Admin", note: "Order placed" }],
+      id,
+      orderNumber,
+      status: "PENDING",
+      customerName: input.customerName,
+      customerPhone: input.customerPhone,
+      recipientName: input.customerName,
+      recipientPhone: input.customerPhone,
+      shippingAddress: "",
+      shippingCity: "",
+      paymentMethod: "COD",
+      notes: input.notes,
+      createdById: "1",
+      createdByName: "Amira Admin",
+      createdByEmail: "admin@prodexa.com",
+      createdAt: at,
+      cancelledAt: null,
+      items,
     },
   ];
-  return { id, number };
+  return { id, number: orderNumber };
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -97,38 +217,74 @@ const LATENCY = 350;
 const notFound = () => new ApiError(404, "Order not found", { serverMessage: "Order not found" });
 const find = (id: Id) => db.find((o) => String(o.id) === String(id));
 
-function transition(id: Id, action: "confirm" | "cancel") {
-  const o = find(id);
-  if (!o) throw notFound();
-  if (!allowedActions(o).includes(action)) {
-    const msg = `Order #${o.number} can’t be ${action === "confirm" ? "confirmed" : "cancelled"} because it is ${STATUS_LABEL[o.status].toLowerCase()}.`;
-    throw new ApiError(409, msg, { serverMessage: msg });
-  }
-  const to = ACTION_RULES[action].to;
-  const event = { status: to, at: new Date().toISOString(), by: "Demo Admin", note: action === "confirm" ? "Order confirmed" : "Order cancelled" };
-  db = db.map((x) => (x.id === o.id ? { ...x, status: to, history: [...x.history, event] } : x));
+function conflict(o: MockOrder, action: "confirm" | "cancel") {
+  const verb = action === "confirm" ? "confirmed" : "cancelled";
+  const message = `Order #${o.orderNumber} can’t be ${verb} because it is ${STATUS_LABEL[o.status].toLowerCase()}.`;
+  return new ApiError(409, message, { serverMessage: message });
 }
 
-const clone = (o: OrderDetails): OrderDetails => ({ ...o, items: o.items.map((i) => ({ ...i })), history: o.history.map((h) => ({ ...h })) });
+function currentCustomerId(): string {
+  return tokenStorage.getSession()?.user.id ?? OWN_CUSTOMER;
+}
 
-export const mockOrdersApi: OrdersApi = {
-  async list(p) {
+function updateStatus(id: Id, status: "CONFIRMED" | "CANCELLED") {
+  const order = find(id);
+  if (!order) throw notFound();
+
+  const allowed = status === "CONFIRMED" ? order.status === "PENDING" : order.status === "PENDING" || order.status === "CONFIRMED";
+  if (!allowed) throw conflict(order, status === "CONFIRMED" ? "confirm" : "cancel");
+
+  db = db.map((o) =>
+    o.id === order.id
+      ? { ...o, status, cancelledAt: status === "CANCELLED" ? new Date().toISOString() : o.cancelledAt }
+      : o,
+  );
+}
+
+/** Staff list: every order (SUPPORT/STAFF/ADMIN). */
+export const mockStaffOrdersApi: StaffOrdersApi = {
+  async listOrders(p) {
     await sleep(LATENCY);
-    const r = paginate(filterOrders(db, p), p.page, p.pageSize);
-    return { items: r.items.map((o) => ({ id: o.id, number: o.number, customerName: o.customerName, createdAt: o.createdAt, total: o.total, status: o.status, createdById: o.createdById })), total: r.total };
+    const rows = filterOrders(db.map((o) => toStaffOrder(o, false)), p);
+    return paginate(rows, p.page, p.pageSize);
   },
-  async get(id) {
+  async getOrder(id) {
     await sleep(LATENCY);
-    const o = find(id);
-    if (!o) throw notFound();
-    return clone(o);
+    const order = find(id);
+    if (!order) throw notFound();
+    return toStaffOrder(order, true);
   },
-  async confirm(id) {
+  async updateOrderStatus(id, status) {
     await sleep(LATENCY);
-    transition(id, "confirm");
+    updateStatus(id, status);
   },
-  async cancel(id) {
+  async cancelOrder(id) {
     await sleep(LATENCY);
-    transition(id, "cancel");
+    const order = find(id);
+    if (!order) throw notFound();
+    if (order.status !== "PENDING") throw conflict(order, "cancel");
+    updateStatus(id, "CANCELLED");
+  },
+};
+
+/** Customer scope: only the signed-in customer's orders. */
+export const mockCustomerOrdersApi: CustomerOrdersApi = {
+  async listMyOrders(p) {
+    await sleep(LATENCY);
+    const mine = db.filter((o) => o.customerId === currentCustomerId()).map(toCustomerOrder);
+    return paginate(filterMyOrders(mine, p), p.page, p.pageSize);
+  },
+  async getMyOrder(id) {
+    await sleep(LATENCY);
+    const order = db.find((o) => String(o.id) === String(id) && o.customerId === currentCustomerId());
+    if (!order) throw notFound(); // foreign orders look exactly like missing ones
+    return toCustomerOrder(order);
+  },
+  async cancelMyOrder(id) {
+    await sleep(LATENCY);
+    const order = db.find((o) => String(o.id) === String(id) && o.customerId === currentCustomerId());
+    if (!order) throw notFound();
+    if (order.status !== "PENDING") throw conflict(order, "cancel");
+    updateStatus(id, "CANCELLED");
   },
 };

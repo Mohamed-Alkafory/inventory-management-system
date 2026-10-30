@@ -1,53 +1,111 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError } from "../../lib/http";
-import { ordersApi } from "./api";
+import { customerOrdersApi, staffOrdersApi } from "./api";
 import { ordersApi as globalOrdersApi } from "../../api/ordersApi";
 import { productKeys } from "../../hooks/useProducts";
 import type { CreateOrderInput, CreatedOrder } from "../../types/orders";
-import type { Id, OrderAction, OrderListParams } from "./types";
+import type { Id, MyOrderListParams, OrderListParams } from "./types";
 
-export const orderKeys = {
-  all: ["orders"] as const, // the list AND every details page live under this root
-  list: (p: OrderListParams) => [...orderKeys.all, "list", p] as const,
-  detail: (id: Id) => [...orderKeys.all, "detail", String(id)] as const,
+/**
+ * Both scopes live under the ["orders"] root so a new order can refresh every
+ * list at once (useCreateOrder), but lists/details are otherwise separate.
+ */
+const ROOT = ["orders"] as const;
+
+export const myOrderKeys = {
+  all: [...ROOT, "my"] as const,
+  list: (p: MyOrderListParams) => [...myOrderKeys.all, "list", p] as const,
+  detail: (id: Id) => [...myOrderKeys.all, "detail", String(id)] as const,
 };
 
-export const useOrders = (params: OrderListParams) =>
-  useQuery({ queryKey: orderKeys.list(params), queryFn: () => ordersApi.list(params), placeholderData: keepPreviousData });
+export const staffOrderKeys = {
+  all: [...ROOT, "staff"] as const,
+  list: (p: OrderListParams) => [...staffOrderKeys.all, "list", p] as const,
+  detail: (id: Id) => [...staffOrderKeys.all, "detail", String(id)] as const,
+};
 
-export const useOrder = (id: Id) =>
+export const orderKeys = {
+  all: ROOT,
+  my: myOrderKeys,
+  staff: staffOrderKeys,
+};
+
+type EnabledOptions = { enabled?: boolean };
+
+/* ------------------------------- CUSTOMER ------------------------------- */
+
+export const useMyOrders = (params: MyOrderListParams, options: EnabledOptions = {}) =>
   useQuery({
-    queryKey: orderKeys.detail(id),
-    queryFn: () => ordersApi.get(id),
+    queryKey: myOrderKeys.list(params),
+    queryFn: () => customerOrdersApi.listMyOrders(params),
+    enabled: options.enabled ?? true,
+    placeholderData: keepPreviousData,
+  });
+
+export const useMyOrder = (id: Id, options: EnabledOptions = {}) =>
+  useQuery({
+    queryKey: myOrderKeys.detail(id),
+    queryFn: () => customerOrdersApi.getMyOrder(id),
+    enabled: (options.enabled ?? true) && Boolean(id),
     retry: (count, err) => !(err instanceof ApiError && err.status === 404) && count < 1,
   });
 
-/**
- * Confirm / cancel. Refreshes the list AND the details page afterwards — also when the server
- * refuses (e.g. someone else already changed the status), so the UI never keeps a stale status.
- */
-export function useOrderAction() {
+export function useCancelMyOrder() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, action }: { id: Id; action: OrderAction }) => (action === "confirm" ? ordersApi.confirm(id) : ordersApi.cancel(id)),
-    onSettled: () => qc.invalidateQueries({ queryKey: orderKeys.all }),
+    mutationFn: (id: Id) => customerOrdersApi.cancelMyOrder(id),
+    onSettled: () => qc.invalidateQueries({ queryKey: myOrderKeys.all }),
+  });
+}
+
+/* ---------------------------- STAFF / SUPPORT ---------------------------- */
+
+export const useOrders = (params: OrderListParams, options: EnabledOptions = {}) =>
+  useQuery({
+    queryKey: staffOrderKeys.list(params),
+    queryFn: () => staffOrdersApi.listOrders(params),
+    enabled: options.enabled ?? true,
+    placeholderData: keepPreviousData,
+  });
+
+export const useOrder = (id: Id, options: EnabledOptions = {}) =>
+  useQuery({
+    queryKey: staffOrderKeys.detail(id),
+    queryFn: () => staffOrdersApi.getOrder(id),
+    enabled: (options.enabled ?? true) && Boolean(id),
+    retry: (count, err) => !(err instanceof ApiError && err.status === 404) && count < 1,
+  });
+
+export function useUpdateOrderStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, status }: { id: Id; status: "CONFIRMED" | "CANCELLED" }) =>
+      staffOrdersApi.updateOrderStatus(id, status),
+    onSettled: () => qc.invalidateQueries({ queryKey: staffOrderKeys.all }),
+  });
+}
+
+export function useCancelOrder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: Id) => staffOrdersApi.cancelOrder(id),
+    onSettled: () => qc.invalidateQueries({ queryKey: staffOrderKeys.all }),
   });
 }
 
 /**
  * Places an order and refreshes the caches afterwards: the backend deducts
  * stock in the same transaction, so product quantities and every orders list
- * (admin list, profile, my orders) would otherwise go stale. Returns the
- * invalidation promise so the dialog can keep its "placing order" state
- * until the lists have been refreshed.
- */
+ * would otherwise go stale. Returns the invalidation promise so the dialog can
+ * keep its "placing order" state until the lists have been refreshed. */
 export function useCreateOrder() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (order: CreateOrderInput): Promise<CreatedOrder> => globalOrdersApi.create(order),
-    onSuccess: () => Promise.all([
-      qc.invalidateQueries({ queryKey: productKeys.all }),
-      qc.invalidateQueries({ queryKey: orderKeys.all }),
-    ]),
+    onSuccess: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: productKeys.all }),
+        qc.invalidateQueries({ queryKey: orderKeys.all }),
+      ]),
   });
 }

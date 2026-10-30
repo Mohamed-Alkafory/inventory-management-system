@@ -24,7 +24,7 @@ export default function Orders() {
         </Link>
       </div>
       <div className="mt-6">
-        <OrdersList />
+        <OrdersList scope="staff" />
       </div>
     </div>
   );

@@ -74,7 +74,7 @@ export const INSIGHT_POINTS = [
   "Automatic Low Stock and Out of Stock flags",
   "Reorder levels set per product",
   "One view of stock, orders and suppliers",
-  "Clear order statuses from pending to delivered",
+  "Clear order statuses from pending to confirmed or cancelled",
 ];
 
 export const ALERTS: { name: string; sku: string; stock: number; reorderAt: number; status: Status }[] = [

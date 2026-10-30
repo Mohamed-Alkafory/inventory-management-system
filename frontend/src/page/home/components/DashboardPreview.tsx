@@ -71,8 +71,8 @@ export default function DashboardPreview() {
 
   const chip =
     sales === 0
-      ? { id: 1042, text: "Left the warehouse", status: "shipped" as const }
-      : { id: 1042 + sales, text: "New order just placed", status: "pending" as const };
+      ? { id: 1042, text: "Left the warehouse", status: "CONFIRMED" as const }
+      : { id: 1042 + sales, text: "New order just placed", status: "PENDING" as const };
 
   return (
     <div
