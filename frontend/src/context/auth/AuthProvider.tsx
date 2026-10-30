@@ -72,11 +72,6 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
     [startSession],
   );
 
-  const loginWithGoogle = useCallback(
-    async (idToken: string) => startSession(await authApi.loginWithGoogle(idToken)),
-    [startSession],
-  );
-
   /** PATCH /auth/me — persists the fresh user into the session. */
   const updateProfile = useCallback(async (payload: UpdateProfilePayload) => {
     const fresh = await authApi.updateProfile(payload);
@@ -130,7 +125,6 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
       isAuthenticated: user !== null,
       login,
       register,
-      loginWithGoogle,
       updateProfile,
       uploadAvatar,
       removeAvatar,
@@ -138,7 +132,7 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
       logout,
       hasRole: (...roles: Role[]) => (user ? roles.includes(user.role) : false),
     }),
-    [user, login, register, loginWithGoogle, updateProfile, uploadAvatar, removeAvatar, deleteAccount, logout],
+    [user, login, register, updateProfile, uploadAvatar, removeAvatar, deleteAccount, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

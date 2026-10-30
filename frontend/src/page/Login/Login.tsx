@@ -6,8 +6,6 @@ import { AlertCircle, BellRing, LockKeyhole, Package, ShieldCheck } from "lucide
 import { z } from "zod";
 import { ApiError } from "../../api/errors";
 import { MOCK_ACCOUNTS } from "../../api/mock/authMock";
-import GoogleButton from "../../components/auth/GoogleButton";
-import OrDivider from "../../components/auth/OrDivider";
 import PasswordInput from "../../components/auth/PasswordInput";
 import Button from "../../components/ui/Button";
 import Input from "../../components/ui/Input";
@@ -39,7 +37,7 @@ function errorText(error: unknown): string | null {
 }
 
 export default function Login() {
-  const { login, loginWithGoogle } = useAuth();
+  const { login } = useAuth();
   const toast = useToast();
 
   const { control, handleSubmit, setValue } = useForm<LoginValues>({
@@ -53,13 +51,8 @@ export default function Login() {
     onSuccess: (user) => toast.success(`Welcome back, ${user.name}`),
   });
 
-  const googleSignIn = useMutation({
-    mutationFn: (idToken: string) => loginWithGoogle(idToken),
-    onSuccess: (user) => toast.success(`Welcome back, ${user.name}`),
-  });
-
   const onSubmit = handleSubmit((values) => signIn.mutate(values));
-  const message = errorText(signIn.error) ?? errorText(googleSignIn.error);
+  const message = errorText(signIn.error);
 
   const fillDemo = (email: string, password: string) => {
     setValue("email", email, { shouldValidate: true });
@@ -152,18 +145,10 @@ export default function Login() {
               )}
             </FormField>
 
-            <Button type="submit" size="lg" fullWidth loading={signIn.isPending} disabled={googleSignIn.isPending}>
+            <Button type="submit" size="lg" fullWidth loading={signIn.isPending}>
               {signIn.isPending ? "Signing in…" : "Sign in"}
             </Button>
           </form>
-
-          <OrDivider />
-
-          <GoogleButton
-            variant="signin_with"
-            disabled={signIn.isPending || googleSignIn.isPending}
-            onCredential={(token) => googleSignIn.mutate(token)}
-          />
 
           <p className="mt-6 text-center text-sm text-muted">
             New to {BRAND}?{" "}

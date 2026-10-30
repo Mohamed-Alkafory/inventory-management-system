@@ -1,4 +1,5 @@
 import { request } from "../../lib/http";
+import { isRole } from "../../types/auth";
 import type { AdminUser, CreateUserInput, UsersApi } from "./types";
 
 type Obj = Record<string, unknown>;
@@ -7,12 +8,17 @@ const str = (v: unknown) => (typeof v === "string" ? v : "");
 
 export function normalizeUser(raw: unknown): AdminUser {
   const r: Obj = isObject(raw) ? raw : {};
-  const role = str(r.role).toUpperCase();
+  const role = str(r.role).toUpperCase().replace(/^ROLE_/, "");
+  // Never silently remap a role: unknown values are a contract error.
+  if (!isRole(role)) {
+    throw new Error(`Unknown user role: ${str(r.role) || "(missing)"}`);
+  }
+
   return {
     id: str(r.id),
     name: str(r.name),
     email: str(r.email),
-    role: role === "ADMIN" ? "ADMIN" : "STAFF",
+    role,
     isActive: typeof r.isActive === "boolean" ? r.isActive : true,
     avatarUrl: typeof r.avatarUrl === "string" && r.avatarUrl.length > 0 ? r.avatarUrl : null,
     createdAt: str(r.createdAt),

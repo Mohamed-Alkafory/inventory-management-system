@@ -10,9 +10,11 @@ type MockAccount = User & { password: string };
 export const MOCK_ACCOUNTS: MockAccount[] = [
   { id: "1", name: "Amira Admin", email: "admin@prodexa.com", password: "Admin@123", role: "ADMIN" },
   { id: "2", name: "Sami Staff", email: "staff@prodexa.com", password: "Staff@123", role: "STAFF" },
+  { id: "3", name: "Sara Support", email: "support@prodexa.com", password: "Support@123", role: "SUPPORT" },
+  { id: "4", name: "Cara Customer", email: "customer@prodexa.com", password: "Customer@123", role: "CUSTOMER" },
 ];
 
-/* Accounts created through the Register page / Google are kept in localStorage (mock only). */
+/* Accounts created through the Register page are kept in localStorage (mock only). */
 const STORE_KEY = "prodexa.mock.users.v1";
 
 function loadExtra(): MockAccount[] {
@@ -53,7 +55,8 @@ function persistAccount(account: MockAccount) {
 }
 
 function createAccount(name: string, email: string, password: string): MockAccount {
-  const account: MockAccount = { id: `u-${Date.now()}`, name, email, password, role: "STAFF" };
+  // Public registration always creates a CUSTOMER; callers cannot choose a role.
+  const account: MockAccount = { id: `u-${Date.now()}`, name, email, password, role: "CUSTOMER" };
   saveExtra([...loadExtra(), account]);
   return account;
 }
@@ -74,13 +77,6 @@ export const mockAuthApi: AuthApi = {
       throw new ApiError("An account with this email already exists.", { status: 409 });
     }
     return sessionFor(createAccount(name, email, password));
-  },
-
-  async loginWithGoogle() {
-    await delay(500);
-    const email = "google.user@gmail.com";
-    const existing = allAccounts().find((a) => a.email === email);
-    return sessionFor(existing ?? createAccount("Google User", email, ""));
   },
 
   async me() {

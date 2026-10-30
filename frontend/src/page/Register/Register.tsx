@@ -7,16 +7,12 @@ import {
   Check,
   Rocket,
   ShieldCheck,
-  ShoppingBag,
-  Store,
   Timer,
   UserPlus,
   X,
 } from "lucide-react";
 import { z } from "zod";
 import { ApiError } from "../../api/errors";
-import GoogleButton from "../../components/auth/GoogleButton";
-import OrDivider from "../../components/auth/OrDivider";
 import PasswordInput from "../../components/auth/PasswordInput";
 import Button from "../../components/ui/Button";
 import Input from "../../components/ui/Input";
@@ -28,7 +24,6 @@ import { PASSWORD_RULES, isStrongPassword, passwordScore, strengthLabel } from "
 
 const schema = z
   .object({
-    accountType: z.enum(["customer", "seller"]),
     name: z.string().trim().min(2, "Enter your full name"),
     email: z.string().trim().min(1, "Email is required").email("Enter a valid email address"),
     password: z
@@ -44,7 +39,6 @@ const schema = z
   });
 
 type RegisterValues = z.infer<typeof schema>;
-type AccountType = RegisterValues["accountType"];
 
 const BG_IMAGE = "https://unsplash.com/photos/CpIWRMy0jkg/download?force=true&w=1800";
 
@@ -54,21 +48,13 @@ const HIGHLIGHTS = [
   { icon: ShieldCheck, text: "Your data stays private and secure" },
 ];
 
-const ACCOUNT_TYPES = [
-  { value: "customer", icon: ShoppingBag, title: "I'm a customer", text: "Browse and buy products" },
-  { value: "seller", icon: Store, title: "I'm a seller", text: "Open a store and sell" },
-] as const;
-
-// أين يروح المستخدم بعد التسجيل
-const destinationFor = (type: AccountType) => (type === "seller" ? "/seller/onboarding" : "/");
-
 function errorText(error: unknown): string | null {
   if (!error) return null;
   return error instanceof ApiError ? error.message : "Something went wrong. Please try again.";
 }
 
 export default function Register() {
-  const { register: signUp, loginWithGoogle } = useAuth();
+  const { register: signUp } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
 
@@ -80,7 +66,6 @@ export default function Register() {
   } = useForm<RegisterValues>({
     resolver: zodResolver(schema),
     defaultValues: {
-      accountType: "customer",
       name: "",
       email: "",
       password: "",
@@ -90,33 +75,20 @@ export default function Register() {
   });
 
   const password = useWatch({ control, name: "password" }) ?? "";
-  const accountType = useWatch({ control, name: "accountType" }) ?? "customer";
-  const isSeller = accountType === "seller";
   const score = passwordScore(password);
   const strength = strengthLabel(score);
 
   const createAccount = useMutation({
     mutationFn: ({ name, email, password: pw }: RegisterValues) => signUp({ name, email, password: pw }),
-    onSuccess: (user, variables) => {
+    onSuccess: (user) => {
       toast.success(`Account created — welcome, ${user.name}`);
-      // Route through GuestRoute's redirect contract so it doesn't bounce us elsewhere.
-      const target = destinationFor(variables.accountType);
-      navigate(target, { replace: true, state: { from: { pathname: target } } });
-    },
-  });
-
-  const googleSignUp = useMutation({
-    mutationFn: ({ idToken }: { idToken: string; role: AccountType }) => loginWithGoogle(idToken),
-    onSuccess: (user, variables) => {
-      toast.success(`Welcome, ${user.name}`);
-      const target = destinationFor(variables.role);
-      navigate(target, { replace: true, state: { from: { pathname: target } } });
+      // Public registration always creates a CUSTOMER, whose home is "/".
+      navigate("/", { replace: true, state: { from: { pathname: "/" } } });
     },
   });
 
   const onSubmit = handleSubmit((values) => createAccount.mutate(values));
-  const message = errorText(createAccount.error) ?? errorText(googleSignUp.error);
-  const busy = createAccount.isPending || googleSignUp.isPending;
+  const message = errorText(createAccount.error);
 
   return (
     <div className="grid min-h-screen lg:grid-cols-2">
@@ -185,39 +157,7 @@ export default function Register() {
             </div>
           )}
 
-          {/* اختيار نوع الحساب */}
-          <fieldset className="mt-6">
-            <legend className="mb-2 text-sm font-medium text-ink">I want to join as</legend>
-            <div className="grid grid-cols-2 gap-3">
-              {ACCOUNT_TYPES.map(({ value, icon: Icon, title, text }) => (
-                <label key={value} className="cursor-pointer">
-                  <input type="radio" value={value} {...register("accountType")} className="peer sr-only" />
-                  <div className="flex h-full flex-col gap-1 rounded-control border border-line p-3 transition hover:border-primary-300 peer-checked:border-primary-600 peer-checked:bg-primary-50 peer-checked:ring-1 peer-checked:ring-primary-600 peer-focus-visible:ring-2 peer-focus-visible:ring-primary-300">
-                    <Icon className="h-5 w-5 text-primary-600" aria-hidden="true" />
-                    <span className="text-sm font-semibold text-ink">{title}</span>
-                    <span className="text-xs text-muted">{text}</span>
-                  </div>
-                </label>
-              ))}
-            </div>
-            {isSeller && (
-              <p className="mt-2 text-xs text-muted">
-                After signing up, we'll walk you through setting up your store step by step.
-              </p>
-            )}
-          </fieldset>
-
-          <div className="mt-5">
-            <GoogleButton
-              variant="signup_with"
-              disabled={busy}
-              onCredential={(token) => googleSignUp.mutate({ idToken: token, role: accountType })}
-            />
-          </div>
-
-          <OrDivider />
-
-          <form onSubmit={onSubmit} noValidate className="space-y-4">
+          <form onSubmit={onSubmit} noValidate className="mt-6 space-y-4">
             <FormField control={control} name="name" label="Full name" required>
               {({ field, aria }) => <Input {...field} {...aria} autoComplete="name" placeholder="Your full name" />}
             </FormField>
@@ -323,9 +263,8 @@ export default function Register() {
               size="lg"
               fullWidth
               loading={createAccount.isPending}
-              disabled={googleSignUp.isPending}
             >
-              {createAccount.isPending ? "Creating account…" : isSeller ? "Create seller account" : "Create account"}
+              {createAccount.isPending ? "Creating account…" : "Create account"}
             </Button>
           </form>
 

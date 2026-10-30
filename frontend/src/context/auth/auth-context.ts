@@ -7,10 +7,8 @@ export type AuthContextValue = {
   isAuthenticated: boolean;
   /** Signs in and resolves with the user. Rejects with an ApiError. */
   login: (payload: LoginPayload) => Promise<User>;
-  /** Creates an account (always STAFF) and signs it in. */
+  /** Creates an account (always CUSTOMER) and signs it in. */
   register: (payload: RegisterPayload) => Promise<User>;
-  /** Signs in / up with a Google ID token. */
-  loginWithGoogle: (idToken: string) => Promise<User>;
   /** Updates the signed-in user's own profile (name and/or password). */
   updateProfile: (payload: UpdateProfilePayload) => Promise<User>;
   /** Uploads a new avatar for the signed-in user and updates the app state. */

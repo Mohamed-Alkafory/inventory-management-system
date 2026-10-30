@@ -1,4 +1,19 @@
-export type Role = "ADMIN" | "STAFF";
+/** Every role the backend knows, in display order. Use this list for filters, selects and labels. */
+export const ROLES = ["ADMIN", "STAFF", "SUPPORT", "CUSTOMER"] as const;
+
+export type Role = (typeof ROLES)[number];
+
+/** Human label for each role (badges, selects, menus). */
+export const ROLE_LABELS: Record<Role, string> = {
+  ADMIN: "Admin",
+  STAFF: "Staff",
+  SUPPORT: "Support",
+  CUSTOMER: "Customer",
+};
+
+export function isRole(value: unknown): value is Role {
+  return typeof value === "string" && (ROLES as readonly string[]).includes(value);
+}
 
 export type User = {
   id: string;

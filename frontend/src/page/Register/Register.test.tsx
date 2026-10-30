@@ -13,7 +13,7 @@ import Register from "./Register";
 const register = vi.hoisted(() => vi.fn());
 
 vi.mock("../../api/authApi", () => ({
-  authApi: { login: vi.fn(), register, loginWithGoogle: vi.fn(), logout: vi.fn().mockResolvedValue(undefined), me: vi.fn() },
+  authApi: { login: vi.fn(), register, logout: vi.fn().mockResolvedValue(undefined), me: vi.fn() },
 }));
 
 function renderRegister() {
@@ -27,7 +27,6 @@ function renderRegister() {
               <Route element={<GuestRoute />}>
                 <Route path="/register" element={<Register />} />
               </Route>
-              <Route path="/dashboard" element={<p>Dashboard page</p>} />
               <Route path="/" element={<p>Home page</p>} />
             </Routes>
           </AuthProvider>
@@ -92,9 +91,9 @@ describe("Register page", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("An account with this email already exists.");
   });
 
-  it("creates the account and redirects to the home page", async () => {
+  it("creates a CUSTOMER account and lands on the home page", async () => {
     register.mockResolvedValue({
-      user: { id: "9", name: "Nour Ahmed", email: "nour@prodexa.com", role: "STAFF" },
+      user: { id: "9", name: "Nour Ahmed", email: "nour@prodexa.com", role: "CUSTOMER" },
       tokens: { accessToken: "a", refreshToken: "r" },
     });
     renderRegister();
@@ -105,5 +104,13 @@ describe("Register page", () => {
 
     await waitFor(() => expect(screen.getByText("Home page")).toBeInTheDocument());
     expect(register).toHaveBeenCalledWith({ name: "Nour Ahmed", email: "nour@prodexa.com", password: "Strong#Pass1" });
+    expect(tokenStorage.getSession()?.user.role).toBe("CUSTOMER");
+  });
+
+  it("does not offer seller account types or Google sign-up", () => {
+    renderRegister();
+    expect(screen.queryByText(/seller/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/google/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("radio")).not.toBeInTheDocument();
   });
 });

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { usersApi } from "../api";
+import { ROLES } from "../../../types/auth";
+import { normalizeUser, usersApi } from "../api";
 
 const jsonResponse = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -15,6 +16,23 @@ const user = (id: string) => ({
 
 afterEach(() => {
   vi.unstubAllGlobals();
+});
+
+describe("normalizeUser", () => {
+  it("keeps every backend role as-is", () => {
+    for (const role of ROLES) {
+      expect(normalizeUser({ ...user("u1"), role }).role).toBe(role);
+    }
+  });
+
+  it("accepts a ROLE_ prefix but never remaps", () => {
+    expect(normalizeUser({ ...user("u1"), role: "ROLE_SUPPORT" }).role).toBe("SUPPORT");
+  });
+
+  it("throws on an unknown role instead of coercing it", () => {
+    expect(() => normalizeUser({ ...user("u1"), role: "OWNER" })).toThrow(/unknown user role/i);
+    expect(() => normalizeUser({ ...user("u1"), role: "admin " })).toThrow(/unknown user role/i);
+  });
 });
 
 describe("usersApi.list", () => {

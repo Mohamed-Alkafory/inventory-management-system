@@ -13,6 +13,7 @@ import { AccountStatusChip } from "./RoleBadge";
 import RoleBadge from "./RoleBadge";
 import UserFormDialog from "./UserFormDialog";
 import type { AdminUser, UserListParams } from "./types";
+import { ROLES, ROLE_LABELS } from "../../types/auth";
 
 const PAGE_SIZE = 10;
 
@@ -141,8 +142,11 @@ export default function UsersList() {
           className={control}
         >
           <option value="">All roles</option>
-          <option value="ADMIN">Admins</option>
-          <option value="STAFF">Staff</option>
+          {ROLES.map((r) => (
+            <option key={r} value={r}>
+              {ROLE_LABELS[r]}
+            </option>
+          ))}
         </select>
         {filtered && (
           <button

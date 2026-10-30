@@ -7,6 +7,7 @@ import { useAuth } from "../../context/auth/useAuth";
 import { useCart } from "../../context/cart/useCart";
 import { useFavorites } from "../../context/favorites/useFavorites";
 import { useProductCategories } from "../../hooks/useProducts";
+import { homePathForRole } from "../../routes/redirect";
 import ProdexaLogo from "../Logo";
 import UserAvatar from "../user/UserAvatar";
 import "./header.css";
@@ -16,13 +17,6 @@ const NAV_LINKS = [
   { label: "Products", href: "/products" },
   { label: "About", href: "/about" },
   { label: "Contact", href: "/contact" },
-];
-
-/** Admin-only extra link: straight into the admin panel, between Home and Products. */
-const ADMIN_NAV_LINKS = [
-  ...NAV_LINKS.slice(0, 1), // Home
-  { label: "Dashboard", href: "/admin" },
-  ...NAV_LINKS.slice(1), // Products, About, Contact
 ];
 
 /** Icon + orange count badge; guests are sent to sign in first. */
@@ -59,14 +53,24 @@ export default function Header() {
   const [open, setOpen] = useState(false);
   const [catsOpen, setCatsOpen] = useState(false);
   const [searchText, setSearchText] = useState("");
-  const { isAuthenticated, user, logout, hasRole } = useAuth();
+  const { isAuthenticated, user, logout, role } = useAuth();
   const { totalItems } = useCart();
   const { items: favorites } = useFavorites();
-  const categories = useProductCategories();
+  const isCustomer = role === "CUSTOMER";
+  const showShopIcons = !isAuthenticated || isCustomer;
+  // The categories endpoint is staff-facing for now: customers and guests must not call it (403).
+  const canBrowseCategories = isAuthenticated && !isCustomer;
+  const categories = useProductCategories(canBrowseCategories);
   const navigate = useNavigate();
   const catsRef = useRef<HTMLDivElement>(null);
 
-  const navLinks = hasRole("ADMIN") ? ADMIN_NAV_LINKS : NAV_LINKS;
+  // Signed-in staff/admin get a shortcut to their area; customers get their orders.
+  const areaLink = role && !isCustomer ? { label: "Dashboard", href: homePathForRole(role) } : null;
+  const ordersLink = isCustomer ? { label: "My orders", href: "/orders" } : null;
+  const extraLink = areaLink ?? ordersLink;
+  const navLinks = extraLink
+    ? [NAV_LINKS[0], extraLink, ...NAV_LINKS.slice(1)]
+    : NAV_LINKS;
 
   const closeMenu = () => setOpen(false);
 
@@ -146,20 +150,24 @@ export default function Header() {
           </form>
 
           <div className="header__icons">
-            <IconLink
-              to={isAuthenticated ? "/favorites" : "/login"}
-              label="Favorites"
-              count={isAuthenticated ? favorites.length : 0}
-            >
-              <Heart className={favorites.length > 0 ? "size-5 fill-current" : "size-5"} aria-hidden="true" />
-            </IconLink>
-            <IconLink
-              to={isAuthenticated ? "/cart" : "/login"}
-              label="Cart"
-              count={isAuthenticated ? totalItems : 0}
-            >
-              <ShoppingCart className="size-5" aria-hidden="true" />
-            </IconLink>
+            {showShopIcons && (
+              <>
+                <IconLink
+                  to={isAuthenticated ? "/favorites" : "/login"}
+                  label="Favorites"
+                  count={isAuthenticated ? favorites.length : 0}
+                >
+                  <Heart className={favorites.length > 0 ? "size-5 fill-current" : "size-5"} aria-hidden="true" />
+                </IconLink>
+                <IconLink
+                  to={isAuthenticated ? "/cart" : "/login"}
+                  label="Cart"
+                  count={isAuthenticated ? totalItems : 0}
+                >
+                  <ShoppingCart className="size-5" aria-hidden="true" />
+                </IconLink>
+              </>
+            )}
           </div>
 
           <nav id="main-nav" className={`header__nav ${open ? "is-open" : ""}`} aria-label="Main">
@@ -220,27 +228,44 @@ export default function Header() {
               </button>
               {catsOpen && (
                 <div className="header__cats-menu" id="header-cats-menu" role="menu">
-                  {categories.isPending && (
-                    <span className="header__cats-item" aria-disabled="true">
-                      Loading categories…
-                    </span>
-                  )}
-                  {categories.isError && (
-                    <button type="button" className="header__cats-item" onClick={() => void categories.refetch()}>
-                      Couldn't load categories — retry
-                    </button>
-                  )}
-                  {categories.data?.map((c) => (
+                  {!canBrowseCategories ? (
                     <button
-                      key={c.id}
                       type="button"
                       role="menuitem"
                       className="header__cats-item"
-                      onClick={() => goToCategory(c.id)}
+                      onClick={() => {
+                        setCatsOpen(false);
+                        closeMenu();
+                        navigate("/products");
+                      }}
                     >
-                      {c.name}
+                      Browse all products
                     </button>
-                  ))}
+                  ) : (
+                    <>
+                      {categories.isPending && (
+                        <span className="header__cats-item" aria-disabled="true">
+                          Loading categories…
+                        </span>
+                      )}
+                      {categories.isError && (
+                        <button type="button" className="header__cats-item" onClick={() => void categories.refetch()}>
+                          Couldn't load categories — retry
+                        </button>
+                      )}
+                      {categories.data?.map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          role="menuitem"
+                          className="header__cats-item"
+                          onClick={() => goToCategory(c.id)}
+                        >
+                          {c.name}
+                        </button>
+                      ))}
+                    </>
+                  )}
                 </div>
               )}
             </div>

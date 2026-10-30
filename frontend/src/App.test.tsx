@@ -27,4 +27,11 @@ describe("App", () => {
     // The src must come from the imported asset module (bundled by Vite), not a raw "/src/..." string.
     expect(img.getAttribute("src")).toBe(aboutBanner);
   });
+
+  it("renders the mounted NotFound page for unknown paths", () => {
+    window.history.pushState({}, "", "/no-such-page");
+    render(<App />);
+
+    expect(screen.getByText("Page not found")).toBeInTheDocument();
+  });
 });

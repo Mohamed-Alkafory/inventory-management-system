@@ -10,8 +10,6 @@ export type AuthApi = {
   login(payload: LoginPayload): Promise<AuthSession>;
   /** Creates an account and signs it in. */
   register(payload: RegisterPayload): Promise<AuthSession>;
-  /** Exchanges a Google ID token (credential) for an app session. */
-  loginWithGoogle(idToken: string): Promise<AuthSession>;
   me(): Promise<User>;
   /** Updates the signed-in user's name and/or password; resolves with the fresh user. */
   updateProfile(payload: UpdateProfilePayload): Promise<User>;
@@ -32,11 +30,6 @@ const realAuthApi: AuthApi = {
 
   async register(payload) {
     const { data } = await http.post(AUTH_ENDPOINTS.register, payload);
-    return toAuthSession(data);
-  },
-
-  async loginWithGoogle(idToken) {
-    const { data } = await http.post(AUTH_ENDPOINTS.google, { idToken });
     return toAuthSession(data);
   },
 

@@ -8,6 +8,7 @@ import { tokenStorage } from "../../api/tokenStorage";
 import ToastProvider from "../../components/ui/toast/ToastProvider";
 import AuthProvider from "../../context/auth/AuthProvider";
 import GuestRoute from "../../routes/GuestRoute";
+import type { Role } from "../../types/auth";
 import Login from "./Login";
 
 const login = vi.hoisted(() => vi.fn());
@@ -27,7 +28,9 @@ function renderLogin() {
               <Route element={<GuestRoute />}>
                 <Route path="/login" element={<Login />} />
               </Route>
-              <Route path="/dashboard" element={<p>Dashboard page</p>} />
+              <Route path="/admin" element={<p>Admin page</p>} />
+              <Route path="/staff" element={<p>Staff page</p>} />
+              <Route path="/support" element={<p>Support page</p>} />
               <Route path="/" element={<p>Home page</p>} />
             </Routes>
           </AuthProvider>
@@ -36,6 +39,18 @@ function renderLogin() {
     </QueryClientProvider>,
   );
 }
+
+const signInAs = (role: Role) =>
+  login.mockResolvedValue({
+    user: { id: "1", name: "Test User", email: "test@prodexa.com", role },
+    tokens: { accessToken: "a", refreshToken: "r" },
+  });
+
+const submitCredentials = () => {
+  fireEvent.change(screen.getByLabelText(/email/i), { target: { value: "test@prodexa.com" } });
+  fireEvent.change(screen.getByLabelText(/^password/i), { target: { value: "Strong#Pass1" } });
+  fireEvent.click(screen.getByRole("button", { name: /^sign in$/i }));
+};
 
 beforeEach(() => {
   tokenStorage.clear();
@@ -58,25 +73,28 @@ describe("Login page", () => {
     login.mockRejectedValue(new ApiError("Invalid email or password.", { status: 401 }));
     renderLogin();
 
-    fireEvent.change(screen.getByLabelText(/email/i), { target: { value: "staff@prodexa.com" } });
-    fireEvent.change(screen.getByLabelText(/^password/i), { target: { value: "wrong-pass" } });
-    fireEvent.click(screen.getByRole("button", { name: /^sign in$/i }));
+    submitCredentials();
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Invalid email or password.");
   });
 
-  it("signs in and redirects to the home page", async () => {
-    login.mockResolvedValue({
-      user: { id: "2", name: "Sami Staff", email: "staff@prodexa.com", role: "STAFF" },
-      tokens: { accessToken: "a", refreshToken: "r" },
-    });
+  it.each([
+    ["ADMIN", "Admin page"],
+    ["STAFF", "Staff page"],
+    ["SUPPORT", "Support page"],
+    ["CUSTOMER", "Home page"],
+  ] as const)("redirects a signed-in %s to its role home", async (role, text) => {
+    signInAs(role);
     renderLogin();
 
-    fireEvent.change(screen.getByLabelText(/email/i), { target: { value: "staff@prodexa.com" } });
-    fireEvent.change(screen.getByLabelText(/^password/i), { target: { value: "Staff@123" } });
-    fireEvent.click(screen.getByRole("button", { name: /^sign in$/i }));
+    submitCredentials();
 
-    await waitFor(() => expect(screen.getByText("Home page")).toBeInTheDocument());
-    expect(tokenStorage.getSession()?.user.role).toBe("STAFF");
+    await waitFor(() => expect(screen.getByText(text)).toBeInTheDocument());
+    expect(tokenStorage.getSession()?.user.role).toBe(role);
+  });
+
+  it("does not offer Google sign-in", () => {
+    renderLogin();
+    expect(screen.queryByText(/google/i)).not.toBeInTheDocument();
   });
 });
