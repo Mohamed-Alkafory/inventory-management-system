@@ -83,16 +83,30 @@ const AUTH_PATHS: string[] = [
 ];
 const isAuthPath = (path: string) => AUTH_PATHS.some((p) => path.startsWith(p));
 
-async function send(path: string, init: RequestInit, overrideToken?: string): Promise<Response> {
-  const token = overrideToken ?? tokenStorage.getAccessToken();
+type SendOptions = {
+  /** Token to use instead of the stored one (post-refresh retry). */
+  token?: string;
+  /** Public request: never attach a token, even when the user is signed in. */
+  anonymous?: boolean;
+};
+
+async function send(path: string, init: RequestInit, opts: SendOptions = {}): Promise<Response> {
+  const token = opts.anonymous ? undefined : (opts.token ?? tokenStorage.getAccessToken());
   const headers = new Headers(init.headers);
   // FormData bodies must keep the browser-generated multipart boundary, so the
   // JSON Content-Type is only set for non-FormData requests.
   const isFormData = typeof FormData !== "undefined" && init.body instanceof FormData;
   if (!isFormData && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
-  // On a post-refresh retry the fresh token must win over any stale header.
-  if (overrideToken) headers.set("Authorization", `Bearer ${overrideToken}`);
-  else if (token && !headers.has("Authorization")) headers.set("Authorization", `Bearer ${token}`);
+  if (opts.anonymous) {
+    // Public endpoints must be callable without a session, and a stale caller
+    // header must not turn the request into an authenticated one.
+    headers.delete("Authorization");
+  } else if (opts.token) {
+    // On a post-refresh retry the fresh token must win over any stale header.
+    headers.set("Authorization", `Bearer ${opts.token}`);
+  } else if (token && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
 
   try {
     return await fetch(`${BASE}${path}`, {
@@ -115,7 +129,7 @@ export async function requestBlob(path: string, init: RequestInit = {}): Promise
     if (tokenStorage.getRefreshToken()) {
       try {
         const token = await refreshAccessToken();
-        res = await send(path, init, token);
+        res = await send(path, init, { token });
       } catch {
         // Refresh failed - fall through to sign the user out.
       }
@@ -158,7 +172,7 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
     if (tokenStorage.getRefreshToken()) {
       try {
         const token = await refreshAccessToken();
-        res = await send(path, init, token);
+        res = await send(path, init, { token });
       } catch {
         // Refresh failed — fall through to sign the user out.
       }
@@ -184,6 +198,38 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
     const serverMessage = isObject(body) ? (text(body.message) ?? text(body.error) ?? null) : null;
     // A bare "Internal Server Error" alone doesn't help the user — fall back to it
     // only when we have nothing better to say.
+    const helpful = serverMessage === "Internal Server Error" ? null : serverMessage;
+    throw new ApiError(res.status, helpful ?? `Request failed (${res.status})`, {
+      fieldErrors: extractFieldErrors(body),
+      serverMessage,
+      body,
+    });
+  }
+  return body as T;
+}
+
+/**
+ * Request for a public endpoint (e.g. `POST /contact`).
+ *
+ * Unlike `request`, it never attaches the stored token, never refreshes an
+ * expired session and never emits `session-expired` — anonymous visitors must
+ * be able to submit without being redirected to login.
+ */
+export async function publicRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const res = await send(path, init, { anonymous: true });
+
+  const raw = await res.text();
+  let body: unknown = null;
+  if (raw) {
+    try {
+      body = JSON.parse(raw);
+    } catch {
+      body = null;
+    }
+  }
+
+  if (!res.ok) {
+    const serverMessage = isObject(body) ? (text(body.message) ?? text(body.error) ?? null) : null;
     const helpful = serverMessage === "Internal Server Error" ? null : serverMessage;
     throw new ApiError(res.status, helpful ?? `Request failed (${res.status})`, {
       fieldErrors: extractFieldErrors(body),
