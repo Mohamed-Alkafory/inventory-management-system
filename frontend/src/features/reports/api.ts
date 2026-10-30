@@ -1,50 +1,91 @@
-import { ApiError, request } from "../../lib/http";
+import { withMock } from "../../api/mockSwitch";
+import { rangeQueryString, todayISO } from "../../lib/dateRange";
+import { requestBlob } from "../../lib/http";
 import { mockReportsApi } from "./mockApi";
-import { normalizeCategories, normalizeOverview, normalizeSummary, normalizeTopProducts } from "./normalize";
-import type { DateRange, ReportsApi } from "./types";
+import type { DateRange, DownloadedFile, ReportDefinition, ReportKind, ReportsApi } from "./types";
 
-/**
- * ► CONNECTING THE REAL API
- *   When the dashboard endpoints are merged, set  VITE_USE_MOCK_API=false  in your .env
- *   (the same switch the other pages use). Nothing else changes.
- *
- * ► CSV EXPORT
- *   The button stays disabled until the backend endpoint exists. Then set
- *   VITE_REPORTS_EXPORT_ENABLED=true  and it switches on.
- */
-export const USE_MOCK = import.meta.env?.VITE_USE_MOCK_API !== "false";
-export const EXPORT_ENABLED = import.meta.env?.VITE_REPORTS_EXPORT_ENABLED === "true";
-
-const API_URL = import.meta.env?.VITE_API_URL ?? "";
-const PATH = "/reports"; // change here if the endpoints live elsewhere, e.g. "/dashboard"
-
-const qs = (r: DateRange) => `from=${r.from}&to=${r.to}`;
-
-export const realReportsApi: ReportsApi = {
-  async summary(r) {
-    return normalizeSummary(await request<unknown>(`${PATH}/summary?${qs(r)}`));
+export const REPORTS: Record<ReportKind, ReportDefinition> = {
+  inventory: {
+    kind: "inventory",
+    title: "Inventory",
+    description: "Every active product with stock, price and cost price.",
+    path: "/reports/inventory.csv",
+    usesRange: false,
   },
-  async overview(r) {
-    return normalizeOverview(await request<unknown>(`${PATH}/sales-overview?${qs(r)}`));
+  "low-stock": {
+    kind: "low-stock",
+    title: "Low stock",
+    description: "Products at or below their reorder level, with the shortfall.",
+    path: "/reports/low-stock.csv",
+    usesRange: false,
   },
-  async categories(r) {
-    return normalizeCategories(await request<unknown>(`${PATH}/sales-by-category?${qs(r)}`));
+  sales: {
+    kind: "sales",
+    title: "Sales",
+    description: "One row per non-cancelled order in the selected range.",
+    path: "/reports/sales.csv",
+    usesRange: true,
   },
-  async topProducts(r, limit) {
-    return normalizeTopProducts(await request<unknown>(`${PATH}/top-products?${qs(r)}&limit=${limit}`));
-  },
-  /** GET → a CSV file. (`request()` only handles JSON, so this one reads the raw response.) */
-  async exportCsv(r) {
-    let res: Response;
-    try {
-      res = await fetch(`${API_URL}${PATH}/export?${qs(r)}&format=csv`, { credentials: "include" });
-    } catch {
-      throw new ApiError(0, "Can’t reach the server. Check your connection and try again.");
-    }
-    if (!res.ok) throw new ApiError(res.status, `Export failed (${res.status})`);
-    const named = /filename="?([^";]+)"?/i.exec(res.headers.get("Content-Disposition") ?? "")?.[1];
-    return { blob: await res.blob(), filename: named ?? `sales-report_${r.from}_${r.to}.csv` };
+  "stock-movements": {
+    kind: "stock-movements",
+    title: "Stock movements",
+    description: "Every stock increase and decrease in the selected range.",
+    path: "/reports/stock-movements.csv",
+    usesRange: true,
   },
 };
 
-export const reportsApi: ReportsApi = USE_MOCK ? mockReportsApi : realReportsApi;
+export const REPORT_LIST = Object.values(REPORTS);
+
+/** `Content-Disposition: attachment; filename="..."` -> the filename. */
+export function filenameFromContentDisposition(header: string | null): string | null {
+  if (!header) return null;
+
+  const encoded = /filename\*\s*=\s*UTF-8''([^;]+)/i.exec(header);
+  if (encoded) {
+    const value = encoded[1].trim().replace(/^"|"$/g, "");
+    try {
+      return decodeURIComponent(value);
+    } catch {
+      return value;
+    }
+  }
+
+  const plain = /filename\s*=\s*"?([^";]+)"?/i.exec(header);
+  return plain?.[1]?.trim() ?? null;
+}
+
+/** A readable name when the server omits Content-Disposition. */
+export function fallbackFilename(kind: ReportKind, range: DateRange): string {
+  if (kind === "inventory") return `inventory-${todayISO()}.csv`;
+  if (kind === "low-stock") return `low-stock-${todayISO()}.csv`;
+  return `${kind}-${range.from}_${range.to}.csv`;
+}
+
+const realReportsApi: ReportsApi = {
+  async download(kind, range) {
+    const definition = REPORTS[kind];
+    const query = definition.usesRange ? `?${rangeQueryString(range)}` : "";
+    const res = await requestBlob(`${definition.path}${query}`);
+    const filename =
+      filenameFromContentDisposition(res.headers.get("Content-Disposition")) ?? fallbackFilename(kind, range);
+    return { blob: await res.blob(), filename };
+  },
+};
+
+/** The authenticated request itself (exported so tests can exercise it directly). */
+export const downloadReport: ReportsApi["download"] = (kind, range) => realReportsApi.download(kind, range);
+
+export const reportsApi: ReportsApi = withMock(realReportsApi, mockReportsApi);
+
+/** Saves a Blob as a file download. */
+export function saveDownloadedFile({ blob, filename }: DownloadedFile): void {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}

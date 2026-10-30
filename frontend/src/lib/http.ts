@@ -105,6 +105,49 @@ async function send(path: string, init: RequestInit, overrideToken?: string): Pr
   }
 }
 
+export async function requestBlob(path: string, init: RequestInit = {}): Promise<Response> {
+  const hadSession = Boolean(tokenStorage.getAccessToken());
+  let res = await send(path, init);
+
+  // Same one-shot refresh as `request`, but the body is never parsed: callers
+  // need the raw response (CSV downloads read headers and then `blob()`).
+  if (res.status === 401 && !isAuthPath(path)) {
+    if (tokenStorage.getRefreshToken()) {
+      try {
+        const token = await refreshAccessToken();
+        res = await send(path, init, token);
+      } catch {
+        // Refresh failed - fall through to sign the user out.
+      }
+    }
+
+    if (res.status === 401 && hadSession) {
+      tokenStorage.clear();
+      emitSessionExpired();
+    }
+  }
+
+  if (!res.ok) {
+    const raw = await res.text();
+    let body: unknown = null;
+    if (raw) {
+      try {
+        body = JSON.parse(raw);
+      } catch {
+        body = null;
+      }
+    }
+    const serverMessage = isObject(body) ? (text(body.message) ?? text(body.error) ?? null) : null;
+    const helpful = serverMessage === "Internal Server Error" ? null : serverMessage;
+    throw new ApiError(res.status, helpful ?? `Request failed (${res.status})`, {
+      fieldErrors: extractFieldErrors(body),
+      serverMessage,
+      body,
+    });
+  }
+  return res;
+}
+
 export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const hadSession = Boolean(tokenStorage.getAccessToken());
   let res = await send(path, init);
