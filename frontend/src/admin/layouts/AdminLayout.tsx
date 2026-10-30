@@ -1,4 +1,5 @@
 import {
+  Bell,
   Boxes,
   ClipboardList,
   FileText,
@@ -25,6 +26,7 @@ const NAV: AreaNavItem[] = [
   { to: "/admin/suppliers", label: "Suppliers", icon: Truck },
   { to: "/admin/users", label: "Users", icon: UsersIcon },
   { to: "/admin/audit-logs", label: "Audit Log", icon: ScrollText },
+  { to: "/notifications", label: "Notifications", icon: Bell },
   { to: "/support/messages", label: "Support", icon: LifeBuoy },
 ];
 

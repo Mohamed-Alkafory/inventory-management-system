@@ -36,6 +36,8 @@ vi.mock("../support/pages/Messages/Messages", () => ({ default: () => <p>Support
 vi.mock("../support/pages/Messages/MessageDetails", () => ({ default: () => <p>Support message details page</p> }));
 vi.mock("../support/pages/Orders/Orders", () => ({ default: () => <p>Support orders page</p> }));
 vi.mock("../support/pages/Orders/OrderDetails", () => ({ default: () => <p>Support order details page</p> }));
+vi.mock("../features/notifications/NotificationsPage", () => ({ default: () => <p>Notifications page</p> }));
+vi.mock("../features/notifications/NotificationBell", () => ({ default: () => <span>Notification bell</span> }));
 
 // Never hit the network: the provider re-validates the stored session through authApi.me().
 vi.mock("../api/authApi", () => ({
@@ -72,7 +74,7 @@ afterEach(cleanup);
 
 describe("route access matrix", () => {
   it("sends anonymous visitors on protected routes to /login", () => {
-    for (const path of ["/admin", "/admin/reports", "/staff", "/support", "/cart", "/orders", "/orders/new", "/profile"]) {
+    for (const path of ["/admin", "/admin/reports", "/staff", "/support", "/cart", "/orders", "/orders/new", "/notifications", "/profile"]) {
       const view = renderAt(path);
       expect(login()).toBeInTheDocument();
       view.unmount();
@@ -113,6 +115,7 @@ describe("route access matrix", () => {
       ["/support/messages/m-1", "Support message details page"],
       ["/support/orders", "Support orders page"],
       ["/support/orders/o-1", "Support order details page"],
+      ["/notifications", "Notifications page"],
       ["/profile", "Profile page"],
     ];
     for (const [path, text] of cases) {
@@ -153,6 +156,7 @@ describe("route access matrix", () => {
       ["/staff/purchase-orders/po-1", "Staff purchase order details page"],
       ["/staff/products", "Staff products page"],
       ["/staff/products/p-1", "Staff product details page"],
+      ["/notifications", "Notifications page"],
     ];
     for (const [path, text] of allowed) {
       const view = renderAt(path);
@@ -175,6 +179,7 @@ describe("route access matrix", () => {
       ["/support/messages/m-1", "Support message details page"],
       ["/support/orders", "Support orders page"],
       ["/support/orders/o-1", "Support order details page"],
+      ["/notifications", "Notifications page"],
     ];
     for (const [path, text] of allowed) {
       const view = renderAt(path);
@@ -197,6 +202,10 @@ describe("route access matrix", () => {
 
     view = renderAt("/orders");
     expect(screen.getByText("My orders page")).toBeInTheDocument();
+    view.unmount();
+
+    view = renderAt("/notifications");
+    expect(screen.getByText("Notifications page")).toBeInTheDocument();
     view.unmount();
 
     for (const path of ["/admin", "/admin/orders", "/admin/reports", "/staff", "/staff/orders", "/staff/products", "/support", "/support/messages", "/support/orders", "/orders/new"]) {

@@ -4,6 +4,7 @@ import type { LucideIcon } from "lucide-react";
 import { Menu, X } from "lucide-react";
 import { useAuth } from "../../context/auth/useAuth";
 import { cn } from "../../lib/cn";
+import NotificationBell from "../../features/notifications/NotificationBell";
 import UserAvatar from "../user/UserAvatar";
 
 export type AreaNavItem = {
@@ -89,8 +90,13 @@ export default function AreaLayout({ title, menuLabel, ariaLabel, navItems }: Pr
         {open && <div className="border-t border-line p-3">{links}</div>}
       </div>
 
-      <main className="min-w-0 px-4 py-8 sm:px-6 lg:px-8">
-        <Outlet />
+      <main className="min-w-0">
+        <div className="flex h-14 items-center justify-end border-b border-line bg-surface px-4 sm:px-6 lg:px-8">
+          <NotificationBell />
+        </div>
+        <div className="px-4 py-8 sm:px-6 lg:px-8">
+          <Outlet />
+        </div>
       </main>
     </div>
   );
