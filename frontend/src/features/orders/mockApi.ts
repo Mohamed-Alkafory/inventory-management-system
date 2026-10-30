@@ -1,8 +1,10 @@
+import { MOCK_CATALOG } from "../../api/mock/catalogMock";
 import { tokenStorage } from "../../api/tokenStorage";
 import { ApiError } from "../../lib/http";
 import { filterMyOrders, filterOrders, paginate } from "./filters";
 import { STATUS_LABEL } from "./status";
 import type {
+  CreateMyOrderInput,
   CustomerOrder,
   CustomerOrdersApi,
   Id,
@@ -217,6 +219,77 @@ const LATENCY = 350;
 const notFound = () => new ApiError(404, "Order not found", { serverMessage: "Order not found" });
 const find = (id: Id) => db.find((o) => String(o.id) === String(id));
 
+function badRequest(message: string): ApiError {
+  return new ApiError(400, message, {
+    serverMessage: message,
+    body: { statusCode: 400, message, error: "VALIDATION_ERROR" },
+  });
+}
+
+/**
+ * POST /orders/mine in the mock: validates the same limits, recomputes every
+ * price from the catalogue, and answers 409 naming the product when the
+ * requested quantity exceeds the mock's available stock.
+ */
+function createCustomerOrder(input: CreateMyOrderInput): MockOrder {
+  const ids = input.items.map((item) => item.productId);
+  if (input.items.length < 1 || input.items.length > 30) {
+    throw badRequest("items must contain between 1 and 30 products");
+  }
+  if (new Set(ids).size !== ids.length) throw badRequest("Duplicate productId in items");
+
+  const items: MockLine[] = input.items.map((item) => {
+    if (!Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 50) {
+      throw badRequest("quantity must be an integer between 1 and 50");
+    }
+
+    const product = MOCK_CATALOG.find((row) => row.id === item.productId);
+    if (!product) throw new ApiError(404, `Product ${item.productId} not found`);
+    if (!product.inStock || item.quantity > product.maxOrderable) {
+      const message = `Insufficient stock: product ${product.id} change -${item.quantity} would push the quantity below zero`;
+      throw new ApiError(409, message, {
+        serverMessage: message,
+        body: { statusCode: 409, message, error: "CONFLICT" },
+      });
+    }
+
+    return {
+      productName: product.name,
+      sku: `SKU-${product.id.toUpperCase()}`,
+      quantity: item.quantity,
+      unitPrice: product.price,
+      lineTotal: r2(item.quantity * product.price),
+    };
+  });
+
+  const customerId = currentCustomerId();
+  const sessionUser = tokenStorage.getSession()?.user;
+  const id = Math.max(0, ...db.map((o) => o.id)) + 1;
+  const orderNumber = `ORD-${1000 + id}`;
+  const order: MockOrder = {
+    id,
+    orderNumber,
+    status: "PENDING",
+    customerId,
+    customerName: input.recipientName,
+    customerPhone: input.recipientPhone,
+    recipientName: input.recipientName,
+    recipientPhone: input.recipientPhone,
+    shippingAddress: input.shippingAddress,
+    shippingCity: input.shippingCity,
+    paymentMethod: "COD",
+    notes: input.notes ?? "",
+    createdById: customerId,
+    createdByName: sessionUser?.name ?? "Cara Customer",
+    createdByEmail: sessionUser?.email ?? "customer@prodexa.com",
+    createdAt: new Date().toISOString(),
+    cancelledAt: null,
+    items,
+  };
+  db = [...db, order];
+  return order;
+}
+
 function conflict(o: MockOrder, action: "confirm" | "cancel") {
   const verb = action === "confirm" ? "confirmed" : "cancelled";
   const message = `Order #${o.orderNumber} can’t be ${verb} because it is ${STATUS_LABEL[o.status].toLowerCase()}.`;
@@ -286,5 +359,9 @@ export const mockCustomerOrdersApi: CustomerOrdersApi = {
     if (!order) throw notFound();
     if (order.status !== "PENDING") throw conflict(order, "cancel");
     updateStatus(id, "CANCELLED");
+  },
+  async createMyOrder(input) {
+    await sleep(LATENCY);
+    return toCustomerOrder(createCustomerOrder(input));
   },
 };

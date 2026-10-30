@@ -2,11 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { shopStorage } from "../../lib/shopStorage";
 import type { CartItem, ShopProduct } from "../../types/shop";
-import { CartContext } from "./cart-context";
+import { CartContext, MAX_CART_PRODUCTS, MAX_LINE_QUANTITY } from "./cart-context";
 import type { CartContextValue } from "./cart-context";
 
 /** What a caller can show after an addToCart call. */
-export type CartAddResult = "added" | "increased" | "capped" | "out_of_stock";
+export type CartAddResult = "added" | "increased" | "capped" | "out_of_stock" | "limit_reached";
 
 export default function CartProvider({ children }: { children: ReactNode }) {
   // Stored lines survive a refresh; legacy/corrupt payloads are sanitised on read.
@@ -23,7 +23,7 @@ export default function CartProvider({ children }: { children: ReactNode }) {
   }, [items]);
 
   const clamp = (product: ShopProduct, quantity: number): number =>
-    Math.max(1, Math.min(quantity, Math.max(product.maxOrderable, 1)));
+    Math.max(1, Math.min(quantity, Math.max(product.maxOrderable, 1), MAX_LINE_QUANTITY));
 
   const addToCart = useCallback((product: ShopProduct, quantity = 1): boolean => {
     const rows = itemsRef.current;
@@ -32,6 +32,8 @@ export default function CartProvider({ children }: { children: ReactNode }) {
 
     if (product.maxOrderable <= 0) {
       outcome = "out_of_stock";
+    } else if (!existing && rows.length >= MAX_CART_PRODUCTS) {
+      outcome = "limit_reached";
     } else if (existing) {
       // Refresh the snapshot (price / availability may have changed since it was stored).
       const next = clamp(product, existing.quantity + quantity);

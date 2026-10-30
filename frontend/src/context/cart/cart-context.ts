@@ -1,5 +1,8 @@
 import { createContext } from "react";
+import { MAX_CART_PRODUCTS, MAX_LINE_QUANTITY } from "../../lib/shopStorage";
 import type { CartItem, ShopProduct } from "../../types/shop";
+
+export { MAX_CART_PRODUCTS, MAX_LINE_QUANTITY };
 
 export type CartContextValue = {
   items: CartItem[];

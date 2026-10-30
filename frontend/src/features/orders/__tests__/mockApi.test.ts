@@ -76,3 +76,57 @@ describe("mockStaffOrdersApi", () => {
     await expect(mockStaffOrdersApi.cancelOrder(9)).resolves.toBeUndefined(); // PENDING
   });
 });
+
+describe("mockCustomerOrdersApi.createMyOrder", () => {
+  const input = {
+    items: [{ productId: "p-1", quantity: 2 }],
+    recipientName: "Cara Customer",
+    recipientPhone: "+20 100 000 0000",
+    shippingAddress: "1 Nile Street",
+    shippingCity: "Cairo",
+    notes: "Call on arrival",
+  };
+
+  it("creates a PENDING own order in the customer-safe shape", async () => {
+    signIn("4");
+
+    const order = await mockCustomerOrdersApi.createMyOrder(input);
+
+    expect(order).toMatchObject({
+      status: "PENDING",
+      recipientName: "Cara Customer",
+      shippingCity: "Cairo",
+      paymentMethod: "COD",
+    });
+    expect(order.items[0]).toMatchObject({ quantity: 2, productName: expect.any(String) });
+    expect(order).not.toHaveProperty("notes");
+    expect(order).not.toHaveProperty("createdBy");
+    await expect(mockCustomerOrdersApi.getMyOrder(order.id)).resolves.toMatchObject({ id: order.id });
+  });
+
+  it("answers 409 with the failing product when stock is insufficient", async () => {
+    signIn("4");
+
+    // p-2 only has 9 mock units available.
+    await expect(
+      mockCustomerOrdersApi.createMyOrder({
+        ...input,
+        items: [{ productId: "p-2", quantity: 10 }],
+      }),
+    ).rejects.toMatchObject({
+      status: 409,
+      body: { message: expect.stringContaining("product p-2") },
+    });
+  });
+
+  it("rejects an out-of-range quantity with 400", async () => {
+    signIn("4");
+
+    await expect(
+      mockCustomerOrdersApi.createMyOrder({
+        ...input,
+        items: [{ productId: "p-1", quantity: 51 }],
+      }),
+    ).rejects.toMatchObject({ status: 400 });
+  });
+});

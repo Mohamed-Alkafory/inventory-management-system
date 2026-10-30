@@ -1,10 +1,13 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useState } from "react";
+import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import ToastProvider from "../../components/ui/toast/ToastProvider";
 import CartProvider from "../../context/cart/CartProvider";
+import { useCart } from "../../context/cart/useCart";
 import type { ShopProduct } from "../../types/shop";
 import Cart from "./Cart";
 
@@ -32,18 +35,34 @@ const seedCart = (items: SeedLine[]) => {
   );
 };
 
-function renderPage() {
+function renderPage(extra?: ReactNode) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
       <ToastProvider>
         <MemoryRouter initialEntries={["/cart"]}>
           <CartProvider>
+            {extra}
             <Cart />
           </CartProvider>
         </MemoryRouter>
       </ToastProvider>
     </QueryClientProvider>,
+  );
+}
+
+/** Attempts to add one more distinct product, exposing the provider's answer. */
+function ExtraProductProbe() {
+  const { addToCart, items } = useCart();
+  const [result, setResult] = useState("");
+  return (
+    <>
+      <button type="button" onClick={() => setResult(String(addToCart(product({ id: "p-extra" }))))}>
+        Add extra product
+      </button>
+      <span data-testid="add-result">{result}</span>
+      <span data-testid="distinct-count">{items.length}</span>
+    </>
   );
 }
 
@@ -89,6 +108,47 @@ describe("Cart page", () => {
     fireEvent.click(plus);
     expect(screen.getByText(/shopping cart/i)).toHaveTextContent("2 items");
     expect(plus).toBeDisabled(); // capped at the catalog's maxOrderable
+  });
+
+  it("caps each line at 50 even when the catalogue allows more", () => {
+    seedCart([{ id: "1", price: 10, maxOrderable: 100, quantity: 60 }]);
+    renderPage();
+
+    expect(screen.getByText(/shopping cart/i)).toHaveTextContent("50 items");
+    expect(screen.getByText("Product 1")).toBeInTheDocument();
+  });
+
+  it("explains a cart with more than 30 distinct products and blocks checkout", () => {
+    seedCart(
+      Array.from({ length: 31 }, (_, i) => ({
+        id: `p-${i + 1}`,
+        price: 10,
+        maxOrderable: 10,
+        quantity: 1,
+      })),
+    );
+    renderPage();
+
+    expect(screen.getByRole("alert")).toHaveTextContent(/31 different products.*at most 30/i);
+    expect(screen.getByRole("button", { name: /proceed to checkout/i })).toBeDisabled();
+  });
+
+  it("refuses to add a 31st distinct product", () => {
+    seedCart(
+      Array.from({ length: 30 }, (_, i) => ({
+        id: `p-${i + 1}`,
+        price: 10,
+        maxOrderable: 10,
+        quantity: 1,
+      })),
+    );
+    renderPage(<ExtraProductProbe />);
+
+    fireEvent.click(screen.getByRole("button", { name: /add extra product/i }));
+
+    expect(screen.getByTestId("add-result")).toHaveTextContent("false");
+    expect(screen.getByTestId("distinct-count")).toHaveTextContent("30");
+    expect(screen.queryByText("Product p-extra")).toBeNull();
   });
 
   it("clamps a legacy over-quantity line to maxOrderable on load", () => {

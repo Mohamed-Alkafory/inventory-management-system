@@ -1,8 +1,9 @@
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Role } from "../../../types/auth";
+import { ApiError } from "../../../lib/http";
 import OrderDetailsView from "../OrderDetailsView";
 
 const mocks = vi.hoisted(() => {
@@ -61,6 +62,9 @@ beforeEach(() => {
   mocks.role = "CUSTOMER";
   mocks.useMyOrder.mockReturnValue(queryResult(undefined));
   mocks.useOrder.mockReturnValue(queryResult(undefined));
+  mocks.cancelMy.mutateAsync.mockResolvedValue(undefined);
+  mocks.cancelStaff.mutateAsync.mockResolvedValue(undefined);
+  mocks.updateStatus.mutateAsync.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -132,5 +136,44 @@ describe("OrderDetailsView", () => {
 
     expect(screen.queryByRole("button", { name: "Cancel order" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Confirm order" })).toBeNull();
+  });
+
+  it("cancels an own PENDING order only after confirmation", async () => {
+    mocks.role = "CUSTOMER";
+    mocks.useMyOrder.mockReturnValue(queryResult(customerOrder("PENDING")));
+
+    render(
+      <MemoryRouter>
+        <OrderDetailsView id="1" scope="my" />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel order" }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/cancel this order/i)).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel order" }));
+
+    await waitFor(() => expect(mocks.cancelMy.mutateAsync).toHaveBeenCalledWith(1));
+  });
+
+  it("shows a not-found state for a 404 and renders no order data", () => {
+    mocks.useMyOrder.mockReturnValue({
+      data: undefined,
+      isPending: false,
+      isError: true,
+      error: new ApiError(404, "Order not found"),
+      refetch: vi.fn(),
+    });
+
+    render(
+      <MemoryRouter>
+        <OrderDetailsView id="missing" scope="my" />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Order not found");
+    expect(screen.queryByText("Cara Customer")).toBeNull();
+    expect(screen.queryByText("Water Bottle")).toBeNull();
   });
 });
