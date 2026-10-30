@@ -1,69 +1,121 @@
 export type Id = string | number;
-export type OrderStatus = "pending" | "processing" | "shipped" | "delivered" | "cancelled";
+
+/** The backend's three lifecycle states. No processing/shipped/delivered. */
+export type OrderStatus = "PENDING" | "CONFIRMED" | "CANCELLED";
+
 export type OrderAction = "confirm" | "cancel";
 
-export interface OrderSummary {
-  id: Id;
-  number: string; // "ORD-1001"
-  customerName: string;
-  createdAt: string; // ISO date-time
-  total: number;
-  status: OrderStatus;
-  /** Present when the server echoes it — lets pages show "my orders". */
-  createdById?: string;
-  /** Optional: when the server says which actions are allowed, we trust it over our own rules. */
-  allowedActions?: OrderAction[];
-}
-
-export interface OrderItem {
-  productId: Id | null;
-  name: string;
-  sku: string;
-  quantity: number;
-  unitPrice: number;
-}
-
-export interface StatusEvent {
-  status: OrderStatus;
-  at: string;
-  by: string;
-  note: string;
-}
-
-export interface OrderDetails extends OrderSummary {
-  customerEmail: string;
-  customerPhone: string;
-  notes: string;
-  createdBy: string;
-  items: OrderItem[];
-  subtotal: number;
-  shipping: number;
-  tax: number;
-  discount: number;
-  history: StatusEvent[];
-}
-
-export interface OrderListParams {
-  search: string; // order number or customer
-  status: "" | OrderStatus;
-  from: string; // YYYY-MM-DD or ""
-  to: string;
-  page: number; // 1-based
-  pageSize: number;
-  /** Filter to the orders a user created (real API: createdById, mock: matches the seeded ids). */
-  createdById?: string;
-}
+/** Which API/route family a screen is using. */
+export type OrderScope = "my" | "staff";
 
 export interface Paged<T> {
   items: T[];
   total: number;
 }
 
-/** Same shape for the mock and the real API, so switching is one line. */
-export interface OrdersApi {
-  list(params: OrderListParams): Promise<Paged<OrderSummary>>;
-  get(id: Id): Promise<OrderDetails>;
-  /** Rejects with ApiError(409) when the transition isn't allowed for the current status. */
-  confirm(id: Id): Promise<void>;
-  cancel(id: Id): Promise<void>;
+/** Customer-safe line snapshot — deliberately has no internal ids. */
+export interface CustomerOrderItem {
+  productName: string;
+  sku: string;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
+}
+
+/** Memory-safe order shape returned by /orders/mine*. */
+export interface CustomerOrder {
+  id: Id;
+  orderNumber: string;
+  status: OrderStatus;
+  totalAmount: number;
+  items: CustomerOrderItem[];
+  recipientName?: string;
+  recipientPhone?: string;
+  shippingAddress?: string;
+  shippingCity?: string;
+  paymentMethod?: string;
+  createdAt: string;
+  cancelledAt?: string;
+}
+
+/** Staff/support/admin line snapshot (detail + create responses). */
+export interface StaffOrderItem {
+  id?: Id;
+  productId?: Id;
+  productName: string;
+  sku: string;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
+}
+
+/**
+ * Staff/support/admin order shape. Phone and shipping fields are optional
+ * because SUPPORT list rows omit customerPhone, recipientPhone and
+ * shippingAddress (data minimization on the backend).
+ */
+export interface StaffOrder {
+  id: Id;
+  orderNumber: string;
+  status: OrderStatus;
+  customerName?: string;
+  customerPhone?: string;
+  notes?: string;
+  totalAmount: number;
+  customerId?: string;
+  recipientName?: string;
+  recipientPhone?: string;
+  shippingAddress?: string;
+  shippingCity?: string;
+  paymentMethod?: string;
+  createdById?: string;
+  cancelledAt?: string;
+  createdAt: string;
+  updatedAt?: string;
+  /** Only detail (and create) responses carry these. */
+  items?: StaffOrderItem[];
+  createdBy?: { id: string; name: string; email?: string };
+  stockMovements?: Array<{
+    id: string;
+    productId: string;
+    type: string;
+    quantityChange: number;
+    quantityAfter: number;
+    reason?: string;
+    createdAt: string;
+  }>;
+}
+
+/** Staff/support/admin list filters. */
+export interface OrderListParams {
+  search: string;
+  status: "" | OrderStatus;
+  from: string; // YYYY-MM-DD or ""
+  to: string;
+  page: number; // 1-based
+  pageSize: number;
+}
+
+/** Customer "my orders" filters — the backend only supports status + pagination. */
+export interface MyOrderListParams {
+  status: "" | OrderStatus;
+  page: number;
+  pageSize: number;
+}
+
+export interface CustomerOrdersApi {
+  listMyOrders(params: MyOrderListParams): Promise<Paged<CustomerOrder>>;
+  /** A missing or foreign order both reject with ApiError(404). */
+  getMyOrder(id: Id): Promise<CustomerOrder>;
+  /** Rejects with ApiError(409) unless the order is owned and PENDING. */
+  cancelMyOrder(id: Id): Promise<void>;
+}
+
+export interface StaffOrdersApi {
+  listOrders(params: OrderListParams): Promise<Paged<StaffOrder>>;
+  getOrder(id: Id): Promise<StaffOrder>;
+  /** PATCH /orders/:id/status — PENDING→CONFIRMED, PENDING/CONFIRMED→CANCELLED. */
+  updateOrderStatus(id: Id, status: "CONFIRMED" | "CANCELLED"): Promise<void>;
+  /** POST /orders/:id/cancel — PENDING only (SUPPORT/STAFF/ADMIN). */
+  cancelOrder(id: Id): Promise<void>;
 }

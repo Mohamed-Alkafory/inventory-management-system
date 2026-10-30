@@ -1,5 +1,5 @@
 import { request } from "../../../lib/http";
-import { normalizeSummary } from "../normalize";
+import { normalizeStaffOrder } from "../normalize";
 import { mockOrderBuilderApi } from "./mockApi";
 import type { CreateOrderInput, OrderBuilderApi, PickerProduct } from "./types";
 
@@ -66,8 +66,8 @@ export const realOrderBuilderApi: OrderBuilderApi = {
     const resp = await request<unknown>("/orders", { method: "POST", body: JSON.stringify(body) });
     const order = isObject(resp) && isObject(resp.data) ? resp.data : resp; // some APIs wrap the result in { data }
     if (!isObject(order)) return { id: null, number: "" };
-    const s = normalizeSummary(order);
-    return { id: s.id === "" ? null : s.id, number: s.number };
+    const s = normalizeStaffOrder(order);
+    return { id: s.id === "" ? null : s.id, number: s.orderNumber };
   },
 };
 

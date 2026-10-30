@@ -1,47 +1,67 @@
 import { request } from "../../lib/http";
 import { USE_MOCK } from "../../lib/env";
-import { mockOrdersApi } from "./mockApi";
-import { normalizeDetails, toOrderPage } from "./normalize";
-import type { OrderListParams, OrdersApi } from "./types";
+import { mockCustomerOrdersApi, mockStaffOrdersApi } from "./mockApi";
+import { normalizeCustomerOrder, normalizeStaffOrder, toCustomerOrderPage, toStaffOrderPage } from "./normalize";
+import type { CustomerOrdersApi, Id, MyOrderListParams, OrderListParams, StaffOrdersApi } from "./types";
 
 /**
  * One switch for the whole app: the shared `VITE_USE_MOCK` flag (lib/env).
- * The standalone `VITE_USE_MOCK_API` flag previously made the orders pages
- * serve demo data while checkout hit the real backend — so real orders
- * never appeared here. Re-exported so other imports keep working.
+ * Re-exported so the existing "Demo data (mock API)" badges keep working.
  */
 export { USE_MOCK };
 
-function listQuery(p: OrderListParams) {
-  // The backend contract (§1/§3.7) takes `limit` (not `pageSize`), an
-  // UPPERCASE status enum, and date-times for the from/to range. Unknown
-  // query params are rejected outright (forbidNonWhitelisted), so sending
-  // anything else breaks the whole request.
+function myListQuery(p: MyOrderListParams) {
+  const q = new URLSearchParams({ page: String(p.page), limit: String(p.pageSize) });
+  if (p.status) q.set("status", p.status);
+  return q.toString();
+}
+
+function staffListQuery(p: OrderListParams) {
+  // The backend takes `limit` (not `pageSize`), an UPPERCASE status enum, and
+  // date-times for the from/to range. Unknown query params are rejected
+  // outright (forbidNonWhitelisted), so nothing else is sent.
   const q = new URLSearchParams({ page: String(p.page), limit: String(p.pageSize) });
   if (p.search.trim()) q.set("search", p.search.trim());
-  if (p.status) q.set("status", p.status.toUpperCase());
-  if (p.createdById) q.set("createdById", p.createdById);
-  // Local calendar days → full-day date-time bounds so a "from"/"to" filter
-  // includes everything created that day.
+  if (p.status) q.set("status", p.status);
+  // Local calendar days → full-day date-time bounds.
   if (p.from.trim()) q.set("from", `${p.from}T00:00:00`);
   if (p.to.trim()) q.set("to", `${p.to}T23:59:59`);
   return q.toString();
 }
 
-export const realOrdersApi: OrdersApi = {
-  async list(p) {
-    return toOrderPage(await request<unknown>(`/orders?${listQuery(p)}`), p);
+const encode = (id: Id) => encodeURIComponent(String(id));
+
+/** Customer scope: /orders/mine* — ownership is enforced server-side. */
+export const realCustomerOrdersApi: CustomerOrdersApi = {
+  async listMyOrders(p) {
+    return toCustomerOrderPage(await request<unknown>(`/orders/mine?${myListQuery(p)}`), p);
   },
-  async get(id) {
-    return normalizeDetails(await request<unknown>(`/orders/${id}`));
+  async getMyOrder(id) {
+    return normalizeCustomerOrder(await request<unknown>(`/orders/mine/${encode(id)}`));
   },
-  /** The real API exposes one transition endpoint: PATCH /orders/:id/status. */
-  async confirm(id) {
-    await request<unknown>(`/orders/${id}/status`, { method: "PATCH", body: JSON.stringify({ newStatus: "CONFIRMED" }) });
-  },
-  async cancel(id) {
-    await request<unknown>(`/orders/${id}/status`, { method: "PATCH", body: JSON.stringify({ newStatus: "CANCELLED" }) });
+  async cancelMyOrder(id) {
+    await request<unknown>(`/orders/mine/${encode(id)}/cancel`, { method: "POST" });
   },
 };
 
-export const ordersApi: OrdersApi = USE_MOCK ? mockOrdersApi : realOrdersApi;
+/** Staff/support/admin scope: /orders*. */
+export const realStaffOrdersApi: StaffOrdersApi = {
+  async listOrders(p) {
+    return toStaffOrderPage(await request<unknown>(`/orders?${staffListQuery(p)}`), p);
+  },
+  async getOrder(id) {
+    return normalizeStaffOrder(await request<unknown>(`/orders/${encode(id)}`));
+  },
+  async updateOrderStatus(id: Id, status: "CONFIRMED" | "CANCELLED") {
+    await request<unknown>(`/orders/${encode(id)}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ newStatus: status }),
+    });
+  },
+  async cancelOrder(id) {
+    await request<unknown>(`/orders/${encode(id)}/cancel`, { method: "POST" });
+  },
+};
+
+export const customerOrdersApi: CustomerOrdersApi = USE_MOCK ? mockCustomerOrdersApi : realCustomerOrdersApi;
+export const staffOrdersApi: StaffOrdersApi = USE_MOCK ? mockStaffOrdersApi : realStaffOrdersApi;

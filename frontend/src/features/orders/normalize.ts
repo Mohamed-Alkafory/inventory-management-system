@@ -1,118 +1,178 @@
-import { filterOrders, paginate } from "./filters";
-import { ACTION_RULES, STATUSES } from "./status";
+import { filterMyOrders, filterOrders, paginate } from "./filters";
+import { STATUSES } from "./status";
 import type {
-  OrderAction,
-  OrderDetails,
-  OrderItem,
+  CustomerOrder,
+  CustomerOrderItem,
+  MyOrderListParams,
   OrderListParams,
   OrderStatus,
-  OrderSummary,
   Paged,
-  StatusEvent,
+  StaffOrder,
+  StaffOrderItem,
 } from "./types";
 
 type Obj = Record<string, unknown>;
 const isObject = (v: unknown): v is Obj => typeof v === "object" && v !== null;
-const str = (v: unknown) => (typeof v === "string" ? v : undefined);
+/** Non-empty string or undefined — personal fields must never render as "". */
+const str = (v: unknown) => (typeof v === "string" && v.trim() !== "" ? v : undefined);
 const num = (v: unknown) => {
   if (typeof v === "number" && Number.isFinite(v)) return v;
-  if (typeof v === "string" && v.trim() !== "" && Number.isFinite(Number(v))) return Number(v); // decimals often arrive as strings
-  return undefined;
-};
-const person = (...c: unknown[]): string | undefined => {
-  for (const v of c) {
-    const name = typeof v === "string" ? v : isObject(v) ? str(v.name) : undefined;
-    if (name) return name;
-  }
+  if (typeof v === "string" && v.trim() !== "" && Number.isFinite(Number(v))) return Number(v);
   return undefined;
 };
 const idOf = (v: unknown) => (typeof v === "string" || typeof v === "number" ? v : undefined);
 const arr = (...c: unknown[]): unknown[] => (c.find(Array.isArray) as unknown[] | undefined) ?? [];
+const hasArray = (...c: unknown[]): boolean => c.some(Array.isArray);
 
 export function readStatus(v: unknown): OrderStatus | undefined {
-  let s = str(v)?.toLowerCase().trim();
-  if (s === "canceled") s = "cancelled";
-  // The API's CONFIRMED state is shown as "Processing" in this shopping-flow UI.
-  if (s === "confirmed") s = "processing";
-  return STATUSES.find((x) => x === s);
+  const raw = str(v)?.toUpperCase().trim();
+  if (!raw) return undefined;
+  if (raw === "CANCELED") return "CANCELLED";
+  return STATUSES.find((s) => s === raw);
 }
 
-function readActions(v: unknown): OrderAction[] | undefined {
-  if (!Array.isArray(v)) return undefined;
-  const known = Object.keys(ACTION_RULES) as OrderAction[];
-  return v.map((x) => String(x).toLowerCase()).filter((x): x is OrderAction => known.includes(x as OrderAction));
+function readCreatedBy(v: unknown): StaffOrder["createdBy"] {
+  if (typeof v === "string") return v.trim() ? { id: "", name: v } : undefined;
+  if (!isObject(v)) return undefined;
+  const id = str(v.id);
+  const name = str(v.name);
+  if (!id && !name) return undefined;
+  return { id: id ?? "", name: name ?? "", email: str(v.email) };
 }
 
-export function normalizeSummary(raw: unknown): OrderSummary {
-  const r: Obj = isObject(raw) ? raw : {};
-  const customer = isObject(r.customer) ? r.customer : {};
-  const id = idOf(r.id) ?? "";
-  return {
-    id,
-    number: str(r.number) ?? str(r.orderNumber) ?? str(r.order_number) ?? str(r.code) ?? `ORD-${id}`,
-    customerName: str(customer.name) ?? str(r.customerName) ?? str(r.customer_name) ?? str(r.customer) ?? "",
-    createdAt: str(r.createdAt) ?? str(r.created_at) ?? str(r.date) ?? "",
-    total: num(r.total) ?? num(r.totalAmount) ?? num(r.total_amount) ?? 0,
-    status: readStatus(r.status) ?? "pending",
-    createdById: str(r.createdById) ?? str(r.created_by),
-    allowedActions: readActions(r.allowedActions ?? r.allowed_actions),
-  };
-}
+const lineTotalOf = (item: CustomerOrderItem) =>
+  item.lineTotal || Math.round(item.quantity * item.unitPrice * 100) / 100;
 
-function normalizeItem(raw: unknown): OrderItem {
+function normalizeCustomerItem(raw: unknown): CustomerOrderItem {
   const r: Obj = isObject(raw) ? raw : {};
   const product = isObject(r.product) ? r.product : {};
+  const quantity = num(r.quantity) ?? num(r.qty) ?? 0;
+  const unitPrice = num(r.unitPrice) ?? num(r.unit_price) ?? num(r.price) ?? 0;
   return {
-    productId: idOf(r.productId) ?? idOf(r.product_id) ?? idOf(product.id) ?? null,
-    name: str(r.name) ?? str(r.productName) ?? str(r.product_name) ?? str(product.name) ?? "",
+    productName: str(r.productName) ?? str(r.product_name) ?? str(r.name) ?? str(product.name) ?? "",
     sku: str(r.sku) ?? str(product.sku) ?? "",
-    quantity: num(r.quantity) ?? num(r.qty) ?? 0,
-    unitPrice: num(r.unitPrice) ?? num(r.unit_price) ?? num(r.price) ?? 0,
+    quantity,
+    unitPrice,
+    lineTotal: num(r.lineTotal) ?? num(r.line_total) ?? Math.round(quantity * unitPrice * 100) / 100,
   };
 }
 
-function normalizeEvent(raw: unknown): StatusEvent {
+/**
+ * Customer-safe shape from GET /orders/mine*.
+ * Tolerates missing fields: optional personal data is undefined, never "".
+ */
+export function normalizeCustomerOrder(raw: unknown): CustomerOrder {
   const r: Obj = isObject(raw) ? raw : {};
+  const id = idOf(r.id) ?? "";
+  const items = arr(r.items, r.orderItems, r.order_items, r.lines).map(normalizeCustomerItem);
+  const computed = items.reduce((sum, item) => sum + lineTotalOf(item), 0);
   return {
-    status: readStatus(r.status) ?? readStatus(r.to) ?? "pending",
-    at: str(r.at) ?? str(r.createdAt) ?? str(r.created_at) ?? str(r.date) ?? "",
-    by: person(r.changedBy, r.changed_by, r.by, r.user, r.createdBy, r.created_by) ?? "",
-    note: str(r.note) ?? str(r.comment) ?? str(r.reason) ?? "",
-  };
-}
-
-export function normalizeDetails(raw: unknown): OrderDetails {
-  const base = normalizeSummary(raw);
-  const r: Obj = isObject(raw) ? raw : {};
-  const customer = isObject(r.customer) ? r.customer : {};
-    const items = arr(r.items, r.orderItems, r.order_items, r.lines).map(normalizeItem);
-  const subtotal = num(r.subtotal) ?? items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
-  const shipping = num(r.shipping) ?? num(r.shippingCost) ?? num(r.shipping_cost) ?? 0;
-  const tax = num(r.tax) ?? num(r.taxAmount) ?? num(r.tax_amount) ?? 0;
-  const discount = num(r.discount) ?? 0;
-  const hasTotal = num(r.total) ?? num(r.totalAmount) ?? num(r.total_amount);
-  return {
-    ...base,
-    total: hasTotal ?? subtotal + shipping + tax - discount,
-    customerEmail: str(customer.email) ?? str(r.customerEmail) ?? str(r.customer_email) ?? "",
-    customerPhone: str(customer.phone) ?? str(r.customerPhone) ?? str(r.customer_phone) ?? str(r.phone) ?? "",
-    notes: str(r.notes) ?? str(r.note) ?? "",
-    createdBy: person(r.createdBy, r.created_by, r.creator, r.creatorName) ?? "",
+    id,
+    orderNumber:
+      str(r.orderNumber) ?? str(r.order_number) ?? str(r.number) ?? str(r.code) ?? (id ? `ORD-${id}` : ""),
+    status: readStatus(r.status) ?? "PENDING",
+    totalAmount: num(r.totalAmount) ?? num(r.total_amount) ?? num(r.total) ?? Math.round(computed * 100) / 100,
     items,
-    subtotal,
-    shipping,
-    tax,
-    discount,
-    history: arr(r.statusHistory, r.status_history, r.history, r.events, r.timeline).map(normalizeEvent),
+    recipientName: str(r.recipientName) ?? str(r.recipient_name) ?? undefined,
+    recipientPhone: str(r.recipientPhone) ?? str(r.recipient_phone) ?? undefined,
+    shippingAddress: str(r.shippingAddress) ?? str(r.shipping_address) ?? undefined,
+    shippingCity: str(r.shippingCity) ?? str(r.shipping_city) ?? undefined,
+    paymentMethod: str(r.paymentMethod) ?? str(r.payment_method) ?? undefined,
+    createdAt: str(r.createdAt) ?? str(r.created_at) ?? "",
+    cancelledAt: str(r.cancelledAt) ?? str(r.cancelled_at) ?? undefined,
   };
 }
 
-/** `[...]` or `{ items | data: [...], total | meta.total | pagination.total | count }`. */
-export function toOrderPage(body: unknown, p: OrderListParams): Paged<OrderSummary> {
-  if (Array.isArray(body)) return paginate(filterOrders(body.map(normalizeSummary), p), p.page, p.pageSize); // no server paging → do it here
+function normalizeStaffItem(raw: unknown): StaffOrderItem {
+  const r: Obj = isObject(raw) ? raw : {};
+  const product = isObject(r.product) ? r.product : {};
+  const quantity = num(r.quantity) ?? num(r.qty) ?? 0;
+  const unitPrice = num(r.unitPrice) ?? num(r.unit_price) ?? num(r.price) ?? 0;
+  return {
+    id: idOf(r.id),
+    productId: idOf(r.productId) ?? idOf(r.product_id) ?? idOf(product.id),
+    productName: str(r.productName) ?? str(r.product_name) ?? str(r.name) ?? str(product.name) ?? "",
+    sku: str(r.sku) ?? str(product.sku) ?? "",
+    quantity,
+    unitPrice,
+    lineTotal: num(r.lineTotal) ?? num(r.line_total) ?? Math.round(quantity * unitPrice * 100) / 100,
+  };
+}
+
+function normalizeMovements(v: unknown): NonNullable<StaffOrder["stockMovements"]> | undefined {
+  if (!Array.isArray(v)) return undefined;
+  return v.map((raw) => {
+    const r: Obj = isObject(raw) ? raw : {};
+    return {
+      id: String(idOf(r.id) ?? ""),
+      productId: String(idOf(r.productId) ?? idOf(r.product_id) ?? ""),
+      type: String(str(r.type) ?? ""),
+      quantityChange: num(r.quantityChange) ?? num(r.quantity_change) ?? 0,
+      quantityAfter: num(r.quantityAfter) ?? num(r.quantity_after) ?? 0,
+      reason: str(r.reason),
+      createdAt: str(r.createdAt) ?? str(r.created_at) ?? "",
+    };
+  });
+}
+
+/**
+ * Staff/support/admin shape from GET /orders and GET /orders/:id.
+ * List rows may omit phone/address fields and items; every field is optional
+ * except the common order scalars.
+ */
+export function normalizeStaffOrder(raw: unknown): StaffOrder {
+  const r: Obj = isObject(raw) ? raw : {};
+  const id = idOf(r.id) ?? "";
+  const createdBy = r.createdBy ?? r.created_by;
+
+  return {
+    id,
+    orderNumber:
+      str(r.orderNumber) ?? str(r.order_number) ?? str(r.number) ?? str(r.code) ?? (id ? `ORD-${id}` : ""),
+    status: readStatus(r.status) ?? "PENDING",
+    customerName: str(r.customerName) ?? str(r.customer_name) ?? str(r.customer) ?? undefined,
+    customerPhone: str(r.customerPhone) ?? str(r.customer_phone) ?? undefined,
+    notes: str(r.notes) ?? str(r.note) ?? undefined,
+    totalAmount: num(r.totalAmount) ?? num(r.total_amount) ?? num(r.total) ?? 0,
+    customerId: str(r.customerId) ?? str(r.customer_id) ?? undefined,
+    recipientName: str(r.recipientName) ?? str(r.recipient_name) ?? undefined,
+    recipientPhone: str(r.recipientPhone) ?? str(r.recipient_phone) ?? undefined,
+    shippingAddress: str(r.shippingAddress) ?? str(r.shipping_address) ?? undefined,
+    shippingCity: str(r.shippingCity) ?? str(r.shipping_city) ?? undefined,
+    paymentMethod: str(r.paymentMethod) ?? str(r.payment_method) ?? undefined,
+    createdById: str(r.createdById) ?? str(r.created_by_id) ?? undefined,
+    cancelledAt: str(r.cancelledAt) ?? str(r.cancelled_at) ?? undefined,
+    createdAt: str(r.createdAt) ?? str(r.created_at) ?? "",
+    updatedAt: str(r.updatedAt) ?? str(r.updated_at) ?? undefined,
+    items: hasArray(r.items, r.orderItems, r.order_items, r.lines)
+      ? arr(r.items, r.orderItems, r.order_items, r.lines).map(normalizeStaffItem)
+      : undefined,
+    createdBy: readCreatedBy(createdBy),
+    stockMovements: normalizeMovements(r.stockMovements ?? r.stock_movements),
+  };
+}
+
+/** Total from `{ data | items, meta.total | total }`, or a plain array. */
+function pageOf<T>(body: unknown, map: (raw: unknown) => T, fallback: () => Paged<T>): Paged<T> {
+  if (Array.isArray(body)) return fallback();
   const b: Obj = isObject(body) ? body : {};
   const meta: Obj = isObject(b.meta) ? b.meta : {};
   const pagination: Obj = isObject(b.pagination) ? b.pagination : {};
-  const items = arr(b.items, b.data).map(normalizeSummary);
-  return { items, total: num(b.total) ?? num(meta.total) ?? num(pagination.total) ?? num(b.count) ?? items.length };
+  const items = arr(b.items, b.data).map(map);
+  return {
+    items,
+    total: num(b.total) ?? num(meta.total) ?? num(pagination.total) ?? num(b.count) ?? items.length,
+  };
+}
+
+export function toCustomerOrderPage(body: unknown, p: MyOrderListParams): Paged<CustomerOrder> {
+  return pageOf(body, normalizeCustomerOrder, () =>
+    paginate(filterMyOrders(arr(body).map(normalizeCustomerOrder), p), p.page, p.pageSize),
+  );
+}
+
+export function toStaffOrderPage(body: unknown, p: OrderListParams): Paged<StaffOrder> {
+  return pageOf(body, normalizeStaffOrder, () =>
+    paginate(filterOrders(arr(body).map(normalizeStaffOrder), p), p.page, p.pageSize),
+  );
 }

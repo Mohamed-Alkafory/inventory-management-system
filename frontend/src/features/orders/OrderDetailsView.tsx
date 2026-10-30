@@ -2,12 +2,14 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft, Ban, CheckCircle2 } from "lucide-react";
 import { ApiError } from "../../lib/http";
+import { useAuth } from "../../context/auth/useAuth";
 import { ORDERS_PATH, formatDateTime, formatMoney, formatNumber } from "./format";
-import { useOrder } from "./hooks";
+import { useMyOrder, useOrder } from "./hooks";
 import OrderActionDialog from "./OrderActionDialog";
 import type { ActionTarget } from "./OrderActionDialog";
-import { ACTION_RULES, allowedActions } from "./status";
+import { ACTION_RULES, getOrderActions } from "./status";
 import StatusBadge from "./StatusBadge";
+import type { CustomerOrder, OrderScope, StaffOrder } from "./types";
 
 const card = "rounded-2xl border border-[#E5E7EB] bg-white";
 
@@ -20,8 +22,28 @@ function BackLink() {
   );
 }
 
-export default function OrderDetailsView({ id }: { id: string }) {
-  const { data: order, isPending, isError, error, refetch } = useOrder(id);
+function Field({ label, value }: { label: string; value?: string }) {
+  if (!value) return null;
+  return (
+    <div>
+      <dt className="text-[11px] font-semibold text-[#6B7280]">{label}</dt>
+      <dd className="mt-0.5 whitespace-pre-line text-[#111827]">{value}</dd>
+    </div>
+  );
+}
+
+/**
+ * Role-aware order details.
+ *   scope="my"    → GET /orders/mine/:id (customer-safe fields only)
+ *   scope="staff" → GET /orders/:id (staff fields, optional for SUPPORT rows)
+ *
+ * Empty/undefined personal fields are never rendered.
+ */
+export default function OrderDetailsView({ id, scope = "staff" }: { id: string; scope?: OrderScope }) {
+  const { role } = useAuth();
+  const myQuery = useMyOrder(id, { enabled: scope === "my" });
+  const staffQuery = useOrder(id, { enabled: scope === "staff" });
+  const { data: order, isPending, isError, error, refetch } = scope === "my" ? myQuery : staffQuery;
   const [target, setTarget] = useState<ActionTarget | null>(null);
 
   if (isPending) {
@@ -35,7 +57,7 @@ export default function OrderDetailsView({ id }: { id: string }) {
     );
   }
 
-  if (isError) {
+  if (isError || !order) {
     const missing = error instanceof ApiError && error.status === 404;
     return (
       <div className="mx-auto w-full max-w-5xl px-4 sm:px-6">
@@ -54,9 +76,16 @@ export default function OrderDetailsView({ id }: { id: string }) {
     );
   }
 
-  const allowed = allowedActions(order);
-  const ref = { id: order.id, number: order.number, customerName: order.customerName };
-  const history = [...order.history].sort((a, b) => b.at.localeCompare(a.at));
+  const allowed = getOrderActions(role, order);
+  const ref = {
+    id: order.id,
+    orderNumber: order.orderNumber,
+    status: order.status,
+    customerName: scope === "staff" ? (order as StaffOrder).customerName : undefined,
+  };
+  const items = order.items ?? [];
+  const customer = scope === "my" ? (order as CustomerOrder) : null;
+  const staff = scope === "staff" ? (order as StaffOrder) : null;
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 sm:px-6">
@@ -64,7 +93,7 @@ export default function OrderDetailsView({ id }: { id: string }) {
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
         <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-xl font-extrabold text-[#111827]">Order {formatNumber(order.number)}</h1>
+          <h1 className="text-xl font-extrabold text-[#111827]">Order {formatNumber(order.orderNumber)}</h1>
           <StatusBadge status={order.status} />
         </div>
         {allowed.length > 0 && (
@@ -72,7 +101,7 @@ export default function OrderDetailsView({ id }: { id: string }) {
             {allowed.includes("confirm") && (
               <button
                 type="button"
-                onClick={() => setTarget({ action: "confirm", order: ref })}
+                onClick={() => setTarget({ action: "confirm", scope, order: ref })}
                 className="inline-flex items-center gap-2 rounded-lg bg-[#FF5615] px-3.5 py-2 text-[13px] font-semibold text-white shadow-md shadow-[#FF5615]/25 hover:bg-[#E84A0E] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF5615] focus-visible:ring-offset-2"
               >
                 <CheckCircle2 className="h-3.5 w-3.5" />
@@ -82,7 +111,7 @@ export default function OrderDetailsView({ id }: { id: string }) {
             {allowed.includes("cancel") && (
               <button
                 type="button"
-                onClick={() => setTarget({ action: "cancel", order: ref })}
+                onClick={() => setTarget({ action: "cancel", scope, order: ref })}
                 className="inline-flex items-center gap-2 rounded-lg border border-[#FECACA] bg-white px-3.5 py-2 text-[13px] font-semibold text-[#DC2626] hover:bg-[#FEF2F2] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#DC2626]"
               >
                 <Ban className="h-3.5 w-3.5" />
@@ -95,7 +124,6 @@ export default function OrderDetailsView({ id }: { id: string }) {
 
       <div className="mt-5 grid gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
-          {/* Items + totals */}
           <section aria-labelledby="items-h" className={`${card} overflow-hidden`}>
             <h2 id="items-h" className="px-4 py-3 text-sm font-bold text-[#111827]">
               Items
@@ -112,13 +140,13 @@ export default function OrderDetailsView({ id }: { id: string }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#F3F4F6]">
-                  {order.items.map((i, n) => (
+                  {items.map((i, n) => (
                     <tr key={`${i.sku}-${n}`}>
-                      <td className="px-4 py-2.5 font-semibold text-[#111827]">{i.name}</td>
-                      <td className="px-4 py-2.5 text-[#6B7280]">{i.sku}</td>
+                      <td className="px-4 py-2.5 font-semibold text-[#111827]">{i.productName || "—"}</td>
+                      <td className="px-4 py-2.5 text-[#6B7280]">{i.sku || "—"}</td>
                       <td className="px-4 py-2.5 text-right text-[#374151]">{i.quantity}</td>
                       <td className="px-4 py-2.5 text-right text-[#374151]">{formatMoney(i.unitPrice)}</td>
-                      <td className="px-4 py-2.5 text-right font-semibold text-[#111827]">{formatMoney(i.quantity * i.unitPrice)}</td>
+                      <td className="px-4 py-2.5 text-right font-semibold text-[#111827]">{formatMoney(i.lineTotal)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -126,88 +154,43 @@ export default function OrderDetailsView({ id }: { id: string }) {
             </div>
 
             <dl className="ml-auto w-full max-w-xs space-y-1.5 border-t border-[#F3F4F6] px-4 py-3 text-[13px] sm:mr-0">
-              <div className="flex justify-between">
-                <dt className="text-[#6B7280]">Subtotal</dt>
-                <dd className="text-[#111827]">{formatMoney(order.subtotal)}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-[#6B7280]">Shipping</dt>
-                <dd className="text-[#111827]">{order.shipping > 0 ? formatMoney(order.shipping) : "Free"}</dd>
-              </div>
-              {order.tax > 0 && (
-                <div className="flex justify-between">
-                  <dt className="text-[#6B7280]">Tax</dt>
-                  <dd className="text-[#111827]">{formatMoney(order.tax)}</dd>
-                </div>
-              )}
-              {order.discount > 0 && (
-                <div className="flex justify-between">
-                  <dt className="text-[#6B7280]">Discount</dt>
-                  <dd className="text-[#1F8F6B]">−{formatMoney(order.discount)}</dd>
-                </div>
-              )}
-              <div className="flex justify-between border-t border-[#F3F4F6] pt-1.5 text-sm font-extrabold">
+              <div className="flex justify-between text-sm font-extrabold">
                 <dt className="text-[#111827]">Total</dt>
-                <dd className="text-[#111827]">{formatMoney(order.total)}</dd>
+                <dd className="text-[#111827]">{formatMoney(order.totalAmount)}</dd>
               </div>
             </dl>
           </section>
         </div>
 
         <div className="space-y-4">
-          {/* Summary */}
           <section aria-labelledby="summary-h" className={`${card} p-4`}>
             <h2 id="summary-h" className="text-sm font-bold text-[#111827]">
               Order summary
             </h2>
             <dl className="mt-3 space-y-2.5 text-[13px]">
-              <div>
-                <dt className="text-[11px] font-semibold text-[#6B7280]">Customer</dt>
-                <dd className="mt-0.5 font-semibold text-[#111827]">{order.customerName || "—"}</dd>
-                {order.customerEmail && <dd className="text-[#6B7280]">{order.customerEmail}</dd>}
-                {order.customerPhone && <dd className="text-[#6B7280]">{order.customerPhone}</dd>}
-              </div>
-              <div>
-                <dt className="text-[11px] font-semibold text-[#6B7280]">Placed on</dt>
-                <dd className="mt-0.5 text-[#111827]">{formatDateTime(order.createdAt)}</dd>
-              </div>
-              {order.notes && (
-                <div>
-                  <dt className="text-[11px] font-semibold text-[#6B7280]">Notes</dt>
-                  <dd className="mt-0.5 whitespace-pre-line text-[#111827]">{order.notes}</dd>
-                </div>
-              )}
-              <div>
-                <dt className="text-[11px] font-semibold text-[#6B7280]">Created by</dt>
-                <dd className="mt-0.5 text-[#111827]">{order.createdBy || "—"}</dd>
-              </div>
+              {staff && <Field label="Customer" value={staff.customerName} />}
+              {staff && <Field label="Customer phone" value={staff.customerPhone} />}
+              {customer && <Field label="Recipient" value={customer.recipientName} />}
+              <Field label="Placed on" value={formatDateTime(order.createdAt)} />
+              {order.cancelledAt && <Field label="Cancelled on" value={formatDateTime(order.cancelledAt)} />}
+              <Field label="Payment method" value={order.paymentMethod} />
+              {customer && <Field label="Recipient phone" value={customer.recipientPhone} />}
+              {staff && <Field label="Notes" value={staff.notes} />}
+              {staff?.createdBy?.name && <Field label="Created by" value={staff.createdBy.name} />}
             </dl>
           </section>
 
-          {/* Status history */}
-          <section aria-labelledby="history-h" className={`${card} p-4`}>
-            <h2 id="history-h" className="text-sm font-bold text-[#111827]">
-              Status history
-            </h2>
-            {history.length === 0 ? (
-              <p className="mt-3 text-[13px] text-[#6B7280]">No status changes recorded.</p>
-            ) : (
-              <ol className="mt-3 space-y-3.5">
-                {history.map((h, n) => (
-                  <li key={`${h.at}-${n}`} className="relative pl-6">
-                    <span aria-hidden="true" className={`absolute left-0 top-1.5 h-2.5 w-2.5 rounded-full ${n === 0 ? "bg-[#FF5615]" : "bg-[#D1D5DB]"}`} />
-                    {n < history.length - 1 && <span aria-hidden="true" className="absolute left-[4px] top-4 h-[calc(100%+0.25rem)] w-px bg-[#E5E7EB]" />}
-                    <StatusBadge status={h.status} />
-                    <p className="mt-1 text-xs text-[#6B7280]">
-                      {formatDateTime(h.at)}
-                      {h.by ? ` · ${h.by}` : ""}
-                    </p>
-                    {h.note && <p className="mt-0.5 text-[13px] text-[#374151]">{h.note}</p>}
-                  </li>
-                ))}
-              </ol>
-            )}
-          </section>
+          {(order.shippingAddress || order.shippingCity) && (
+            <section aria-labelledby="shipping-h" className={`${card} p-4`}>
+              <h2 id="shipping-h" className="text-sm font-bold text-[#111827]">
+                Shipping
+              </h2>
+              <dl className="mt-3 space-y-2.5 text-[13px]">
+                <Field label="Address" value={order.shippingAddress} />
+                <Field label="City" value={order.shippingCity} />
+              </dl>
+            </section>
+          )}
         </div>
       </div>
 

@@ -46,12 +46,12 @@ describe("Badge", () => {
         <StatusBadge status="in_stock" />
         <StatusBadge status="low_stock" />
         <StatusBadge status="out_of_stock" />
-        <StatusBadge status="processing" />
+        <StatusBadge status="CONFIRMED" />
       </>,
     );
     expect(screen.getByText("In Stock")).toBeInTheDocument();
     expect(screen.getByText("Low Stock")).toBeInTheDocument();
     expect(screen.getByText("Out of Stock")).toBeInTheDocument();
-    expect(screen.getByText("Processing")).toBeInTheDocument();
+    expect(screen.getByText("Confirmed")).toBeInTheDocument();
   });
 });
