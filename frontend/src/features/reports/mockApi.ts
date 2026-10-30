@@ -1,10 +1,11 @@
 import { delay } from "../../api/mockSwitch";
+import { todayISO } from "../../lib/dateRange";
 import type { DateRange, DownloadedFile, ReportKind, ReportsApi } from "./types";
 
-const nameFor = (kind: ReportKind, range: DateRange) =>
-  kind === "sales" || kind === "stock-movements"
-    ? `${kind}-${range.from}_${range.to}.csv`
-    : `${kind}-${range.to}.csv`;
+const nameFor = (kind: ReportKind, range: DateRange) => {
+  if (kind === "inventory" || kind === "low-stock") return `${kind}-${todayISO()}.csv`;
+  return `${kind}-${range.from}_${range.to}.csv`;
+};
 
 /** A small CSV stand-in so the reports page works with VITE_USE_MOCK=true. */
 export const mockReportsApi: ReportsApi = {

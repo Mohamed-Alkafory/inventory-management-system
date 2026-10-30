@@ -1,5 +1,6 @@
 import { tokenStorage } from "../../api/tokenStorage";
 import { ApiError } from "../../lib/http";
+import { can } from "../../lib/permissions";
 import type { ContactAssignee, ContactMessage, ContactMessagesApi, ContactUpdateInput } from "./types";
 
 /*
@@ -67,7 +68,18 @@ let db: ContactMessage[] = SEED.map((m) => ({ ...m }));
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const LATENCY = 120;
 const notFound = () => new ApiError(404, "Contact message not found", { serverMessage: "Contact message not found" });
+const forbidden = () =>
+  new ApiError(403, "You don't have permission to do that.", { serverMessage: "Forbidden resource" });
 const find = (id: string | number) => db.find((m) => m.id === String(id));
+
+/** The real inbox is limited to `contact.read` (list/detail) and `contact.manage` (triage). */
+function requireRead() {
+  if (!can(tokenStorage.getSession()?.user.role, "contact.read")) throw forbidden();
+}
+
+function requireManage() {
+  if (!can(tokenStorage.getSession()?.user.role, "contact.manage")) throw forbidden();
+}
 
 function assigneeFor(id: string): ContactAssignee {
   const known = DIRECTORY[id];
@@ -88,6 +100,7 @@ function matches(m: ContactMessage, search: string) {
 export const mockContactMessagesApi: ContactMessagesApi = {
   async list(params) {
     await sleep(LATENCY);
+    requireRead();
     const rows = db
       .filter(
         (m) =>
@@ -102,6 +115,7 @@ export const mockContactMessagesApi: ContactMessagesApi = {
 
   async get(id) {
     await sleep(LATENCY);
+    requireRead();
     const message = find(id);
     if (!message) throw notFound();
     return { ...message };
@@ -109,6 +123,7 @@ export const mockContactMessagesApi: ContactMessagesApi = {
 
   async update(id, patch: ContactUpdateInput) {
     await sleep(LATENCY);
+    requireManage();
     const current = find(id);
     if (!current) throw notFound();
 
