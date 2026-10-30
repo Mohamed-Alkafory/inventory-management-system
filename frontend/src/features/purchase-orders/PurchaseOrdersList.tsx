@@ -4,9 +4,11 @@ import { Ban, Eye, PackagePlus, PackageSearch, Plus, ShoppingCart, Truck } from 
 import Pagination from "../../components/ui/Pagination";
 import RowActionsMenu from "../../components/ui/RowActionsMenu";
 import type { MenuAction } from "../../components/ui/RowActionsMenu";
+import { useAuth } from "../../context/auth/useAuth";
+import { can } from "../../lib/permissions";
 import CreatePoDialog, { type ReorderPrefill } from "./CreatePoDialog";
 import ReceiveDialog from "./ReceiveDialog";
-import { formatDate, formatMoney, poPath } from "./format";
+import { PO_PATH, formatDate, formatMoney, poPath } from "./format";
 import { usePoTransition, usePurchaseOrders } from "./hooks";
 import { PO_STATUSES, PO_STATUS_LABEL, allowedActions, canReceive } from "./status";
 import PoStatusBadge from "./PoStatusBadge";
@@ -24,9 +26,13 @@ const control =
  * navigates here with { reorderProduct } in router state, which opens the
  * create dialog pre-filled — so restocking is two clicks.
  */
-export default function PurchaseOrdersList() {
+export default function PurchaseOrdersList({ basePath = PO_PATH }: { basePath?: string }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { role } = useAuth();
+  const canCreate = can(role, "po.create");
+  const canUpdateStatus = can(role, "po.updateStatus");
+  const canReceivePo = can(role, "po.receive");
 
   const [status, setStatus] = useState<PoListParams["status"]>("");
   const [supplierId, setSupplierId] = useState("");
@@ -55,14 +61,14 @@ export default function PurchaseOrdersList() {
   const supplierNames = new Map((suppliers.data?.items ?? []).map((s) => [String(s.id), s.name]));
 
   const actionsFor = (po: PurchaseOrder): MenuAction[] => {
-    const allowed = allowedActions(po.status);
-    const detail = { label: "View details", icon: Eye, onSelect: () => navigate(poPath(po.id)) };
+    const allowed = canUpdateStatus ? allowedActions(po.status) : [];
+    const detail = { label: "View details", icon: Eye, onSelect: () => navigate(poPath(po.id, basePath)) };
     return [
       detail,
       ...(allowed.includes("order")
         ? [{ label: "Place order", icon: ShoppingCart, onSelect: () => void runTransition(po, "order") }]
         : []),
-      ...(canReceive(po.status)
+      ...(canReceivePo && canReceive(po.status)
         ? [{ label: "Receive stock", icon: PackagePlus, onSelect: () => setReceivingId(po.id) }]
         : []),
       ...(allowed.includes("cancel")
@@ -128,14 +134,16 @@ export default function PurchaseOrdersList() {
             Clear filters
           </button>
         )}
-        <button
-          type="button"
-          onClick={() => setCreate({ open: true, prefill: null })}
-          className="ms-auto inline-flex h-10 items-center gap-2 rounded-lg bg-[#FF5615] px-4 text-sm font-semibold text-white transition hover:bg-[#E74B0F]"
-        >
-          <Plus className="h-4 w-4" aria-hidden="true" />
-          New purchase order
-        </button>
+        {canCreate && (
+          <button
+            type="button"
+            onClick={() => setCreate({ open: true, prefill: null })}
+            className="ms-auto inline-flex h-10 items-center gap-2 rounded-lg bg-[#FF5615] px-4 text-sm font-semibold text-white transition hover:bg-[#E74B0F]"
+          >
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            New purchase order
+          </button>
+        )}
       </div>
 
       {actionError && (
@@ -160,7 +168,7 @@ export default function PurchaseOrdersList() {
           <div className="flex flex-col items-center gap-2 p-10 text-center">
             <PackageSearch className="h-10 w-10 text-[#D1D5DB]" aria-hidden="true" />
             <p className="text-sm font-medium text-[#374151]">{filtered ? "No purchase orders match these filters." : "No purchase orders yet."}</p>
-            {!filtered && <p className="text-sm text-[#6B7280]">Create one to restock products from a supplier.</p>}
+            {!filtered && canCreate && <p className="text-sm text-[#6B7280]">Create one to restock products from a supplier.</p>}
           </div>
         ) : (
           <div className={`overflow-x-auto transition-opacity ${isFetching ? "opacity-60" : ""}`} aria-busy={isFetching}>
@@ -180,7 +188,7 @@ export default function PurchaseOrdersList() {
                 {data.items.map((po) => (
                   <tr key={po.id}>
                     <td className="px-4 py-3">
-                      <Link to={poPath(po.id)} className="font-semibold text-[#111827] hover:text-[#FF5615] hover:underline">
+                      <Link to={poPath(po.id, basePath)} className="font-semibold text-[#111827] hover:text-[#FF5615] hover:underline">
                         #{po.number}
                       </Link>
                     </td>
@@ -220,7 +228,7 @@ export default function PurchaseOrdersList() {
         Receiving stock updates product quantities and writes purchase movements automatically.
       </p>
 
-      {create.open && (
+      {canCreate && create.open && (
         <CreatePoDialog
           prefill={create.prefill}
           onClose={() => {

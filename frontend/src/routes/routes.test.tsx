@@ -20,8 +20,16 @@ vi.mock("../page/Profile/Profile", () => ({ default: () => <p>Profile page</p> }
 vi.mock("../page/Products/Products", () => ({ default: () => <p>Products page</p> }));
 vi.mock("../page/Products/ShopProducts", () => ({ default: () => <p>Products page</p> }));
 vi.mock("../page/Products/ProductDetail", () => ({ default: () => <p>Product detail page</p> }));
-vi.mock("../admin/pages/Orders/NewOrder", () => ({ default: () => <p>New order page</p> }));
 vi.mock("../admin/pages/Dashboard/AdminDashboard", () => ({ default: () => <p>Admin dashboard page</p> }));
+vi.mock("../features/orders/create/NewOrderFlow", () => ({ default: () => <p>New order page</p> }));
+vi.mock("../features/orders/StaffOrdersPage", () => ({ default: () => <p>Staff orders page</p> }));
+vi.mock("../features/orders/StaffOrderDetailsPage", () => ({ default: () => <p>Staff order details page</p> }));
+vi.mock("../features/products/StaffProducts", () => ({ default: () => <p>Staff products page</p> }));
+vi.mock("../features/products/StaffProductDetails", () => ({ default: () => <p>Staff product details page</p> }));
+vi.mock("../staff/pages/Dashboard/StaffDashboard", () => ({ default: () => <p>Staff dashboard</p> }));
+vi.mock("../staff/pages/Inventory/Inventory", () => ({ default: () => <p>Staff inventory page</p> }));
+vi.mock("../staff/pages/PurchaseOrders/PurchaseOrders", () => ({ default: () => <p>Staff purchase orders page</p> }));
+vi.mock("../staff/pages/PurchaseOrders/PurchaseOrderDetails", () => ({ default: () => <p>Staff purchase order details page</p> }));
 
 // Never hit the network: the provider re-validates the stored session through authApi.me().
 vi.mock("../api/authApi", () => ({
@@ -80,13 +88,17 @@ describe("route access matrix", () => {
     view.unmount();
   });
 
-  it("ADMIN may open /admin, /staff, /support, /orders/new and /profile", () => {
+  it("ADMIN may open /admin, the staff workspace and /support but not customer pages", () => {
     signIn("ADMIN");
     const cases: Array<[string, string]> = [
       ["/admin", "Admin panel"],
-      ["/staff", "Staff workspace"],
+      ["/staff", "Staff dashboard"],
+      ["/staff/orders", "Staff orders page"],
+      ["/staff/orders/new", "New order page"],
+      ["/staff/inventory", "Staff inventory page"],
+      ["/staff/purchase-orders", "Staff purchase orders page"],
+      ["/staff/products", "Staff products page"],
       ["/support", "Support workspace"],
-      ["/orders/new", "New order page"],
       ["/profile", "Profile page"],
     ];
     for (const [path, text] of cases) {
@@ -96,18 +108,36 @@ describe("route access matrix", () => {
     }
   });
 
-  it("STAFF may open /staff and /orders/new but not /admin, /support or customer pages", () => {
-    signIn("STAFF");
-    let view = renderAt("/staff");
-    expect(screen.getByText("Staff workspace")).toBeInTheDocument();
-    view.unmount();
+  it("redirects the old /orders/new URL to /staff/orders/new for ADMIN and STAFF", async () => {
+    for (const role of ["ADMIN", "STAFF"] as const) {
+      signIn(role);
+      const view = renderAt("/orders/new");
+      expect(await screen.findByText("New order page")).toBeInTheDocument();
+      view.unmount();
+    }
+  });
 
-    view = renderAt("/orders/new");
-    expect(screen.getByText("New order page")).toBeInTheDocument();
-    view.unmount();
+  it("STAFF may open every /staff page but not /admin, /support or customer pages", () => {
+    signIn("STAFF");
+    const allowed: Array<[string, string]> = [
+      ["/staff", "Staff dashboard"],
+      ["/staff/orders", "Staff orders page"],
+      ["/staff/orders/new", "New order page"],
+      ["/staff/orders/o-1", "Staff order details page"],
+      ["/staff/inventory", "Staff inventory page"],
+      ["/staff/purchase-orders", "Staff purchase orders page"],
+      ["/staff/purchase-orders/po-1", "Staff purchase order details page"],
+      ["/staff/products", "Staff products page"],
+      ["/staff/products/p-1", "Staff product details page"],
+    ];
+    for (const [path, text] of allowed) {
+      const view = renderAt(path);
+      expect(screen.getByText(text)).toBeInTheDocument();
+      view.unmount();
+    }
 
     for (const path of ["/admin", "/support", "/cart", "/orders"]) {
-      view = renderAt(path);
+      const view = renderAt(path);
       expect(forbidden()).toBeInTheDocument();
       view.unmount();
     }
@@ -119,7 +149,7 @@ describe("route access matrix", () => {
     expect(screen.getByText("Support workspace")).toBeInTheDocument();
     view.unmount();
 
-    for (const path of ["/admin", "/staff", "/orders/new", "/cart", "/orders"]) {
+    for (const path of ["/admin", "/staff", "/staff/orders", "/staff/inventory", "/orders/new", "/cart", "/orders"]) {
       view = renderAt(path);
       expect(forbidden()).toBeInTheDocument();
       view.unmount();
@@ -136,7 +166,7 @@ describe("route access matrix", () => {
     expect(screen.getByText("My orders page")).toBeInTheDocument();
     view.unmount();
 
-    for (const path of ["/admin", "/staff", "/support", "/orders/new"]) {
+    for (const path of ["/admin", "/staff", "/staff/orders", "/staff/products", "/support", "/orders/new"]) {
       view = renderAt(path);
       expect(forbidden()).toBeInTheDocument();
       view.unmount();

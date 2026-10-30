@@ -1,5 +1,6 @@
-export const ORDERS_PATH = "/orders"; // change if the app lives under a prefix, e.g. "/admin/orders"
-export const orderPath = (id: string | number) => `${ORDERS_PATH}/${id}`;
+export const ORDERS_PATH = "/orders"; // customer "my orders"
+export const STAFF_ORDERS_PATH = "/staff/orders";
+export const orderPath = (id: string | number, basePath = ORDERS_PATH) => `${basePath}/${id}`;
 
 const CURRENCY = "USD";
 const money = new Intl.NumberFormat(undefined, { style: "currency", currency: CURRENCY });

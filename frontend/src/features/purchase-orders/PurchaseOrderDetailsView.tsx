@@ -7,6 +7,8 @@ import PoStatusBadge from "./PoStatusBadge";
 import { PO_STATUS_LABEL, allowedActions, canReceive } from "./status";
 import ReceiveDialog from "./ReceiveDialog";
 import ErrorState from "../../components/ui/ErrorState";
+import { useAuth } from "../../context/auth/useAuth";
+import { can } from "../../lib/permissions";
 import { PO_PATH, formatDate, formatDateTime, formatMoney } from "./format";
 import { usePoTransition, usePurchaseOrder } from "./hooks";
 
@@ -20,7 +22,8 @@ type ConfirmAction = "order" | "cancel";
  * dialog (ORDERED|PARTIALLY_RECEIVED). Receiving more than remaining is
  * blocked in the dialog and again server-side (409).
  */
-export default function PurchaseOrderDetailsView({ id }: { id: string }) {
+export default function PurchaseOrderDetailsView({ id, basePath = PO_PATH }: { id: string; basePath?: string }) {
+  const { role } = useAuth();
   const { data: po, isPending, isError, refetch } = usePurchaseOrder(id);
 
   const [confirm, setConfirm] = useState<ConfirmAction | null>(null);
@@ -46,7 +49,8 @@ export default function PurchaseOrderDetailsView({ id }: { id: string }) {
     );
   }
 
-  const allowed = allowedActions(po.status);
+  const allowed = can(role, "po.updateStatus") ? allowedActions(po.status) : [];
+  const mayReceive = can(role, "po.receive") && canReceive(po.status);
   const remainingTotal = po.lines.reduce((sum, l) => sum + Math.max(0, l.quantityOrdered - l.quantityReceived), 0);
 
   const details: { label: string; value: string }[] = [
@@ -82,7 +86,7 @@ export default function PurchaseOrderDetailsView({ id }: { id: string }) {
 
   return (
     <div>
-      <Link to={PO_PATH} className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#FF5615] hover:underline">
+      <Link to={basePath} className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#FF5615] hover:underline">
         <ArrowLeft className="h-4 w-4" aria-hidden="true" />
         All purchase orders
       </Link>
@@ -105,7 +109,7 @@ export default function PurchaseOrderDetailsView({ id }: { id: string }) {
               Place order
             </Button>
           )}
-          {canReceive(po.status) && (
+          {mayReceive && (
             <Button size="sm" leftIcon={<PackagePlus className="h-3.5 w-3.5" aria-hidden="true" />} onClick={() => setReceiveOpen(true)}>
               Receive stock{remainingTotal > 0 ? ` (${remainingTotal} left)` : ""}
             </Button>

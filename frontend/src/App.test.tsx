@@ -9,10 +9,10 @@ afterEach(() => {
 });
 
 describe("App", () => {
-  it("renders the app shell and redirects / to the dashboard", async () => {
+  it("renders the app shell and the public home page at /", async () => {
     render(<App />);
 
-    expect(await screen.findByRole("heading", { level: 1, name: "Dashboard" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: /know exactly/i })).toBeInTheDocument();
     expect(screen.getByRole("banner")).toBeInTheDocument();
     expect(screen.getByRole("main")).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "Main" })).toBeInTheDocument();
@@ -25,7 +25,7 @@ describe("App", () => {
     render(<App />);
 
     expect(await screen.findByRole("heading", { level: 1, name: /page not found/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /go to dashboard/i })).toHaveAttribute("href", "/dashboard");
+    expect(screen.getByRole("link", { name: /back to home/i })).toHaveAttribute("href", "/");
   });
 
   it("renders the mounted NotFound page for unknown paths", () => {
