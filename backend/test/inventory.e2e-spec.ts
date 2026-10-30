@@ -22,8 +22,8 @@ describe('Inventory Scenarios (e2e)', () => {
 
   let adminToken: string;
   let staffToken: string;
-  let adminId: string;
-  let staffId: string;
+  let _adminId: string;
+  let _staffId: string;
 
   beforeAll(async () => {
     const moduleFixture = await Test.createTestingModule({
@@ -66,7 +66,7 @@ describe('Inventory Scenarios (e2e)', () => {
         role: UserRole.ADMIN,
       },
     });
-    adminId = admin.id;
+    _adminId = admin.id;
 
     const staff = await prisma.user.create({
       data: {
@@ -76,7 +76,7 @@ describe('Inventory Scenarios (e2e)', () => {
         role: UserRole.STAFF,
       },
     });
-    staffId = staff.id;
+    _staffId = staff.id;
 
     // Login to get tokens
     const adminLogin = await request(app.getHttpServer())
@@ -477,7 +477,7 @@ describe('Inventory Scenarios (e2e)', () => {
       const category = await prisma.category.create({
         data: { name: 'Misc' },
       });
-      const p1 = await prisma.product.create({
+      await prisma.product.create({
         data: {
           name: 'Visible',
           sku: 'V-01',
@@ -486,7 +486,7 @@ describe('Inventory Scenarios (e2e)', () => {
           isActive: true,
         },
       });
-      const p2 = await prisma.product.create({
+      await prisma.product.create({
         data: {
           name: 'Hidden',
           sku: 'H-01',
