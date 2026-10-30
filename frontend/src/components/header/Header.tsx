@@ -8,6 +8,7 @@ import { useCart } from "../../context/cart/useCart";
 import { useFavorites } from "../../context/favorites/useFavorites";
 import { useCatalogCategories } from "../../hooks/useCatalog";
 import { homePathForRole } from "../../routes/redirect";
+import NotificationBell from "../../features/notifications/NotificationBell";
 import ProdexaLogo from "../Logo";
 import UserAvatar from "../user/UserAvatar";
 import "./header.css";
@@ -66,9 +67,12 @@ export default function Header() {
   // Signed-in staff/admin get a shortcut to their area; customers get their orders.
   const areaLink = role && !isCustomer ? { label: "Dashboard", href: homePathForRole(role) } : null;
   const ordersLink = isCustomer ? { label: "My orders", href: "/orders" } : null;
-  const extraLink = areaLink ?? ordersLink;
-  const navLinks = extraLink
-    ? [NAV_LINKS[0], extraLink, ...NAV_LINKS.slice(1)]
+  const notificationsLink = isAuthenticated ? { label: "Notifications", href: "/notifications" } : null;
+  const extraLinks = [areaLink, ordersLink, notificationsLink].filter(
+    (link): link is { label: string; href: string } => link !== null,
+  );
+  const navLinks = extraLinks.length > 0
+    ? [NAV_LINKS[0], ...extraLinks, ...NAV_LINKS.slice(1)]
     : NAV_LINKS;
 
   const closeMenu = () => setOpen(false);
@@ -149,6 +153,7 @@ export default function Header() {
           </form>
 
           <div className="header__icons">
+            {isAuthenticated && <NotificationBell />}
             {showShopIcons && (
               <>
                 <IconLink

@@ -52,6 +52,7 @@ import SupportMessages from "./support/pages/Messages/Messages";
 import SupportMessageDetails from "./support/pages/Messages/MessageDetails";
 import SupportOrders from "./support/pages/Orders/Orders";
 import SupportOrderDetails from "./support/pages/Orders/OrderDetails";
+import NotificationsPage from "./features/notifications/NotificationsPage";
 
 /**
  * The route table on its own so tests can mount it with a MemoryRouter.
@@ -79,6 +80,7 @@ export function AppRoutes() {
       <Route element={<ProtectedRoute />}>
         <Route path="/dashboard" element={<RoleHomeRedirect />} />
         <Route path="/profile" element={<Profile />} />
+        <Route path="/notifications" element={<NotificationsPage />} />
 
         {/* CUSTOMER only — shopping and own orders */}
         <Route element={<RoleRoute allow={["CUSTOMER"]} />}>
