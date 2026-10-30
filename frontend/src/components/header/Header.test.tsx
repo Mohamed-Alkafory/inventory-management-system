@@ -1,10 +1,8 @@
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { catalogApi } from "../../api/catalogApi";
-import { productsApi } from "../../api/productsApi";
 import { tokenStorage } from "../../api/tokenStorage";
 import AuthProvider from "../../context/auth/AuthProvider";
 import CartProvider from "../../context/cart/CartProvider";
@@ -15,18 +13,6 @@ import Header from "./Header";
 
 vi.mock("../../api/authApi", () => ({
   authApi: { login: vi.fn(), logout: vi.fn().mockResolvedValue(undefined), me: vi.fn().mockImplementation(() => new Promise(() => {})) },
-}));
-
-vi.mock("../../api/productsApi", () => ({
-  productsApi: { list: vi.fn(), get: vi.fn(), categories: vi.fn().mockResolvedValue([]) },
-}));
-
-vi.mock("../../api/catalogApi", () => ({
-  catalogApi: {
-    list: vi.fn(),
-    get: vi.fn(),
-    categories: vi.fn().mockResolvedValue([{ id: "c1", name: "Audio" }]),
-  },
 }));
 
 function renderHeader() {
@@ -63,13 +49,8 @@ const cartProduct = (id: string): ShopProduct => ({
   maxOrderable: 10,
 });
 
-const catalogCategoriesMock = vi.mocked(catalogApi.categories);
-const privateCategoriesMock = vi.mocked(productsApi.categories);
-
 beforeEach(() => {
   localStorage.clear();
-  catalogCategoriesMock.mockClear();
-  privateCategoriesMock.mockClear();
 });
 
 afterEach(() => {
@@ -158,24 +139,14 @@ describe("Header area links", () => {
   });
 });
 
-describe("Header category menu", () => {
-  it.each([
-    ["guest", null],
-    ["CUSTOMER", "CUSTOMER"],
-    ["ADMIN", "ADMIN"],
-  ] as const)("uses the public catalog categories for %s", async (_label, role) => {
-    if (role) signIn(role);
+describe("Header navigation", () => {
+  it("links the brand, primary nav and account entry points", () => {
     renderHeader();
 
-    await waitFor(() => expect(catalogCategoriesMock).toHaveBeenCalled());
-    expect(privateCategoriesMock).not.toHaveBeenCalled();
-  });
-
-  it("lists the public categories and links them to the shop filter", async () => {
-    renderHeader();
-    fireEvent.click(screen.getByRole("button", { name: /browse category/i }));
-
-    expect(screen.getByRole("menuitem", { name: "Browse all products" })).toBeInTheDocument();
-    expect(await screen.findByRole("menuitem", { name: "Audio" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /prodexa home/i })).toHaveAttribute("href", "/");
+    const products = screen.getAllByRole("link", { name: "Products" });
+    expect(products.some((link) => link.getAttribute("href") === "/products")).toBe(true);
+    const login = screen.getAllByRole("link", { name: /log in/i });
+    expect(login.some((link) => link.getAttribute("href") === "/login")).toBe(true);
   });
 });

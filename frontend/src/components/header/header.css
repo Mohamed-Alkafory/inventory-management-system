@@ -5,15 +5,13 @@
   --ink: #1f2937;
   --muted: #4b5563;
   --line: #e5e7eb;
-  --header-top-h: 72px;
-  --header-main-h: 56px;
-  /* Height of the whole header band (rows that position themselves under it use this). */
-  --header-h: 128px;
+  /* Height of the whole header bar. */
+  --header-h: 68px;
 }
 
 /* ---------- Shell ---------- */
 .header {
-   position: sticky;
+  position: sticky;
   top: 0;
   z-index: 50;
   background: #fff;
@@ -28,33 +26,52 @@
   width: 100%;
 }
 
-/* ---------- Row 1: logo + search + shop icons ---------- */
-.header__top {
+/* One flex row: logo left · centered nav links · icons + account right. */
+.header__row {
   display: flex;
   align-items: center;
-  gap: 24px;
-  height: var(--header-top-h);
-  padding :0 40px;
+  gap: 16px;
+  height: var(--header-h);
+  padding: 0 40px;
 }
 
-/* Row 2 carries the links on desktop; the drawer nav is mobile-only. */
+/* Equal-width side columns keep the middle (links) perfectly centered. */
+.header__left,
+.header__right {
+  display: flex;
+  align-items: center;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.header__left {
+  justify-content: flex-start;
+}
+
+.header__right {
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* The drawer nav is mobile-only; desktop uses the inline links below. */
 .header__nav {
   display: none;
   width: 100%;
 }
 
+/* ---------- Brand ---------- */
 .header__logo {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 9px;
   flex-shrink: 0;
   text-decoration: none;
 }
 
 .header__wordmark {
-  font-size: 22px;
+  font-size: 19px;
   font-weight: 800;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   color: var(--ink);
 }
 
@@ -62,61 +79,39 @@
   color: var(--brand);
 }
 
-.header__search {
-  display: flex;
-  flex: 1;
-  max-width: 520px;
-  height: 44px;
-  margin-inline: auto;
-  background: #fff;
-  border: 1.5px solid #f0d9c8;
-  border-radius: 10px;
-  overflow: hidden;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.header__search:focus-within {
-  border-color: var(--brand);
-  box-shadow: 0 0 0 3px rgba(230, 98, 11, 0.15);
-}
-
-.header__search input {
-  flex: 1;
-  min-width: 0;
-  border: 0;
-  padding: 0 14px;
-  font-size: 14px;
-  color: var(--ink);
-  outline: none;
-  background: transparent;
-}
-
-.header__search input::placeholder {
-  color: #9ca3af;
-}
-
-.header__search button {
+/* ---------- Inline nav links (centered in the bar) ---------- */
+.header__links {
   display: flex;
   align-items: center;
-  justify-content: center;
-  width: 48px;
-  color: #fff;
-  background: var(--brand);
-  border: 0;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
+  gap: 4px;
+  flex-shrink: 0;
 }
 
-.header__search button:hover {
-  background: var(--brand-dark);
+.header__links a {
+  display: block;
+  padding: 9px 12px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--muted);
+  border-radius: 8px;
+  text-decoration: none;
+  transition: color 0.2s ease, background-color 0.2s ease;
 }
 
+.header__links a:hover {
+  color: var(--brand);
+  background: var(--brand-tint);
+}
+
+/* ---------- Shop icons ---------- */
 .header__icons {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   flex-shrink: 0;
- 
 }
 
 .icon-link {
@@ -124,8 +119,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 42px;
-  height: 42px;
+  width: 40px;
+  height: 40px;
   color: var(--ink);
   border-radius: 10px;
   text-decoration: none;
@@ -155,135 +150,24 @@
   border-radius: 999px;
 }
 
-/* ---------- Row 2: categories + links + account ---------- */
-.header__main {
- background: #f8f9fb;
-  border-top: 1px solid var(--line);
-  padding: 0 40px;
-  width: 100vw;
-  margin-left: calc(50% - 50vw);
-}
-
-.header__main-inner {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  height: var(--header-main-h);
-  padding-inline: max(24px, calc((100vw - 1650px) / 2 + 24px));
-  
-}
-
-.header__cats {
-  position: relative;
-  flex-shrink: 0;
-}
-
-.header__cats-btn {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 16px;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--brand);
-  background: #fff;
-  border: 1.5px solid var(--brand);
-  border-radius: 10px;
-  cursor: pointer;
-  transition: background-color 0.2s ease, color 0.2s ease;
-}
-
-.header__cats-btn:hover {
-  color: var(--brand-dark);
-  border-color: var(--brand-dark);
-  background: var(--brand-tint);
-}
-
-.header__cats-btn .chevron {
-  transition: transform 0.2s ease;
-}
-
-.header__cats-btn[aria-expanded="true"] .chevron {
-  transform: rotate(180deg);
-}
-
-.header__cats-menu {
-  position: absolute;
-  top: calc(100% + 8px);
-  left: 0;
-  z-index: 60;
-  min-width: 230px;
-  max-height: 320px;
-  overflow-y: auto;
-  padding: 6px;
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.08);
-}
-
-.header__cats-item {
-  display: block;
-  width: 100%;
-  padding: 10px 12px;
-  font-size: 14px;
-  color: var(--ink);
-  text-align: left;
-  background: transparent;
-  border: 0;
-  border-radius: 8px;
-  text-decoration: none;
-  cursor: pointer;
-  transition: background-color 0.2s ease, color 0.2s ease;
-}
-
-.header__cats-item:hover {
-  color: var(--brand);
-  background: var(--brand-tint);
-}
-
-.header__links {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.header__links a {
-  display: block;
-  padding: 8px 14px;
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--muted);
-  border-radius: 8px;
-  text-decoration: none;
-  transition: color 0.2s ease, background-color 0.2s ease;
-}
-
-.header__links a:hover {
-  color: var(--brand);
-  background: var(--brand-tint);
-}
-
+/* ---------- Account ---------- */
 .header__acct {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-left: auto;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
-/* Text + icon pair at the end of the second row. */
+/* Text + icon pair at the end of the bar. */
 .btn--plain {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 9px 14px;
-  font-size: 15px;
+  padding: 8px 12px;
+  font-size: 14px;
   font-weight: 600;
   line-height: 1;
+  white-space: nowrap;
   color: var(--ink);
   background: transparent;
   border: 0;
@@ -302,8 +186,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  width: 38px;
+  height: 38px;
   color: var(--ink);
   background: #fff;
   border: 1px solid var(--line);
@@ -318,13 +202,13 @@
   border-color: var(--brand);
 }
 
-/* ---------- Buttons (login / sign up / mobile actions) ---------- */
+/* ---------- Buttons (login / sign up / drawer actions) ---------- */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 9px 18px;
-  font-size: 15px;
+  padding: 8px 16px;
+  font-size: 14px;
   font-weight: 600;
   line-height: 1;
   text-decoration: none;
@@ -378,34 +262,30 @@
 .icon-btn:focus-visible,
 .btn:focus-visible,
 .btn--plain:focus-visible,
-.header__cats-btn:focus-visible,
-.header__cats-item:focus-visible,
 .header__links a:focus-visible,
-.header__toggle:focus-visible,
-.header__search input:focus-visible {
+.header__toggle:focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
-.header__search:focus-within input {
-  outline: none;
-}
-
-/* ---------- Responsive ---------- */
-@media (max-width: 900px) {
-  .header__search,
-  .header__main {
-    display: none;
-  }
-
-  .header__top {
+/* ---------- Responsive: collapse to a burger drawer ---------- */
+@media (max-width: 1260px) {
+  .header__row {
     gap: 12px;
+    padding: 0 16px;
   }
 
-  /* Icons cluster right after the logo, burger at the far end. */
-  .header__icons {
-    margin-left: auto;
-    gap: 4px;
+  .header__left {
+    flex: 0 0 auto;
+  }
+
+  .header__right {
+    flex: 1 1 auto;
+  }
+
+  .header__links,
+  .header__acct {
+    display: none;
   }
 
   .header__toggle {
@@ -465,14 +345,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .header__search,
-  .header__search button,
   .icon-link,
   .icon-btn,
   .btn,
   .btn--plain,
-  .header__cats-btn,
-  .header__cats-btn .chevron,
   .header__links a {
     transition: none;
   }
