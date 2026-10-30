@@ -11,6 +11,7 @@ import Audit from "./admin/pages/Audit/Audit";
 import PurchaseOrders from "./admin/pages/PurchaseOrders/PurchaseOrders";
 import PurchaseOrderDetails from "./admin/pages/PurchaseOrders/PurchaseOrderDetails";
 import Header from "./components/header/Header";
+import SiteFooter from "./components/footer/SiteFooter";
 import ToastProvider from "./components/ui/toast/ToastProvider";
 import AuthProvider from "./context/auth/AuthProvider";
 import CartProvider from "./context/cart/CartProvider";
@@ -159,6 +160,7 @@ export default function App() {
                 <Header />
 
                 <AppRoutes />
+                <SiteFooter />
               </FavoritesProvider>
             </CartProvider>
           </AuthProvider>
