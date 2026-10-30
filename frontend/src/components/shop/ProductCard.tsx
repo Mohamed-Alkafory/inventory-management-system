@@ -1,14 +1,20 @@
 import { useState } from "react";
-import { Heart, Package, Pencil, ShoppingCart, Trash2 } from "lucide-react";
-import { Button, Skeleton, SkeletonText, StatusBadge } from "../ui";
+import { Heart, Package, ShoppingCart } from "lucide-react";
+import { Button, Skeleton, SkeletonText } from "../ui";
 import { Card, CardBody } from "../ui/Card";
 import { cn } from "../../lib/cn";
 import { formatPrice } from "../../lib/format";
 import { resolveImageUrl } from "../../lib/imageUrl";
-import type { InventoryProduct } from "../../types/inventory";
+import type { ShopProduct } from "../../types/shop";
 
 /** Product picture; falls back to an icon when there is no image or it fails to load. */
-export function ProductThumb({ product, className }: { product: InventoryProduct; className?: string }) {
+export function ProductThumb({
+  product,
+  className,
+}: {
+  product: Pick<ShopProduct, "imageUrl">;
+  className?: string;
+}) {
   const [failed, setFailed] = useState(false);
   const src = resolveImageUrl(product.imageUrl);
 
@@ -34,36 +40,30 @@ export function ProductThumb({ product, className }: { product: InventoryProduct
 }
 
 export type ProductCardProps = {
-  product: InventoryProduct;
-  isAdmin: boolean;
+  product: ShopProduct;
   isFavorite: boolean;
   disabled?: boolean;
   /** Opens the product page. Fired by clicking the picture or the name. */
-  onOpen: (product: InventoryProduct) => void;
-  onEdit?: (product: InventoryProduct) => void;
-  onDelete?: (product: InventoryProduct) => void;
+  onOpen: (product: ShopProduct) => void;
   /** Adds the product to the cart and navigates to the Cart page. */
-  onOrder: (product: InventoryProduct) => void;
-  onToggleFavorite: (product: InventoryProduct) => void;
+  onOrder: (product: ShopProduct) => void;
+  onToggleFavorite: (product: ShopProduct) => void;
 };
 
-/** One product in the grid: picture, name, description, price, and Order / favorite. */
+/** One product in the public grid: picture, name, description, price, availability and actions. */
 export function ProductCard({
   product,
-  isAdmin,
   isFavorite,
   disabled = false,
   onOpen,
-  onEdit,
-  onDelete,
   onOrder,
   onToggleFavorite,
 }: ProductCardProps) {
-  const outOfStock = product.stock <= 0;
+  const outOfStock = !product.inStock || product.maxOrderable <= 0;
 
   return (
     <Card className="flex h-full flex-col overflow-hidden" aria-busy={disabled || undefined}>
-      {/* Picture + status; the whole picture area opens the product page. */}
+      {/* Picture + availability; the whole picture area opens the product page. */}
       {/* overflow-hidden keeps every card the same 4:3 size, whatever the photo's ratio. */}
       <div className="relative aspect-[4/3] overflow-hidden">
         <button
@@ -76,32 +76,15 @@ export function ProductCard({
           <ProductThumb product={product} className="h-full w-full" />
         </button>
         <div className="pointer-events-none absolute left-3 top-3">
-          <StatusBadge status={product.status} />
+          <span
+            className={cn(
+              "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold",
+              outOfStock ? "bg-danger-50 text-danger-700" : "bg-success-50 text-success-700",
+            )}
+          >
+            {outOfStock ? "Out of stock" : "In stock"}
+          </span>
         </div>
-        {isAdmin && (onEdit || onDelete) && (
-          <div className="absolute right-2 top-2 flex gap-1">
-            {onEdit && (
-              <button
-                type="button"
-                onClick={() => onEdit(product)}
-                aria-label={`Edit ${product.name}`}
-                className="rounded-control bg-white/90 p-2 text-slate-600 shadow-card transition hover:bg-white hover:text-ink focus-visible:outline-2 focus-visible:outline-primary-500"
-              >
-                <Pencil className="size-4" aria-hidden="true" />
-              </button>
-            )}
-            {onDelete && (
-              <button
-                type="button"
-                onClick={() => onDelete(product)}
-                aria-label={`Delete ${product.name}`}
-                className="rounded-control bg-white/90 p-2 text-slate-600 shadow-card transition hover:bg-white hover:text-danger-600 focus-visible:outline-2 focus-visible:outline-primary-500"
-              >
-                <Trash2 className="size-4" aria-hidden="true" />
-              </button>
-            )}
-          </div>
-        )}
       </div>
 
       <CardBody className="flex flex-1 flex-col gap-2 p-4">
@@ -124,7 +107,7 @@ export function ProductCard({
         <div className="mt-auto flex items-baseline justify-between pt-2">
           <span className="text-lg font-bold text-ink">{formatPrice(product.price)}</span>
           <span className={cn("text-xs font-medium", outOfStock ? "text-danger-600" : "text-muted")}>
-            {outOfStock ? "None left" : `${product.stock} in stock`}
+            {outOfStock ? "Out of stock" : "In stock"}
           </span>
         </div>
 
@@ -136,7 +119,7 @@ export function ProductCard({
             disabled={disabled || outOfStock}
             onClick={() => onOrder(product)}
           >
-            Order
+            {outOfStock ? "Out of stock" : "Order"}
           </Button>
           <Button
             size="sm"

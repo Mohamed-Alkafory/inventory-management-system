@@ -27,6 +27,13 @@ describe("Home page", () => {
     trials.forEach((a) => expect(a).toHaveAttribute("href", "/contact"));
   });
 
+  it("links to the public catalog", () => {
+    renderHome();
+
+    const browse = screen.getByRole("link", { name: /browse products/i });
+    expect(browse).toHaveAttribute("href", "/products");
+  });
+
   it("opens and closes FAQ answers", () => {
     renderHome();
 

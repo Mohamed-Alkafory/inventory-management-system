@@ -4,7 +4,7 @@ import { Button, EmptyState } from "../../components/ui";
 import { ProductCard } from "../../components/shop/ProductCard";
 import { useCart } from "../../context/cart/useCart";
 import { useFavorites } from "../../context/favorites/useFavorites";
-import type { InventoryProduct } from "../../types/inventory";
+import type { ShopProduct } from "../../types/shop";
 
 /**
  * Products the visitor hearted on the catalogue. Everything is client-side
@@ -16,7 +16,7 @@ export default function Favorites() {
   const navigate = useNavigate();
 
   /** Order click → put the product in the cart, then jump to the Cart page. */
-  const handleOrder = (product: InventoryProduct) => {
+  const handleOrder = (product: ShopProduct) => {
     cart.addToCart(product);
     navigate("/cart");
   };
@@ -39,7 +39,6 @@ export default function Favorites() {
             <ProductCard
               key={product.id}
               product={product}
-              isAdmin={false}
               isFavorite
               onOpen={(product) => navigate(`/products/${product.id}`)}
               onOrder={handleOrder}

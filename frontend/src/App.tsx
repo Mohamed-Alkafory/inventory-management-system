@@ -24,7 +24,7 @@ import Forbidden from "./page/Forbidden/Forbidden";
 import Home from "./page/home/Home";
 import Login from "./page/Login/Login";
 import NotFound from "./page/NotFound/NotFound";
-import Products from "./page/Products/Products";
+import ShopProducts from "./page/Products/ShopProducts";
 import ProductDetail from "./page/Products/ProductDetail";
 import Register from "./page/Register/Register";
 import MyOrders from "./page/Orders/MyOrders";
@@ -52,6 +52,9 @@ export function AppRoutes() {
       <Route path="/about" element={<About />} />
       <Route path="/contact" element={<Contact />} />
       <Route path="/forbidden" element={<Forbidden />} />
+      {/* Public storefront: browsing never requires a token. */}
+      <Route path="/products" element={<ShopProducts />} />
+      <Route path="/products/:id" element={<ProductDetail />} />
 
       {/* Only for signed-out visitors */}
       <Route element={<GuestRoute />}>
@@ -63,8 +66,6 @@ export function AppRoutes() {
       <Route element={<ProtectedRoute />}>
         <Route path="/dashboard" element={<RoleHomeRedirect />} />
         <Route path="/profile" element={<Profile />} />
-        <Route path="/products" element={<Products />} />
-        <Route path="/products/:id" element={<ProductDetail />} />
 
         {/* CUSTOMER only — shopping and own orders */}
         <Route element={<RoleRoute allow={["CUSTOMER"]} />}>

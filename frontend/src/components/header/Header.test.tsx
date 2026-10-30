@@ -3,13 +3,14 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { catalogApi } from "../../api/catalogApi";
 import { productsApi } from "../../api/productsApi";
 import { tokenStorage } from "../../api/tokenStorage";
 import AuthProvider from "../../context/auth/AuthProvider";
 import CartProvider from "../../context/cart/CartProvider";
 import FavoritesProvider from "../../context/favorites/FavoritesProvider";
 import type { Role } from "../../types/auth";
-import type { InventoryProduct } from "../../types/inventory";
+import type { ShopProduct } from "../../types/shop";
 import Header from "./Header";
 
 vi.mock("../../api/authApi", () => ({
@@ -18,6 +19,14 @@ vi.mock("../../api/authApi", () => ({
 
 vi.mock("../../api/productsApi", () => ({
   productsApi: { list: vi.fn(), get: vi.fn(), categories: vi.fn().mockResolvedValue([]) },
+}));
+
+vi.mock("../../api/catalogApi", () => ({
+  catalogApi: {
+    list: vi.fn(),
+    get: vi.fn(),
+    categories: vi.fn().mockResolvedValue([{ id: "c1", name: "Audio" }]),
+  },
 }));
 
 function renderHeader() {
@@ -44,23 +53,23 @@ const signIn = (role: Role) =>
     user: { id: "1", name: "Test User", email: "test@prodexa.com", role },
   });
 
-const cartProduct = (id: string): InventoryProduct => ({
+const cartProduct = (id: string): ShopProduct => ({
   id,
   name: `Product ${id}`,
-  sku: `SKU-${id}`,
   categoryId: "c1",
   category: "Accessories",
   price: 450,
-  stock: 10,
-  reorderLevel: 0,
-  status: "in_stock",
+  inStock: true,
+  maxOrderable: 10,
 });
 
-const categoriesMock = vi.mocked(productsApi.categories);
+const catalogCategoriesMock = vi.mocked(catalogApi.categories);
+const privateCategoriesMock = vi.mocked(productsApi.categories);
 
 beforeEach(() => {
   localStorage.clear();
-  categoriesMock.mockClear();
+  catalogCategoriesMock.mockClear();
+  privateCategoriesMock.mockClear();
 });
 
 afterEach(() => {
@@ -150,25 +159,23 @@ describe("Header area links", () => {
 });
 
 describe("Header category menu", () => {
-  it("does not call the authenticated categories endpoint for guests or CUSTOMER", () => {
+  it.each([
+    ["guest", null],
+    ["CUSTOMER", "CUSTOMER"],
+    ["ADMIN", "ADMIN"],
+  ] as const)("uses the public catalog categories for %s", async (_label, role) => {
+    if (role) signIn(role);
     renderHeader();
-    expect(categoriesMock).not.toHaveBeenCalled();
-    cleanup();
 
-    signIn("CUSTOMER");
-    renderHeader();
-    expect(categoriesMock).not.toHaveBeenCalled();
+    await waitFor(() => expect(catalogCategoriesMock).toHaveBeenCalled());
+    expect(privateCategoriesMock).not.toHaveBeenCalled();
   });
 
-  it("loads categories for staff roles", async () => {
-    signIn("ADMIN");
-    renderHeader();
-    await waitFor(() => expect(categoriesMock).toHaveBeenCalled());
-  });
-
-  it("keeps the dropdown usable when the fetch is skipped", () => {
+  it("lists the public categories and links them to the shop filter", async () => {
     renderHeader();
     fireEvent.click(screen.getByRole("button", { name: /browse category/i }));
+
     expect(screen.getByRole("menuitem", { name: "Browse all products" })).toBeInTheDocument();
+    expect(await screen.findByRole("menuitem", { name: "Audio" })).toBeInTheDocument();
   });
 });

@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { shopStorage } from "../../lib/shopStorage";
-import type { InventoryProduct } from "../../types/inventory";
-import type { CartItem } from "../../types/shop";
+import type { CartItem, ShopProduct } from "../../types/shop";
 import { CartContext } from "./cart-context";
 import type { CartContextValue } from "./cart-context";
 
@@ -10,7 +9,7 @@ import type { CartContextValue } from "./cart-context";
 export type CartAddResult = "added" | "increased" | "capped" | "out_of_stock";
 
 export default function CartProvider({ children }: { children: ReactNode }) {
-  // Stored lines survive a refresh; a corrupt/older payload just comes back empty.
+  // Stored lines survive a refresh; legacy/corrupt payloads are sanitised on read.
   const [items, setItems] = useState<CartItem[]>(() => shopStorage.readCart());
 
   // Mirror for the synchronous result of addToCart (click handlers need an answer now).
@@ -23,24 +22,27 @@ export default function CartProvider({ children }: { children: ReactNode }) {
     shopStorage.saveCart(items);
   }, [items]);
 
-  const clamp = (product: InventoryProduct, quantity: number): number =>
-    Math.max(1, Math.min(quantity, Math.max(product.stock, 1)));
+  const clamp = (product: ShopProduct, quantity: number): number =>
+    Math.max(1, Math.min(quantity, Math.max(product.maxOrderable, 1)));
 
-  const addToCart = useCallback((product: InventoryProduct, quantity = 1): boolean => {
+  const addToCart = useCallback((product: ShopProduct, quantity = 1): boolean => {
     const rows = itemsRef.current;
     const existing = rows.find((row) => row.product.id === product.id);
     let outcome: CartAddResult = "added";
 
-    if (existing) {
-      const next = clamp(existing.product, existing.quantity + quantity);
+    if (product.maxOrderable <= 0) {
+      outcome = "out_of_stock";
+    } else if (existing) {
+      // Refresh the snapshot (price / availability may have changed since it was stored).
+      const next = clamp(product, existing.quantity + quantity);
       if (next === existing.quantity) {
-        outcome = existing.product.stock <= 0 ? "out_of_stock" : "capped";
+        outcome = "capped";
       } else {
         outcome = "increased";
-        setItems(rows.map((row) => (row.product.id === existing.product.id ? { ...row, quantity: next } : row)));
+        setItems(
+          rows.map((row) => (row.product.id === product.id ? { product, quantity: next } : row)),
+        );
       }
-    } else if (product.stock <= 0) {
-      outcome = "out_of_stock";
     } else {
       setItems([...rows, { product, quantity: clamp(product, quantity) }]);
     }

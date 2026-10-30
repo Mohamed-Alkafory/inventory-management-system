@@ -78,6 +78,12 @@ export default function HomeHero() {
               >
                 See How It Works
               </a>
+              <Link
+                to="/products"
+                className={buttonClass("secondary", "lg", "w-full hover:-translate-y-0.5 sm:w-auto", true)}
+              >
+                Browse Products
+              </Link>
             </div>
           </Reveal>
 

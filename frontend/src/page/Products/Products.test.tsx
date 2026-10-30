@@ -1,47 +1,33 @@
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError } from "../../api/errors";
-import { tokenStorage } from "../../api/tokenStorage";
+import { ApiError } from "../../lib/http";
 import ToastProvider from "../../components/ui/toast/ToastProvider";
-import AuthProvider from "../../context/auth/AuthProvider";
 import CartProvider from "../../context/cart/CartProvider";
 import FavoritesProvider from "../../context/favorites/FavoritesProvider";
-import type { InventoryProduct, ProductQuery } from "../../types/inventory";
-import type { Role } from "../../types/auth";
-import Products from "./Products";
+import type { CatalogQuery, ShopProduct } from "../../types/shop";
+import ShopProducts from "./ShopProducts";
 
 const list = vi.hoisted(() => vi.fn());
+const categories = vi.hoisted(() => vi.fn());
 
-vi.mock("../../api/authApi", () => ({
-  authApi: { login: vi.fn(), logout: vi.fn().mockResolvedValue(undefined), me: vi.fn().mockImplementation(() => new Promise(() => {})) },
-}));
-vi.mock("../../api/productsApi", () => ({
-  productsApi: { list, categories: vi.fn().mockResolvedValue([{ id: "c1", name: "Accessories" }, { id: "c2", name: "Audio" }]) },
+vi.mock("../../api/catalogApi", () => ({
+  catalogApi: { list, categories, get: vi.fn() },
 }));
 
-const product = (over: Partial<InventoryProduct> = {}): InventoryProduct => ({
-  id: "1",
+const product = (over: Partial<ShopProduct> = {}): ShopProduct => ({
+  id: "p-1",
   name: "Wireless Mouse",
-  sku: "WM-204",
-  categoryId: "c1",
-  category: "Accessories",
+  description: "A comfortable wireless mouse.",
   price: 450,
-  costPrice: 280,
-  stock: 142,
-  reorderLevel: 40,
-  status: "in_stock",
+  category: "Accessories",
+  categoryId: "c1",
+  inStock: true,
+  maxOrderable: 10,
   ...over,
 });
-
-const signIn = (role: Role) =>
-  tokenStorage.setSession({
-    accessToken: "t",
-    refreshToken: "r",
-    user: { id: "1", name: "Test User", email: "test@prodexa.com", role },
-  });
 
 function renderPage(url = "/products") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -49,13 +35,11 @@ function renderPage(url = "/products") {
     <QueryClientProvider client={client}>
       <ToastProvider>
         <MemoryRouter initialEntries={[url]}>
-          <AuthProvider>
-            <CartProvider>
-              <FavoritesProvider>
-                <Products />
-              </FavoritesProvider>
-            </CartProvider>
-          </AuthProvider>
+          <CartProvider>
+            <FavoritesProvider>
+              <ShopProducts />
+            </FavoritesProvider>
+          </CartProvider>
         </MemoryRouter>
       </ToastProvider>
     </QueryClientProvider>,
@@ -64,81 +48,82 @@ function renderPage(url = "/products") {
 
 beforeEach(() => {
   localStorage.clear();
-  tokenStorage.clear();
   list.mockReset();
-  list.mockResolvedValue({ items: [product()], total: 1 });
+  categories.mockReset();
+  list.mockResolvedValue({ items: [product()], total: 1, totalPages: 1, page: 1 });
+  categories.mockResolvedValue([
+    { id: "c1", name: "Accessories" },
+    { id: "c2", name: "Audio" },
+  ]);
 });
 afterEach(cleanup);
 
-describe("Products page", () => {
-  it("shows product cards with price and Order, plus Add Product for ADMIN", async () => {
-    signIn("ADMIN");
+describe("public products page", () => {
+  it("browses anonymously and shows only customer-safe fields", async () => {
     renderPage();
 
     expect(await screen.findByText("Wireless Mouse")).toBeInTheDocument();
     expect(screen.getByText("450 EGP")).toBeInTheDocument();
+    expect(screen.getAllByText("In stock").length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: /^order$/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /add product/i })).toBeInTheDocument();
-  });
-
-  it("hides Add Product from STAFF", async () => {
-    signIn("STAFF");
-    renderPage();
-
-    expect(await screen.findByText("Wireless Mouse")).toBeInTheDocument();
-    expect(screen.queryByText("280 EGP")).not.toBeInTheDocument();
+    expect(screen.queryByText(/sku/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /add product/i })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^order$/i })).toBeInTheDocument();
+    expect(screen.queryByText(/cost/i)).not.toBeInTheDocument();
   });
 
-  it("reads the filters from the URL and sends them to the API", async () => {
-    signIn("ADMIN");
-    renderPage("/products?q=mouse&category=c2&stock=low_stock&sort=price&dir=desc&page=1&size=20");
+  it("reads filters and sends them to the public catalog API", async () => {
+    renderPage("/products?q=mouse&category=c2&sort=price&dir=desc&page=1&size=20");
 
     await screen.findByText("Wireless Mouse");
-    const query = list.mock.calls[0][0] as ProductQuery;
+    const query = list.mock.calls[0][0] as CatalogQuery;
     expect(query).toMatchObject({
       search: "mouse",
       category: "c2",
-      status: "low_stock",
-      sortBy: "price",
-      sortDir: "desc",
+      sort: "price",
+      order: "desc",
       pageSize: 20,
     });
     expect(screen.getByRole("searchbox", { name: /search products/i })).toHaveValue("mouse");
   });
 
-  it("combines filters: changing the category keeps the search", async () => {
-    signIn("ADMIN");
-    renderPage("/products?q=mouse");
-    await screen.findByText("Wireless Mouse");
-    await screen.findByRole("option", { name: "Audio" });
-
-    fireEvent.change(screen.getByLabelText(/filter by category/i), { target: { value: "c2" } });
-
-    await waitFor(() => {
-      const last = list.mock.calls[list.mock.calls.length - 1][0] as ProductQuery;
-      expect(last).toMatchObject({ search: "mouse", category: "c2", page: 1 });
+  it("disables ordering when a product is out of stock", async () => {
+    list.mockResolvedValue({
+      items: [product({ inStock: false, maxOrderable: 0 })],
+      total: 1,
+      totalPages: 1,
+      page: 1,
     });
+    renderPage();
+
+    expect(await screen.findByText("Wireless Mouse")).toBeInTheDocument();
+    expect(screen.getAllByText("Out of stock").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /out of stock/i })).toBeDisabled();
   });
 
   it("shows the empty state with a way to clear the filters", async () => {
-    signIn("ADMIN");
-    list.mockResolvedValue({ items: [], total: 0 });
+    list.mockResolvedValue({ items: [], total: 0, totalPages: 1, page: 1 });
     renderPage("/products?q=zzz");
 
     expect(await screen.findByText(/no products match your filters/i)).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: /clear filters/i }).length).toBeGreaterThan(0);
   });
 
-  it("shows the error state and retries", async () => {
-    signIn("ADMIN");
-    list.mockRejectedValueOnce(new ApiError("Boom from the server.", { status: 500 }));
+  it("handles the public rate limit with a friendly retry", async () => {
+    list.mockRejectedValueOnce(new ApiError(429, "Too many requests. Please slow down and try again."));
     renderPage();
 
-    expect(await screen.findByText("Boom from the server.")).toBeInTheDocument();
+    expect(await screen.findByText(/try again in a moment/i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /try again/i }));
     expect(await screen.findByText("Wireless Mouse")).toBeInTheDocument();
+  });
+
+  it("uses the response meta for pagination", async () => {
+    list.mockResolvedValue({ items: [product()], total: 25, totalPages: 3, page: 1 });
+    renderPage();
+
+    await screen.findByText("Wireless Mouse");
+    expect(screen.getByText(/showing 1–10 of 25 products/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "3" })).toBeInTheDocument();
   });
 });

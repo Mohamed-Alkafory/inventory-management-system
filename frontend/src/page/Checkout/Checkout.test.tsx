@@ -6,7 +6,7 @@ import { useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider, useToast } from "../../components/ui";
 import CartProvider from "../../context/cart/CartProvider";
-import type { InventoryProduct } from "../../types/inventory";
+import type { ShopProduct } from "../../types/shop";
 import type { CreatedOrder } from "../../types/orders";
 import Checkout from "./Checkout";
 
@@ -16,16 +16,14 @@ vi.mock("../../api/ordersApi", () => ({
   ordersApi: { create, list: vi.fn(), get: vi.fn(), update: vi.fn(), remove: vi.fn() },
 }));
 
-const product = (): InventoryProduct => ({
+const product = (): ShopProduct => ({
   id: "p-1",
   name: "Wireless Mouse",
-  sku: "WM-204",
   categoryId: "c1",
   category: "Accessories",
   price: 450,
-  stock: 142,
-  reorderLevel: 40,
-  status: "in_stock",
+  inStock: true,
+  maxOrderable: 20,
 });
 
 function seedCart() {

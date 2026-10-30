@@ -1,36 +1,31 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ApiError } from "../../lib/http";
 import ToastProvider from "../../components/ui/toast/ToastProvider";
-import AuthProvider from "../../context/auth/AuthProvider";
 import CartProvider from "../../context/cart/CartProvider";
 import FavoritesProvider from "../../context/favorites/FavoritesProvider";
-import type { InventoryProduct } from "../../types/inventory";
+import type { ShopProduct } from "../../types/shop";
 import ProductDetail from "./ProductDetail";
 
-const list = vi.hoisted(() => vi.fn());
 const get = vi.hoisted(() => vi.fn());
 
-vi.mock("../../api/authApi", () => ({
-  authApi: { login: vi.fn(), logout: vi.fn().mockResolvedValue(undefined), me: vi.fn().mockImplementation(() => new Promise(() => {})) },
-}));
-vi.mock("../../api/productsApi", () => ({
-  productsApi: { list, get, categories: vi.fn().mockResolvedValue([{ id: "c1", name: "Accessories" }]) },
+vi.mock("../../api/catalogApi", () => ({
+  catalogApi: { get, list: vi.fn(), categories: vi.fn().mockResolvedValue([]) },
 }));
 
-const product = (): InventoryProduct => ({
+const product = (over: Partial<ShopProduct> = {}): ShopProduct => ({
   id: "p-1",
   name: "Mechanical Keyboard",
-  sku: "KB-310",
-  categoryId: "c1",
-  category: "Accessories",
   description: "Tactile switches with per-key RGB lighting.",
   price: 1850,
-  stock: 36,
-  reorderLevel: 15,
-  status: "in_stock",
+  category: "Accessories",
+  categoryId: "c1",
+  inStock: true,
+  maxOrderable: 3,
+  ...over,
 });
 
 function renderPage() {
@@ -39,13 +34,14 @@ function renderPage() {
     <QueryClientProvider client={client}>
       <ToastProvider>
         <MemoryRouter initialEntries={["/products/p-1"]}>
-          <AuthProvider>
-            <CartProvider>
-              <FavoritesProvider>
-                <ProductDetail />
-              </FavoritesProvider>
-            </CartProvider>
-          </AuthProvider>
+          <CartProvider>
+            <FavoritesProvider>
+              <Routes>
+                <Route path="/products/:id" element={<ProductDetail />} />
+                <Route path="/products" element={<p>All products page</p>} />
+              </Routes>
+            </FavoritesProvider>
+          </CartProvider>
         </MemoryRouter>
       </ToastProvider>
     </QueryClientProvider>,
@@ -63,25 +59,64 @@ afterEach(() => {
   localStorage.clear();
 });
 
-describe("Product detail page", () => {
-  it("renders the big picture info: name, description, price and status", async () => {
+describe("product detail page", () => {
+  it("renders customer-safe info only: name, description, price and availability", async () => {
     renderPage();
 
     expect(await screen.findByRole("heading", { name: "Mechanical Keyboard" })).toBeInTheDocument();
     expect(screen.getByText("Tactile switches with per-key RGB lighting.")).toBeInTheDocument();
     expect(screen.getByText("1,850 EGP")).toBeInTheDocument();
-    expect(screen.getByText(/36 in stock/i)).toBeInTheDocument();
+    expect(screen.getByText("In stock")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /add to cart/i })).toBeInTheDocument();
+    expect(screen.queryByText(/sku/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/36 in stock/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/cost price/i)).not.toBeInTheDocument();
   });
 
-  it("adds the picked quantity to the cart", async () => {
+  it("caps the quantity at maxOrderable", async () => {
     renderPage();
     await screen.findByRole("heading", { name: "Mechanical Keyboard" });
 
-    fireEvent.click(screen.getByRole("button", { name: /increase quantity/i }));
+    const plus = screen.getByRole("button", { name: /increase quantity/i });
+    fireEvent.click(plus);
+    fireEvent.click(plus);
+    expect(plus).toBeDisabled();
+
     fireEvent.click(screen.getByRole("button", { name: /add to cart/i }));
 
-    expect(await screen.findByText(/added to cart/i)).toBeInTheDocument();
+    const stored = JSON.parse(localStorage.getItem("prodexa.cart.v1") ?? "[]");
+    expect(stored[0].quantity).toBe(3);
+    expect(stored[0].product).toMatchObject({ id: "p-1", name: "Mechanical Keyboard", maxOrderable: 3 });
+    expect(stored[0].product).not.toHaveProperty("sku");
+    expect(stored[0].product).not.toHaveProperty("costPrice");
+    expect(stored[0].product).not.toHaveProperty("stock");
+  });
+
+  it("disables add-to-cart when the product is out of stock", async () => {
+    get.mockResolvedValue(product({ inStock: false, maxOrderable: 0 }));
+    renderPage();
+
+    expect(await screen.findByRole("heading", { name: "Mechanical Keyboard" })).toBeInTheDocument();
+    expect(screen.getAllByText("Out of stock").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /out of stock/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /increase quantity/i })).toBeDisabled();
+  });
+
+  it("shows a not-found state for an inactive/unknown product (404)", async () => {
+    get.mockRejectedValue(new ApiError(404, "We couldn't find what you were looking for."));
+    renderPage();
+
+    expect(await screen.findByText("Product not found")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /all products/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /try again/i })).not.toBeInTheDocument();
+  });
+
+  it("surfaces the rate limit message (429)", async () => {
+    get.mockRejectedValue(new ApiError(429, "Too many requests. Please slow down and try again."));
+    renderPage();
+
+    expect(await screen.findByText(/try again in a moment/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /try again/i })).toBeInTheDocument();
   });
 
   it("hearts and un-hearts the product", async () => {

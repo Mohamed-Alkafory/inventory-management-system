@@ -1,10 +1,10 @@
 import { createContext } from "react";
-import type { InventoryProduct } from "../../types/inventory";
+import type { ShopProduct } from "../../types/shop";
 
 export type FavoritesContextValue = {
-  items: InventoryProduct[];
+  items: ShopProduct[];
   has: (productId: string) => boolean;
-  toggle: (product: InventoryProduct) => void;
+  toggle: (product: ShopProduct) => void;
   remove: (productId: string) => void;
 };
 

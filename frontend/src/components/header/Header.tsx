@@ -6,7 +6,7 @@ import { ChevronDown, Heart, LayoutGrid, Search, ShoppingCart } from "lucide-rea
 import { useAuth } from "../../context/auth/useAuth";
 import { useCart } from "../../context/cart/useCart";
 import { useFavorites } from "../../context/favorites/useFavorites";
-import { useProductCategories } from "../../hooks/useProducts";
+import { useCatalogCategories } from "../../hooks/useCatalog";
 import { homePathForRole } from "../../routes/redirect";
 import ProdexaLogo from "../Logo";
 import UserAvatar from "../user/UserAvatar";
@@ -58,9 +58,8 @@ export default function Header() {
   const { items: favorites } = useFavorites();
   const isCustomer = role === "CUSTOMER";
   const showShopIcons = !isAuthenticated || isCustomer;
-  // The categories endpoint is staff-facing for now: customers and guests must not call it (403).
-  const canBrowseCategories = isAuthenticated && !isCustomer;
-  const categories = useProductCategories(canBrowseCategories);
+  // Public catalog categories: safe for guests, customers and staff alike (no token).
+  const categories = useCatalogCategories();
   const navigate = useNavigate();
   const catsRef = useRef<HTMLDivElement>(null);
 
@@ -228,44 +227,39 @@ export default function Header() {
               </button>
               {catsOpen && (
                 <div className="header__cats-menu" id="header-cats-menu" role="menu">
-                  {!canBrowseCategories ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="header__cats-item"
+                    onClick={() => {
+                      setCatsOpen(false);
+                      closeMenu();
+                      navigate("/products");
+                    }}
+                  >
+                    Browse all products
+                  </button>
+                  {categories.isPending && (
+                    <span className="header__cats-item" aria-disabled="true">
+                      Loading categories…
+                    </span>
+                  )}
+                  {categories.isError && (
+                    <button type="button" className="header__cats-item" onClick={() => void categories.refetch()}>
+                      Couldn't load categories — retry
+                    </button>
+                  )}
+                  {categories.data?.map((c) => (
                     <button
+                      key={c.id}
                       type="button"
                       role="menuitem"
                       className="header__cats-item"
-                      onClick={() => {
-                        setCatsOpen(false);
-                        closeMenu();
-                        navigate("/products");
-                      }}
+                      onClick={() => goToCategory(c.id)}
                     >
-                      Browse all products
+                      {c.name}
                     </button>
-                  ) : (
-                    <>
-                      {categories.isPending && (
-                        <span className="header__cats-item" aria-disabled="true">
-                          Loading categories…
-                        </span>
-                      )}
-                      {categories.isError && (
-                        <button type="button" className="header__cats-item" onClick={() => void categories.refetch()}>
-                          Couldn't load categories — retry
-                        </button>
-                      )}
-                      {categories.data?.map((c) => (
-                        <button
-                          key={c.id}
-                          type="button"
-                          role="menuitem"
-                          className="header__cats-item"
-                          onClick={() => goToCategory(c.id)}
-                        >
-                          {c.name}
-                        </button>
-                      ))}
-                    </>
-                  )}
+                  ))}
                 </div>
               )}
             </div>
