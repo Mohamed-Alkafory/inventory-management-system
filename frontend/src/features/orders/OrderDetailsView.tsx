@@ -2,10 +2,12 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft, Ban, CheckCircle2 } from "lucide-react";
 import { ApiError } from "../../lib/http";
+import { can } from "../../lib/permissions";
 import { useAuth } from "../../context/auth/useAuth";
 import { ORDERS_PATH, formatDateTime, formatMoney, formatNumber } from "./format";
 import { useMyOrder, useOrder } from "./hooks";
 import OrderActionDialog from "./OrderActionDialog";
+import OrderNotesPanel from "./OrderNotesPanel";
 import type { ActionTarget } from "./OrderActionDialog";
 import { ACTION_RULES, getOrderActions } from "./status";
 import StatusBadge from "./StatusBadge";
@@ -94,10 +96,22 @@ export default function OrderDetailsView({
   const items = order.items ?? [];
   const customer = scope === "my" ? (order as CustomerOrder) : null;
   const staff = scope === "staff" ? (order as StaffOrder) : null;
+  // Notes and the audit notice only exist inside the back-office order screens.
+  const showNotes = scope === "staff" && can(role, "orders.notes.read");
+  const auditedVisit = scope === "staff" && (role === "SUPPORT" || role === "STAFF");
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 sm:px-6">
       <BackLink to={basePath} />
+
+      {auditedVisit && (
+        <p
+          role="note"
+          className="mt-4 rounded-lg border border-[#E5E7EB] bg-[#F8F8F8] px-3 py-2 text-xs text-[#6B7280]"
+        >
+          Opening this order is recorded. Personal data access is audited.
+        </p>
+      )}
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
         <div className="flex flex-wrap items-center gap-2">
@@ -168,6 +182,8 @@ export default function OrderDetailsView({
               </div>
             </dl>
           </section>
+
+          {showNotes && <OrderNotesPanel orderId={order.id} canWrite={can(role, "orders.notes.write")} />}
         </div>
 
         <div className="space-y-4">

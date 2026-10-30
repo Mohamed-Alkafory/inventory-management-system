@@ -46,6 +46,10 @@ import StaffProducts from "./features/products/StaffProducts";
 import StaffProductDetails from "./features/products/StaffProductDetails";
 import SupportLayout from "./support/layouts/SupportLayout";
 import SupportDashboard from "./support/pages/Dashboard/SupportDashboard";
+import SupportMessages from "./support/pages/Messages/Messages";
+import SupportMessageDetails from "./support/pages/Messages/MessageDetails";
+import SupportOrders from "./support/pages/Orders/Orders";
+import SupportOrderDetails from "./support/pages/Orders/OrderDetails";
 
 /**
  * The route table on its own so tests can mount it with a MemoryRouter.
@@ -104,6 +108,10 @@ export function AppRoutes() {
         <Route element={<RoleRoute allow={["ADMIN", "SUPPORT"]} />}>
           <Route path="/support" element={<SupportLayout />}>
             <Route index element={<SupportDashboard />} />
+            <Route path="messages" element={<SupportMessages />} />
+            <Route path="messages/:id" element={<SupportMessageDetails />} />
+            <Route path="orders" element={<SupportOrders />} />
+            <Route path="orders/:id" element={<SupportOrderDetails />} />
           </Route>
         </Route>
 

@@ -124,6 +124,9 @@ describe("OrdersList", () => {
           totalAmount: 49.98,
           createdAt,
           customerName: "Ahmed Mohamed",
+          // SUPPORT list rows never carry these; even if they leak in, the row must not render them.
+          customerPhone: "+20 100 000 0000",
+          shippingAddress: "1 Nile Street",
         },
       ]),
     );
@@ -138,6 +141,8 @@ describe("OrdersList", () => {
 
     expect(screen.queryByRole("menuitem", { name: "Confirm order" })).toBeNull();
     expect(screen.getByRole("menuitem", { name: "Cancel order" })).toBeInTheDocument();
+    expect(screen.queryByText("+20 100 000 0000")).toBeNull();
+    expect(screen.queryByText("1 Nile Street")).toBeNull();
   });
 
   it("customer scope filters by status through the customer query", async () => {

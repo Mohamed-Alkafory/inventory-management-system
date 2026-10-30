@@ -4,7 +4,7 @@ import { customerOrdersApi, staffOrdersApi } from "./api";
 import { ordersApi as globalOrdersApi } from "../../api/ordersApi";
 import { productKeys } from "../../hooks/useProducts";
 import type { CreateOrderInput, CreatedOrder } from "../../types/orders";
-import type { CreateMyOrderInput, Id, MyOrderListParams, OrderListParams } from "./types";
+import type { CreateMyOrderInput, Id, MyOrderListParams, OrderListParams, OrderNote } from "./types";
 
 /**
  * Both scopes live under the ["orders"] root so a new order can refresh every
@@ -22,6 +22,7 @@ export const staffOrderKeys = {
   all: [...ROOT, "staff"] as const,
   list: (p: OrderListParams) => [...staffOrderKeys.all, "list", p] as const,
   detail: (id: Id) => [...staffOrderKeys.all, "detail", String(id)] as const,
+  notes: (id: Id) => [...staffOrderKeys.all, "notes", String(id)] as const,
 };
 
 export const orderKeys = {
@@ -106,6 +107,36 @@ export function useCancelOrder() {
   return useMutation({
     mutationFn: (id: Id) => staffOrdersApi.cancelOrder(id),
     onSettled: () => qc.invalidateQueries({ queryKey: staffOrderKeys.all }),
+  });
+}
+
+/** Internal note thread for one order (oldest first). */
+export const useOrderNotes = (id: Id, options: EnabledOptions = {}) =>
+  useQuery({
+    queryKey: staffOrderKeys.notes(id),
+    queryFn: () => staffOrdersApi.listNotes(id),
+    enabled: (options.enabled ?? true) && Boolean(id),
+    retry: (count, err) => !(err instanceof ApiError && err.status === 404) && count < 1,
+  });
+
+/**
+ * Append an internal note. The created note is put straight into the cached
+ * thread (optimistic refresh), then the notes/detail queries are revalidated
+ * so the server remains the source of truth.
+ */
+export function useAddOrderNote(id: Id) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (note: string) => staffOrdersApi.addNote(id, note),
+    onSuccess: (note: OrderNote) => {
+      qc.setQueryData(staffOrderKeys.notes(id), (old: OrderNote[] | undefined) =>
+        old ? [...old, note] : [note],
+      );
+      return Promise.all([
+        qc.invalidateQueries({ queryKey: staffOrderKeys.notes(id) }),
+        qc.invalidateQueries({ queryKey: staffOrderKeys.detail(id) }),
+      ]);
+    },
   });
 }
 

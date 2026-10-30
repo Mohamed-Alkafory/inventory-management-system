@@ -86,6 +86,16 @@ export interface StaffOrder {
   }>;
 }
 
+/** One internal note on an order (GET/POST /orders/:id/notes). */
+export interface OrderNote {
+  id: string;
+  orderId: string;
+  authorId?: string;
+  note: string;
+  author?: { id: string; name: string };
+  createdAt: string;
+}
+
 /** Staff/support/admin list filters. */
 export interface OrderListParams {
   search: string;
@@ -130,4 +140,8 @@ export interface StaffOrdersApi {
   updateOrderStatus(id: Id, status: "CONFIRMED" | "CANCELLED"): Promise<void>;
   /** POST /orders/:id/cancel — PENDING only (SUPPORT/STAFF/ADMIN). */
   cancelOrder(id: Id): Promise<void>;
+  /** GET /orders/:id/notes — oldest first, never paginated. */
+  listNotes(id: Id): Promise<OrderNote[]>;
+  /** POST /orders/:id/notes — internal, trimmed, 1–2000 chars. */
+  addNote(id: Id, note: string): Promise<OrderNote>;
 }

@@ -7,6 +7,10 @@ const CAPABILITIES: Capability[] = [
   "orders.cancelPending",
   "orders.cancelConfirmed",
   "orders.cancelOwn",
+  "orders.notes.read",
+  "orders.notes.write",
+  "contact.read",
+  "contact.manage",
   "stock.adjust",
   "po.receive",
   "po.create",
@@ -24,6 +28,8 @@ describe("can", () => {
     expect(can("STAFF", "orders.confirm")).toBe(true);
     expect(can("STAFF", "orders.cancelPending")).toBe(true);
     expect(can("STAFF", "orders.cancelConfirmed")).toBe(true);
+    expect(can("STAFF", "orders.notes.read")).toBe(true);
+    expect(can("STAFF", "orders.notes.write")).toBe(true);
     expect(can("STAFF", "stock.adjust")).toBe(true);
     expect(can("STAFF", "po.receive")).toBe(true);
 
@@ -32,11 +38,17 @@ describe("can", () => {
     expect(can("STAFF", "products.write")).toBe(false);
     expect(can("STAFF", "suppliers.write")).toBe(false);
     expect(can("STAFF", "orders.cancelOwn")).toBe(false);
+    expect(can("STAFF", "contact.read")).toBe(false);
+    expect(can("STAFF", "contact.manage")).toBe(false);
   });
 
-  it("gives SUPPORT only pending-order cancellation", () => {
-    expect(can("SUPPORT", "orders.cancelPending")).toBe(true);
-    for (const capability of CAPABILITIES.filter((c) => c !== "orders.cancelPending")) {
+  it("gives SUPPORT pending cancellation, order notes and the inbox only", () => {
+    for (const capability of ["orders.cancelPending", "orders.notes.read", "orders.notes.write", "contact.read", "contact.manage"] as const) {
+      expect(can("SUPPORT", capability)).toBe(true);
+    }
+    for (const capability of CAPABILITIES.filter(
+      (c) => !["orders.cancelPending", "orders.notes.read", "orders.notes.write", "contact.read", "contact.manage"].includes(c),
+    )) {
       expect(can("SUPPORT", capability)).toBe(false);
     }
   });

@@ -75,6 +75,32 @@ describe("mockStaffOrdersApi", () => {
     await expect(mockStaffOrdersApi.cancelOrder(2)).rejects.toMatchObject({ status: 409 }); // already CONFIRMED
     await expect(mockStaffOrdersApi.cancelOrder(9)).resolves.toBeUndefined(); // PENDING
   });
+
+  it("lists and appends internal notes, oldest first", async () => {
+    signIn("2");
+
+    const before = await mockStaffOrdersApi.listNotes(2);
+    expect(before.length).toBeGreaterThan(0);
+    expect(before[0].note).toBe("Confirmed by phone. Courier booked.");
+
+    const created = await mockStaffOrdersApi.addNote(2, "  Courier confirmed the new slot  ");
+    expect(created).toMatchObject({
+      orderId: "2",
+      note: "Courier confirmed the new slot",
+      authorId: "2",
+    });
+
+    const after = await mockStaffOrdersApi.listNotes(2);
+    expect(after.map((n) => n.id)).toContain(created.id);
+    expect(after.at(-1)?.note).toBe("Courier confirmed the new slot");
+  });
+
+  it("rejects blank, oversized and foreign-order notes", async () => {
+    await expect(mockStaffOrdersApi.addNote(2, "   ")).rejects.toMatchObject({ status: 400 });
+    await expect(mockStaffOrdersApi.addNote(2, "x".repeat(2001))).rejects.toMatchObject({ status: 400 });
+    await expect(mockStaffOrdersApi.addNote("missing", "hello")).rejects.toMatchObject({ status: 404 });
+    await expect(mockStaffOrdersApi.listNotes("missing")).rejects.toMatchObject({ status: 404 });
+  });
 });
 
 describe("mockCustomerOrdersApi.createMyOrder", () => {

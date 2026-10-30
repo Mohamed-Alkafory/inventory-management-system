@@ -1,5 +1,6 @@
 export const ORDERS_PATH = "/orders"; // customer "my orders"
 export const STAFF_ORDERS_PATH = "/staff/orders";
+export const SUPPORT_ORDERS_PATH = "/support/orders";
 export const orderPath = (id: string | number, basePath = ORDERS_PATH) => `${basePath}/${id}`;
 
 const CURRENCY = "USD";
