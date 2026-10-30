@@ -8,7 +8,9 @@ import AuditRowDetails from "./AuditRowDetails";
 import { useAuditLogs } from "./hooks";
 import { ENTITY_TYPES, actionsFor, humanizeAction } from "./status";
 import type { AuditListParams, AuditLog } from "./types";
+import RoleBadge from "../users/RoleBadge";
 import { useUsers } from "../users/hooks";
+import { ROLE_LABELS } from "../../types/auth";
 
 const PAGE_SIZE = 10;
 
@@ -32,6 +34,8 @@ export default function AuditList() {
 
   // Actor dropdown (ADMIN-only page, so the /users list is reachable).
   const users = useUsers({ search: "", role: "", page: 1, pageSize: 100 });
+  // Audit rows only join { id, name }; the role comes from the users list.
+  const roleByUserId = new Map((users.data?.items ?? []).map((u) => [u.id, u.role]));
 
   const params: AuditListParams = { userId, entityType, action, from, to, page, pageSize: PAGE_SIZE };
   const { data, isPending, isError, isFetching, refetch } = useAuditLogs(params);
@@ -81,7 +85,7 @@ export default function AuditList() {
           <option value="">All users</option>
           {users.data?.items.map((u) => (
             <option key={u.id} value={u.id}>
-              {u.name}
+              {u.name} ({ROLE_LABELS[u.role]})
             </option>
           ))}
         </select>
@@ -172,10 +176,16 @@ export default function AuditList() {
               <tbody className="divide-y divide-[#F3F4F6]">
                 {data.items.map((log) => {
                   const link = entityLink(log.entityType, log.entityId);
+                  const actorRole = log.userId ? roleByUserId.get(log.userId) : undefined;
                   return (
                     <tr key={log.id} className="align-top">
                       <td className="whitespace-nowrap px-4 py-2.5 text-[#6B7280]">{formatDateTime(log.createdAt)}</td>
-                      <td className="px-4 py-2.5 font-medium text-[#111827]">{log.userName ?? "System"}</td>
+                      <td className="px-4 py-2.5 font-medium text-[#111827]">
+                        <span className="flex flex-wrap items-center gap-2">
+                          <span>{log.userName ?? "System"}</span>
+                          {actorRole && <RoleBadge role={actorRole} />}
+                        </span>
+                      </td>
                       <td className="px-4 py-2.5">
                         <span className="rounded-full bg-[#FFF1EB] px-2 py-0.5 text-[11px] font-semibold text-[#FF5615]">
                           {humanizeAction(log.action)}

@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { tokenStorage } from "../api/tokenStorage";
@@ -97,6 +97,9 @@ describe("route access matrix", () => {
     signIn("ADMIN");
     const cases: Array<[string, string]> = [
       ["/admin", "Admin panel"],
+      ["/admin/orders", "Staff orders page"],
+      ["/admin/orders/new", "New order page"],
+      ["/admin/orders/o-1", "Staff order details page"],
       ["/staff", "Staff dashboard"],
       ["/staff/orders", "Staff orders page"],
       ["/staff/orders/new", "New order page"],
@@ -115,6 +118,15 @@ describe("route access matrix", () => {
       expect(screen.getByText(text)).toBeInTheDocument();
       view.unmount();
     }
+  });
+
+  it("shows Orders and Support links in the admin sidebar", () => {
+    signIn("ADMIN");
+    renderAt("/admin");
+
+    const nav = screen.getByRole("navigation", { name: "Admin" });
+    expect(within(nav).getByRole("link", { name: "Orders" })).toHaveAttribute("href", "/admin/orders");
+    expect(within(nav).getByRole("link", { name: "Support" })).toHaveAttribute("href", "/support/messages");
   });
 
   it("redirects the old /orders/new URL to /staff/orders/new for ADMIN and STAFF", async () => {
@@ -145,7 +157,7 @@ describe("route access matrix", () => {
       view.unmount();
     }
 
-    for (const path of ["/admin", "/support", "/support/messages", "/support/orders", "/cart", "/orders"]) {
+    for (const path of ["/admin", "/admin/orders", "/support", "/support/messages", "/support/orders", "/cart", "/orders"]) {
       const view = renderAt(path);
       expect(forbidden()).toBeInTheDocument();
       view.unmount();
@@ -167,7 +179,7 @@ describe("route access matrix", () => {
       view.unmount();
     }
 
-    for (const path of ["/admin", "/staff", "/staff/orders", "/staff/inventory", "/orders/new", "/cart", "/orders"]) {
+    for (const path of ["/admin", "/admin/orders", "/staff", "/staff/orders", "/staff/inventory", "/orders/new", "/cart", "/orders"]) {
       const view = renderAt(path);
       expect(forbidden()).toBeInTheDocument();
       view.unmount();
@@ -184,7 +196,7 @@ describe("route access matrix", () => {
     expect(screen.getByText("My orders page")).toBeInTheDocument();
     view.unmount();
 
-    for (const path of ["/admin", "/staff", "/staff/orders", "/staff/products", "/support", "/support/messages", "/support/orders", "/orders/new"]) {
+    for (const path of ["/admin", "/admin/orders", "/staff", "/staff/orders", "/staff/products", "/support", "/support/messages", "/support/orders", "/orders/new"]) {
       view = renderAt(path);
       expect(forbidden()).toBeInTheDocument();
       view.unmount();

@@ -113,6 +113,40 @@ describe("OrdersList", () => {
     expect(screen.getByRole("menuitem", { name: "Cancel order" })).toBeInTheDocument();
   });
 
+  it("ADMIN on /admin/orders can open details and act on a PENDING order", async () => {
+    mocks.role = "ADMIN";
+    mocks.useOrders.mockReturnValue(
+      queryResult([
+        {
+          id: 1,
+          orderNumber: "ORD-0001",
+          status: "PENDING",
+          totalAmount: 49.98,
+          createdAt,
+          customerName: "Ahmed Mohamed",
+        },
+      ]),
+    );
+
+    render(
+      <MemoryRouter>
+        <OrdersList scope="staff" basePath="/admin/orders" />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("link", { name: "#ORD-0001" })).toHaveAttribute("href", "/admin/orders/1");
+
+    fireEvent.click(screen.getByRole("button", { name: "Actions for #ORD-0001" }));
+    expect(screen.getByRole("menuitem", { name: "Confirm order" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Cancel order" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Confirm order" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Confirm order" }));
+
+    await waitFor(() => expect(mocks.updateStatus.mutateAsync).toHaveBeenCalledWith({ id: 1, status: "CONFIRMED" }));
+  });
+
   it("SUPPORT never gets a confirm action", () => {
     mocks.role = "SUPPORT";
     mocks.useOrders.mockReturnValue(
