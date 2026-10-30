@@ -2,7 +2,6 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import App from "./App";
-import aboutBanner from "./img/about-banner.png";
 
 afterEach(() => {
   cleanup();
@@ -10,22 +9,23 @@ afterEach(() => {
 });
 
 describe("App", () => {
-  it("renders the header and the home page on /", () => {
+  it("renders the app shell and redirects / to the dashboard", async () => {
     render(<App />);
 
-    expect(screen.getByRole("banner")).toBeTruthy();
-    expect(screen.getByRole("main")).toBeTruthy();
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/know exactly what you have/i);
+    expect(await screen.findByRole("heading", { level: 1, name: "Dashboard" })).toBeInTheDocument();
+    expect(screen.getByRole("banner")).toBeInTheDocument();
+    expect(screen.getByRole("main")).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Main" })).toBeInTheDocument();
   });
 
-  it("resolves the About banner image through the bundler", () => {
-    window.history.pushState({}, "", "/about");
+  it("renders the not-found page for unknown routes", async () => {
+    window.history.pushState({}, "", "/does-not-exist");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+
     render(<App />);
 
-    const img = document.querySelector("main img") as HTMLImageElement;
-    expect(img).toBeTruthy();
-    // The src must come from the imported asset module (bundled by Vite), not a raw "/src/..." string.
-    expect(img.getAttribute("src")).toBe(aboutBanner);
+    expect(await screen.findByRole("heading", { level: 1, name: /page not found/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /go to dashboard/i })).toHaveAttribute("href", "/dashboard");
   });
 
   it("renders the mounted NotFound page for unknown paths", () => {

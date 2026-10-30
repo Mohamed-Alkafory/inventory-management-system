@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ApiError } from "../../lib/http";
 import { useAdjustStock } from "./hooks";
@@ -39,7 +39,7 @@ export default function AdjustStockForm({
     handleSubmit,
     setError,
     setFocus,
-    watch,
+    control,
     formState: { errors },
   } = useForm<AdjustFormValues>({
     resolver: zodResolver(adjustSchema),
@@ -47,7 +47,8 @@ export default function AdjustStockForm({
     mode: "onTouched",
   });
 
-  const change = parseChange(watch("change") ?? "");
+  const changeValue = useWatch({ control, name: "change" });
+  const change = parseChange(changeValue ?? "");
   const preview = change === null ? null : item.currentStock + change;
 
   const onSubmit = handleSubmit(async (values) => {

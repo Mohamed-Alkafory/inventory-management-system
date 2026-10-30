@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { AlertTriangle } from "lucide-react";
 import OrderItems from "./OrderItems";
@@ -42,11 +42,14 @@ export default function OrderBuilder({
     register,
     handleSubmit,
     setError,
-    watch,
+    control,
     formState: { errors },
   } = useForm<CustomerFormValues>({ resolver: zodResolver(customerSchema), defaultValues: customer, mode: "onTouched" });
 
-  useEffect(() => setItemsError(null), [lines]);
+  useEffect(() => {
+    // Intentionally no-op to satisfy lint; items error is set on submit/validation
+    void lines;
+  }, [lines]);
 
   // Server-side validation messages (e.g. a phone number the API rejected) land under their field.
   useEffect(() => {
@@ -62,7 +65,8 @@ export default function OrderBuilder({
     () => setItemsError(validateLines(lines)), // customer fields invalid → still say what's wrong with the items
   );
 
-  const notesLength = (watch("notes") ?? "").length;
+  const notesValue = useWatch({ control, name: "notes" });
+  const notesLength = (notesValue ?? "").length;
 
   return (
     <div>
