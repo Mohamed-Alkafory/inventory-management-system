@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { FaBars, FaSignOutAlt, FaTimes, FaUser } from "react-icons/fa";
-import { ChevronDown, Heart, LayoutGrid, Search, ShoppingCart } from "lucide-react";
+import { ChevronDown, Heart, LayoutGrid, Search, Settings as SettingsIcon, ShoppingCart } from "lucide-react";
 import { useAuth } from "../../context/auth/useAuth";
 import { useCart } from "../../context/cart/useCart";
 import { useFavorites } from "../../context/favorites/useFavorites";
@@ -185,6 +185,10 @@ export default function Header() {
                     <FaSignOutAlt aria-hidden="true" style={{ marginRight: 8 }} />
                     Log out
                   </button>
+                  <Link to="/settings" className="btn btn--ghost" onClick={closeMenu}>
+                    <SettingsIcon className="size-4" aria-hidden="true" style={{ marginRight: 8 }} />
+                    Settings
+                  </Link>
                   <Link to="/profile" className="btn btn--primary" onClick={closeMenu}>
                     <FaUser aria-hidden="true" style={{ marginRight: 8 }} />
                     My profile
@@ -284,6 +288,9 @@ export default function Header() {
                     <FaSignOutAlt aria-hidden="true" />
                     Log out
                   </button>
+                  <Link to="/settings" className="icon-btn" aria-label="Settings">
+                    <SettingsIcon className="size-5" aria-hidden="true" />
+                  </Link>
                   <Link to="/profile" className="icon-btn" aria-label="Your profile">
                     <UserAvatar name={user?.name} src={user?.avatarUrl} size="sm" />
                   </Link>

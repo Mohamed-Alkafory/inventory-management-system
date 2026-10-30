@@ -8,6 +8,7 @@ import {
   LifeBuoy,
   Package,
   ScrollText,
+  Settings,
   ShoppingBag,
   Truck,
   Users as UsersIcon,
@@ -27,6 +28,7 @@ const NAV: AreaNavItem[] = [
   { to: "/admin/users", label: "Users", icon: UsersIcon },
   { to: "/admin/audit-logs", label: "Audit Log", icon: ScrollText },
   { to: "/notifications", label: "Notifications", icon: Bell },
+  { to: "/settings", label: "Settings", icon: Settings },
   { to: "/support/messages", label: "Support", icon: LifeBuoy },
 ];
 
