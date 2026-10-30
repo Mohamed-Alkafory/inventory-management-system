@@ -1,13 +1,21 @@
-import type { StockStatus } from "../components/ui/StatusBadge";
-import type { InventoryProduct } from "../types/inventory";
+import type { CartItem, ShopProduct } from "../types/shop";
 
 /*
   localStorage persistence for the shopping cart and favorites.
-  Same guarded pattern as api/tokenStorage, so a corrupt or older payload
-  simply comes back empty instead of crashing the page.
+  Only customer-safe catalog fields are stored — never sku, cost, exact stock,
+  supplier or barcode. Older payloads (built from the internal inventory shape)
+  are sanitised on read: unknown fields are dropped and unusable rows discarded.
 */
 
-type ProductDict = Record<string, unknown>;
+type Dict = Record<string, unknown>;
+
+const isDict = (v: unknown): v is Dict => typeof v === "object" && v !== null && !Array.isArray(v);
+const str = (v: unknown): string | undefined => (typeof v === "string" && v.trim() !== "" ? v : undefined);
+const num = (v: unknown): number | undefined => {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string" && v.trim() !== "" && Number.isFinite(Number(v))) return Number(v);
+  return undefined;
+};
 
 function read<T>(key: string, validate: (rows: unknown[]) => T[]): T[] {
   try {
@@ -20,7 +28,7 @@ function read<T>(key: string, validate: (rows: unknown[]) => T[]): T[] {
   }
 }
 
-function write<T>(key: string, value: T[]): void {
+function write(key: string, value: unknown[]): void {
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch {
@@ -28,59 +36,88 @@ function write<T>(key: string, value: T[]): void {
   }
 }
 
-/** Leniently rebuilds a product snapshot; null when the row is beyond repair. */
-function toProductSnapshot(v: ProductDict): InventoryProduct | null {
-  if (typeof v.id !== "string" || typeof v.name !== "string" || typeof v.price !== "number") return null;
+/**
+ * Rebuilds the catalog snapshot. Accepts the current shape and the legacy
+ * inventory snapshot (where `stock` was stored): `stock` becomes `maxOrderable`.
+ */
+function toShopProduct(raw: unknown): ShopProduct | null {
+  if (!isDict(raw)) return null;
+
+  const id = str(raw.id);
+  const name = str(raw.name);
+  const price = num(raw.price);
+  if (!id || !name || price === undefined) return null;
+
+  const rawCategory = raw.category;
+  const category = (isDict(rawCategory) ? str(rawCategory.name) : str(rawCategory)) ?? "";
+  const categoryId = isDict(rawCategory) ? str(rawCategory.id) : str(raw.categoryId);
+
+  const maxOrderable = Math.max(0, Math.floor(num(raw.maxOrderable) ?? num(raw.stock) ?? 0));
+
   return {
-    id: v.id,
-    name: v.name,
-    sku: typeof v.sku === "string" ? v.sku : "",
-    categoryId: typeof v.categoryId === "string" ? v.categoryId : "",
-    supplierId: typeof v.supplierId === "string" ? v.supplierId : undefined,
-    barcode: typeof v.barcode === "string" ? v.barcode : undefined,
-    isActive: typeof v.isActive === "boolean" ? v.isActive : true,
-    category: typeof v.category === "string" ? v.category : "",
-    description: typeof v.description === "string" ? v.description : undefined,
-    price: v.price,
-    costPrice: typeof v.costPrice === "number" ? v.costPrice : undefined,
-    stock: typeof v.stock === "number" ? v.stock : 0,
-    reorderLevel: typeof v.reorderLevel === "number" ? v.reorderLevel : 0,
-    status: (typeof v.status === "string" ? v.status : "in_stock") as StockStatus,
-    imageUrl: typeof v.imageUrl === "string" ? v.imageUrl : undefined,
+    id,
+    name,
+    price,
+    imageUrl: str(raw.imageUrl),
+    category,
+    categoryId,
+    inStock: maxOrderable > 0,
+    maxOrderable,
   };
 }
 
-const toInventoryProduct = (raw: unknown): InventoryProduct | null =>
-  typeof raw === "object" && raw !== null ? toProductSnapshot(raw as ProductDict) : null;
+/** The only fields written to localStorage. */
+function toSnapshot(product: ShopProduct): Dict {
+  return {
+    id: product.id,
+    name: product.name,
+    price: product.price,
+    imageUrl: product.imageUrl,
+    maxOrderable: product.maxOrderable,
+    category: product.category,
+  };
+}
 
-export type StoredCartLine = { product: InventoryProduct; quantity: number };
+const toCartLine = (raw: unknown): CartItem | null => {
+  if (!isDict(raw)) return null;
+  const product = toShopProduct(raw.product);
+  if (!product || product.maxOrderable <= 0) return null;
+
+  const quantity = Math.max(1, Math.floor(num(raw.quantity) ?? 1));
+  return { product, quantity: Math.min(quantity, product.maxOrderable) };
+};
 
 export const shopStorage = {
   cartKey: "prodexa.cart.v1",
   favoritesKey: "prodexa.favorites.v1",
 
-  readCart(): StoredCartLine[] {
-    return read<StoredCartLine>(this.cartKey, (parsed) =>
-      parsed.flatMap((line) => {
-        const product = toInventoryProduct(line == null ? null : (line as StoredCartLine).product);
-        const quantity = Math.max(1, Math.floor(Number(line && (line as StoredCartLine).quantity) || 1));
-        return product ? [{ product, quantity }] : [];
-      }),
+  readCart(): CartItem[] {
+    return read<CartItem>(this.cartKey, (parsed) =>
+      parsed.map(toCartLine).filter((line): line is CartItem => line !== null),
     );
   },
 
-  saveCart(lines: StoredCartLine[]): void {
-    write(this.cartKey, lines);
-  },
-
-  readFavorites(): InventoryProduct[] {
-    return read<InventoryProduct>(this.favoritesKey, (parsed) =>
-      parsed.map(toInventoryProduct).filter((p): p is InventoryProduct => p !== null),
+  saveCart(lines: CartItem[]): void {
+    write(
+      this.cartKey,
+      lines.map((line) => ({ product: toSnapshot(line.product), quantity: line.quantity })),
     );
   },
 
-  saveFavorites(products: InventoryProduct[]): void {
-    write(this.favoritesKey, products);
+  readFavorites(): ShopProduct[] {
+    return read<ShopProduct>(this.favoritesKey, (parsed) => {
+      const seen = new Set<string>();
+      return parsed.flatMap((row) => {
+        const product = toShopProduct(row);
+        if (!product || seen.has(product.id)) return [];
+        seen.add(product.id);
+        return [product];
+      });
+    });
+  },
+
+  saveFavorites(products: ShopProduct[]): void {
+    write(this.favoritesKey, products.map(toSnapshot));
   },
 
   /** Mostly for tests. */

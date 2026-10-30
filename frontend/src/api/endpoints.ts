@@ -26,6 +26,15 @@ export const PRODUCT_ENDPOINTS = {
 } as const;
 
 /*
+  Public storefront endpoints. No token is required and the responses only carry
+  the customer-safe catalog fields. Query names are built in api/catalogMappers.ts.
+*/
+export const CATALOG_ENDPOINTS = {
+  products: "/catalog/products",
+  categories: "/catalog/categories",
+} as const;
+
+/*
   Order endpoints. POST /orders takes { items: [{ productId, quantity }]
   plus optional customer info — prices and totals are computed server-side.
 */

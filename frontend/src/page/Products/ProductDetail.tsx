@@ -1,17 +1,16 @@
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, ChevronRight, Heart, Minus, Package, Plus, ShoppingCart } from "lucide-react";
-import { ApiError } from "../../api/errors";
-import { Button, Card, EmptyState, Skeleton, SkeletonText, StatusBadge, useToast } from "../../components/ui";
-import { useAuth } from "../../context/auth/useAuth";
+import { Button, Card, EmptyState, Skeleton, SkeletonText, useToast } from "../../components/ui";
 import { useCart } from "../../context/cart/useCart";
 import { useFavorites } from "../../context/favorites/useFavorites";
-import { useProduct } from "../../hooks/useProducts";
+import { useCatalogProduct } from "../../hooks/useCatalog";
 import { cn } from "../../lib/cn";
 import { formatPrice } from "../../lib/format";
 import { ProductThumb } from "../../components/shop/ProductCard";
+import { catalogErrorMessage, isNotFound } from "./catalogError";
 
-/** Quantity stepper shared with the cart page: − [n] +, clamped by stock. */
+/** Quantity stepper: − [n] +, capped by the catalog's maxOrderable. */
 function QuantityStepper({
   value,
   max,
@@ -60,16 +59,14 @@ function DetailSkeleton() {
 }
 
 /**
- * Product detail page: big picture, full description, price, quantity and
- * the same cart / favorites flows as the catalogue.
+ * Public product detail: big picture, full description, price, availability and
+ * the cart / favorites flows. No internal inventory fields are shown.
  */
 export default function ProductDetail() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
-  const { hasRole } = useAuth();
-  const isAdmin = hasRole("ADMIN");
-  const { data: product, isPending, isError, error, refetch } = useProduct(id);
+  const { data: product, isPending, isError, error, refetch } = useCatalogProduct(id);
 
   const cart = useCart();
   const favorites = useFavorites();
@@ -87,18 +84,21 @@ export default function ProductDetail() {
   }
 
   if (isError || !product) {
+    const missing = isNotFound(error);
     return (
       <div className="min-h-[calc(100vh-128px)] bg-surface-alt py-10 text-ink">
         <div className="mx-auto w-full max-w-7xl px-4 sm:px-6">
           <EmptyState
             icon={<Package className="size-6" aria-hidden="true" />}
-            title="We couldn't load this product"
-            description={error instanceof ApiError ? error.message : "Please try again in a moment."}
+            title={missing ? "Product not found" : "We couldn't load this product"}
+            description={missing ? "It may be inactive or no longer sold." : catalogErrorMessage(error)}
             action={
               <div className="flex gap-2">
-                <Button variant="secondary" onClick={() => void refetch()}>
-                  Try again
-                </Button>
+                {!missing && (
+                  <Button variant="secondary" onClick={() => void refetch()}>
+                    Try again
+                  </Button>
+                )}
                 <Link to="/products">
                   <Button>All products</Button>
                 </Link>
@@ -110,7 +110,8 @@ export default function ProductDetail() {
     );
   }
 
-  const outOfStock = product.stock <= 0;
+  const outOfStock = !product.inStock || product.maxOrderable <= 0;
+  const maxQuantity = Math.max(product.maxOrderable, 1);
   const isFavorite = favorites.has(product.id);
 
   const addToCart = () => {
@@ -145,23 +146,22 @@ export default function ProductDetail() {
           {/* Info */}
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-muted">
-              {product.category || "Uncategorised"} · SKU {product.sku}
+              {product.category || "Uncategorised"}
             </p>
             <h1 className="mt-2 text-3xl font-bold leading-tight">{product.name}</h1>
 
             <div className="mt-3 flex items-center gap-3">
-              <StatusBadge status={product.status} />
-              <span className={cn("text-sm font-medium", outOfStock ? "text-danger-600" : "text-muted")}>
-                {outOfStock ? "Out of stock" : `${product.stock} in stock`}
+              <span
+                className={cn(
+                  "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold",
+                  outOfStock ? "bg-danger-50 text-danger-700" : "bg-success-50 text-success-700",
+                )}
+              >
+                {outOfStock ? "Out of stock" : "In stock"}
               </span>
             </div>
 
             <p className="mt-4 text-3xl font-bold text-ink">{formatPrice(product.price)}</p>
-            {isAdmin && product.costPrice !== undefined && (
-              <p className="mt-1 text-sm text-muted">
-                Cost price: {formatPrice(product.costPrice)} · Reorder level: {product.reorderLevel}
-              </p>
-            )}
 
             <div className="mt-6 border-t border-line pt-6">
               <h2 className="text-base font-bold">Description</h2>
@@ -173,7 +173,7 @@ export default function ProductDetail() {
             <div className="mt-6 flex flex-wrap items-center gap-3">
               <QuantityStepper
                 value={quantity}
-                max={Math.max(product.stock, 1)}
+                max={maxQuantity}
                 onChange={setQuantity}
                 disabled={outOfStock}
               />

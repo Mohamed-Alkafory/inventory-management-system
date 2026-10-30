@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { ApiError } from "../../api/errors";
 import { Button, EmptyState, Input, Pagination, Select } from "../../components/ui";
 import { Card, CardBody } from "../../components/ui/Card";
-import { ProductCard, ProductCardSkeleton } from "../../components/shop/ProductCard";
+import { AdminProductCard, AdminProductCardSkeleton } from "../../admin/components/AdminProductCard";
 import { useCart } from "../../context/cart/useCart";
 import { useFavorites } from "../../context/favorites/useFavorites";
 import { useAuth } from "../../context/auth/useAuth";
@@ -15,6 +15,7 @@ import { useProductCategories, useProducts } from "../../hooks/useProducts";
 import { cn } from "../../lib/cn";
 import { STOCK_STATUSES } from "../../types/inventory";
 import type { InventoryProduct, ProductSortField, StockStatus } from "../../types/inventory";
+import type { ShopProduct } from "../../types/shop";
 import { PAGE_SIZES } from "./productQuery";
 import { useProductFilters } from "./useProductFilters";
 
@@ -35,6 +36,21 @@ const SORT_OPTIONS: Array<{ value: string; label: string }> = [
 ];
 
 const SEARCH_DEBOUNCE_MS = 300;
+
+/** Internal inventory row → the customer-safe snapshot used by the cart/favorites. */
+function toShopSnapshot(product: InventoryProduct): ShopProduct {
+  return {
+    id: product.id,
+    name: product.name,
+    description: product.description,
+    price: product.price,
+    imageUrl: product.imageUrl,
+    category: product.category,
+    categoryId: product.categoryId,
+    inStock: product.stock > 0,
+    maxOrderable: Math.max(0, product.stock),
+  };
+}
 
 /** The list row carries everything the edit form needs except the supplier/barcode extras. */
 function toFormProduct(product: InventoryProduct): Product {
@@ -125,12 +141,12 @@ export default function Products({ embedded = false }: { embedded?: boolean }) {
 
   /** Order click → put the product in the cart, then jump to the Cart page. */
   const handleOrder = (product: InventoryProduct) => {
-    cart.addToCart(product);
+    cart.addToCart(toShopSnapshot(product));
     navigate("/cart");
   };
 
   const handleToggleFavorite = (product: InventoryProduct) => {
-    favorites.toggle(product);
+    favorites.toggle(toShopSnapshot(product));
   };
 
   const errorMessage = isError ? (error instanceof ApiError ? error.message : "Couldn't load the products.") : null;
@@ -235,9 +251,9 @@ export default function Products({ embedded = false }: { embedded?: boolean }) {
         <div aria-busy={isPlaceholderData} className={cn("mt-4 transition-opacity", isPlaceholderData && "opacity-60")}>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {isPending
-              ? Array.from({ length: 8 }, (_, i) => <ProductCardSkeleton key={i} />)
+              ? Array.from({ length: 8 }, (_, i) => <AdminProductCardSkeleton key={i} />)
               : products.map((product) => (
-                  <ProductCard
+                  <AdminProductCard
                     key={product.id}
                     product={product}
                     isAdmin={isAdmin}

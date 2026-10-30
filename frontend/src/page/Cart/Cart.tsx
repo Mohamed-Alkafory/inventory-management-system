@@ -38,7 +38,7 @@ export default function Cart() {
   const { items, totalItems, subtotal, setQuantity, remove } = useCart();
   const navigate = useNavigate();
 
-  const overStocked = items.filter((row) => row.product.stock < row.quantity);
+  const overStocked = items.filter((row) => row.product.maxOrderable < row.quantity);
 
   return (
     <div className="min-h-[calc(100vh-128px)] bg-surface-alt py-10 text-ink">
@@ -68,24 +68,26 @@ export default function Cart() {
             {/* Items */}
             <div className="flex flex-col gap-3">
               {items.map((row) => {
-                const overStock = row.product.stock < row.quantity;
+                const overStock = row.product.maxOrderable < row.quantity;
+                const outOfStock = row.product.maxOrderable <= 0;
                 return (
                   <Card key={row.product.id}>
                     <CardBody className="flex items-start gap-4 p-4">
                       <LineThumb imageUrl={row.product.imageUrl} name={row.product.name} />
 
                       <div className="min-w-0 flex-1">
-                        <p className="font-semibold leading-snug text-ink">
-                          {row.product.name}
-                          <span className="ml-2 font-mono text-xs font-normal text-muted">{row.product.sku}</span>
-                        </p>
+                        <p className="font-semibold leading-snug text-ink">{row.product.name}</p>
                         <p className="mt-0.5 font-medium text-primary-600">{formatPrice(row.product.price)}</p>
 
-                        {overStock && (
+                        {outOfStock ? (
                           <p className="mt-1 text-xs font-medium text-danger-600" role="alert">
-                            Only {row.product.stock} left in stock — reduce the quantity to check out.
+                            This item is out of stock — remove it to check out.
                           </p>
-                        )}
+                        ) : overStock ? (
+                          <p className="mt-1 text-xs font-medium text-danger-600" role="alert">
+                            Only {row.product.maxOrderable} available — reduce the quantity to check out.
+                          </p>
+                        ) : null}
 
                         <div
                           className="mt-3 inline-flex items-center rounded-control border border-line"
@@ -106,7 +108,7 @@ export default function Cart() {
                           <button
                             type="button"
                             aria-label={`Increase quantity of ${row.product.name}`}
-                            disabled={row.product.stock <= 0 || row.quantity >= row.product.stock}
+                            disabled={outOfStock || row.quantity >= row.product.maxOrderable}
                             onClick={() => setQuantity(row.product.id, row.quantity + 1)}
                             className="flex size-8 items-center justify-center rounded-r-control text-ink transition hover:bg-surface-alt disabled:opacity-40 disabled:hover:bg-transparent"
                           >

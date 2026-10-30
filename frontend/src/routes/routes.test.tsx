@@ -18,6 +18,7 @@ vi.mock("../page/Orders/MyOrders", () => ({ default: () => <p>My orders page</p>
 vi.mock("../page/Orders/OrderDetails", () => ({ default: () => <p>Order details page</p> }));
 vi.mock("../page/Profile/Profile", () => ({ default: () => <p>Profile page</p> }));
 vi.mock("../page/Products/Products", () => ({ default: () => <p>Products page</p> }));
+vi.mock("../page/Products/ShopProducts", () => ({ default: () => <p>Products page</p> }));
 vi.mock("../page/Products/ProductDetail", () => ({ default: () => <p>Product detail page</p> }));
 vi.mock("../admin/pages/Orders/NewOrder", () => ({ default: () => <p>New order page</p> }));
 vi.mock("../admin/pages/Dashboard/AdminDashboard", () => ({ default: () => <p>Admin dashboard page</p> }));
@@ -67,6 +68,16 @@ describe("route access matrix", () => {
   it("shows the mounted NotFound for unknown paths", () => {
     renderAt("/no-such-page");
     expect(screen.getByText("Page not found")).toBeInTheDocument();
+  });
+
+  it("lets anonymous visitors browse /products and /products/:id", () => {
+    let view = renderAt("/products");
+    expect(screen.getByText("Products page")).toBeInTheDocument();
+    view.unmount();
+
+    view = renderAt("/products/p-1");
+    expect(screen.getByText("Product detail page")).toBeInTheDocument();
+    view.unmount();
   });
 
   it("ADMIN may open /admin, /staff, /support, /orders/new and /profile", () => {
