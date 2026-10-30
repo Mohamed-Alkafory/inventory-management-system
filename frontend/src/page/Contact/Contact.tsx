@@ -1,20 +1,30 @@
 import { useState } from "react";
-import type { ChangeEvent, FormEvent, ReactNode } from "react";
+import type { ReactNode } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useMutation } from "@tanstack/react-query";
+import { useForm, useWatch } from "react-hook-form";
+import type { Control } from "react-hook-form";
 import {
+  AlertCircle,
   ArrowRight,
-  Building2,
   Check,
   ChevronDown,
   Mail,
   MapPin,
+  MessageSquare,
   Phone,
   Send,
   ShieldCheck,
   Sparkles,
   Users,
 } from "lucide-react";
+import { z } from "zod";
 import Button from "../../components/ui/Button";
+import FormField from "../../components/ui/form/FormField";
 import Reveal from "../../components/motion/Reveal";
+import { useAuth } from "../../context/auth/useAuth";
+import { publicContactApi } from "../../features/contact/publicApi";
+import { ApiError } from "../../lib/http";
 
 const BRAND = "InRetail";
 
@@ -67,37 +77,178 @@ const faqs = [
   },
 ];
 
-const ranges = ["1 – 50", "51 – 200", "201 – 500", "501 – 1,000", "1,001+"];
+/** Limits mirror the backend `CreateContactMessageDto`. */
+const MESSAGE_LIMIT = 5000;
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
+const schema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1, "Name is required")
+    .max(100, "Name must be 100 characters or fewer"),
+  email: z
+    .string()
+    .trim()
+    .min(1, "Email is required")
+    .max(255, "Email must be 255 characters or fewer")
+    .email("Enter a valid email address"),
+  subject: z
+    .string()
+    .trim()
+    .min(1, "Subject is required")
+    .max(200, "Subject must be 200 characters or fewer"),
+  message: z
+    .string()
+    .trim()
+    .min(1, "Message is required")
+    .max(MESSAGE_LIMIT, "Message must be 5,000 characters or fewer"),
+  // Optional on the backend, but the form always sends it (empty for humans).
+  honeypot: z.string().max(255, "Honeypot is too long"),
+});
+
+type ContactFormValues = z.infer<typeof schema>;
+
+function inputClass(invalid: boolean) {
+  return `h-12 w-full rounded-xl border bg-[#FFF9F4] pl-10 pr-4 text-sm text-ink placeholder:text-muted focus:outline-none focus:ring-2 ${
+    invalid
+      ? "border-danger-600 focus:border-danger-600 focus:ring-danger-600/20"
+      : "border-[#F0E4D8] focus:border-primary-500 focus:ring-primary-500/20"
+  }`;
+}
+
+function textareaClass(invalid: boolean) {
+  return `h-36 w-full resize-none rounded-xl border bg-[#FFF9F4] px-4 py-3 text-sm text-ink placeholder:text-muted focus:outline-none focus:ring-2 ${
+    invalid
+      ? "border-danger-600 focus:border-danger-600 focus:ring-danger-600/20"
+      : "border-[#F0E4D8] focus:border-primary-500 focus:ring-primary-500/20"
+  }`;
+}
+
+type ContactInputProps = {
+  control: Control<ContactFormValues>;
+  name: "name" | "email" | "subject";
+  label: string;
+  icon: ReactNode;
+  placeholder: string;
+  type?: "text" | "email";
+  autoComplete?: string;
+  className?: string;
+};
+
+function ContactInput({
+  control,
+  name,
+  label,
+  icon,
+  placeholder,
+  type = "text",
+  autoComplete,
+  className,
+}: ContactInputProps) {
   return (
-    <label className="block">
-      <span className="mb-2 block text-sm font-medium text-ink">{label}</span>
-      {children}
-    </label>
+    <FormField control={control} name={name} label={label} required className={className}>
+      {({ field, aria }) => {
+        const { invalid, ...ariaProps } = aria;
+        return (
+          <div className="relative">
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted"
+            >
+              {icon}
+            </span>
+            <input
+              {...field}
+              {...ariaProps}
+              type={type}
+              autoComplete={autoComplete}
+              placeholder={placeholder}
+              aria-invalid={invalid || undefined}
+              className={inputClass(invalid)}
+            />
+          </div>
+        );
+      }}
+    </FormField>
   );
 }
 
 export default function ContactPage() {
-  const [form, setForm] = useState({
-    name: "",
-    email: "",
-    business: "",
-    purpose: "",
-    range: "201 – 500",
-    message: "",
-    agree: true,
+  const { user } = useAuth();
+  const [open, setOpen] = useState<number | null>(0);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const {
+    control,
+    register,
+    handleSubmit,
+    reset,
+    setError,
+  } = useForm<ContactFormValues>({
+    resolver: zodResolver(schema),
+    defaultValues: {
+      name: user?.name ?? "",
+      email: user?.email ?? "",
+      subject: "",
+      message: "",
+      honeypot: "",
+    },
+    mode: "onTouched",
   });
 
-  const [open, setOpen] = useState<number | null>(0);
+  const message = useWatch({ control, name: "message" });
+  const messageLength = message?.length ?? 0;
 
-  const onChange = (
-    e: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>,
-  ) => setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
+  const submit = useMutation({
+    mutationFn: (values: ContactFormValues) =>
+      publicContactApi.submit({
+        name: values.name,
+        email: values.email,
+        subject: values.subject,
+        message: values.message,
+        honeypot: values.honeypot ?? "",
+      }),
+  });
 
-  const onSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    // TODO: send form to API
+  const onSubmit = handleSubmit(async (values) => {
+    setFormError(null);
+    try {
+      await submit.mutateAsync(values);
+    } catch (err) {
+      if (err instanceof ApiError) {
+        const fields: Array<"name" | "email" | "subject" | "message"> = [
+          "name",
+          "email",
+          "subject",
+          "message",
+        ];
+        let hasFieldError = false;
+        for (const key of fields) {
+          const message = err.fieldErrors[key];
+          if (message) {
+            setError(key, { type: "server", message });
+            hasFieldError = true;
+          }
+        }
+        if (hasFieldError) {
+          setFormError("Please fix the highlighted fields and try again.");
+        } else if (err.status === 429) {
+          setFormError("Too many messages from this device. Please try again later.");
+        } else if (err.status === 0) {
+          setFormError(err.message);
+        } else {
+          setFormError("Something went wrong on our end. Please try again.");
+        }
+        return;
+      }
+      setFormError("Something went wrong. Please try again.");
+    }
+  });
+
+  const sendAnother = () => {
+    submit.reset();
+    setFormError(null);
+    reset();
   };
 
   return (
@@ -212,10 +363,7 @@ export default function ContactPage() {
           </Reveal>
 
           <Reveal delay={150}>
-            <form
-              onSubmit={onSubmit}
-              className="rounded-[2rem] border border-[#F0E4D8] bg-white p-8 shadow-sm"
-            >
+            <div className="rounded-[2rem] border border-[#F0E4D8] bg-white p-8 shadow-sm">
               <div className="flex items-center gap-4">
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary-50 text-primary-600">
                   <Send className="h-5 w-5" />
@@ -230,145 +378,142 @@ export default function ContactPage() {
                 </div>
               </div>
 
-              <div className="mt-8 grid gap-5 sm:grid-cols-2">
-                <Field label="Full Name">
-                  <div className="relative">
-                    <Users className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-                    <input
-                      name="name"
-                      value={form.name}
-                      onChange={onChange}
-                      required
-                      placeholder="Your full name"
-                      className="h-12 w-full rounded-xl border border-[#F0E4D8] bg-[#FFF9F4] pl-10 pr-4 text-sm text-ink placeholder:text-muted focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
-                    />
-                  </div>
-                </Field>
-
-                <Field label="Work Email">
-                  <div className="relative">
-                    <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-                    <input
-                      type="email"
-                      name="email"
-                      value={form.email}
-                      onChange={onChange}
-                      required
-                      placeholder="you@company.com"
-                      className="h-12 w-full rounded-xl border border-[#F0E4D8] bg-[#FFF9F4] pl-10 pr-4 text-sm text-ink placeholder:text-muted focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
-                    />
-                  </div>
-                </Field>
-
-                <Field label="Business or Store Name">
-                  <div className="relative">
-                    <Building2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-                    <input
-                      name="business"
-                      value={form.business}
-                      onChange={onChange}
-                      required
-                      placeholder="e.g. FreshMart"
-                      className="h-12 w-full rounded-xl border border-[#F0E4D8] bg-[#FFF9F4] pl-10 pr-4 text-sm text-ink placeholder:text-muted focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
-                    />
-                  </div>
-                </Field>
-
-                <Field label="Inquiry Purpose">
-                  <div className="relative">
-                    <select
-                      name="purpose"
-                      value={form.purpose}
-                      onChange={onChange}
-                      required
-                      className="h-12 w-full appearance-none rounded-xl border border-[#F0E4D8] bg-[#FFF9F4] px-4 pr-10 text-sm text-ink focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
-                    >
-                      <option value="" disabled>
-                        Select a purpose
-                      </option>
-                      <option>Sales & Partnerships</option>
-                      <option>Technical Support</option>
-                      <option>Operations & Hubs</option>
-                    </select>
-                    <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-                  </div>
-                </Field>
-              </div>
-
-              <div className="mt-6">
-                <span className="mb-2 block text-sm font-medium text-ink">
-                  Monthly Store Orders or Active SKU Count
-                </span>
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-                  {ranges.map((range) => {
-                    const active = form.range === range;
-                    return (
-                      <button
-                        key={range}
-                        type="button"
-                        onClick={() => setForm((f) => ({ ...f, range }))}
-                        className={`h-11 rounded-xl border text-sm font-medium transition ${
-                          active
-                            ? "border-primary-500 bg-primary-500 text-white shadow-sm"
-                            : "border-[#F0E4D8] bg-white text-ink hover:border-primary-300"
-                        }`}
-                      >
-                        {range}
-                      </button>
-                    );
-                  })}
+              {submit.isSuccess ? (
+                <div className="mt-8 rounded-2xl border border-[#F3E7DA] bg-[#FFF9F4] px-6 py-10 text-center">
+                  <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary-600 text-white">
+                    <Check className="h-7 w-7" strokeWidth={3} />
+                  </span>
+                  <h4 className="mt-5 text-2xl font-bold text-ink">
+                    Message sent
+                  </h4>
+                  <p className="mx-auto mt-3 max-w-sm text-sm leading-7 text-muted">
+                    Thanks for reaching out. Our team has received your message
+                    and will get back to you soon.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="lg"
+                    className="mt-6"
+                    leftIcon={<Send className="h-4 w-4" />}
+                    onClick={sendAnother}
+                  >
+                    Send another message
+                  </Button>
                 </div>
-              </div>
+              ) : (
+                <form
+                  onSubmit={onSubmit}
+                  noValidate
+                  className="relative mt-8"
+                >
+                  {/* Off-screen honeypot: bots fill it, humans never see it. */}
+                  <div
+                    aria-hidden="true"
+                    className="pointer-events-none absolute -left-[9999px] top-0 h-px w-px overflow-hidden"
+                  >
+                    <label htmlFor="contact-honeypot">
+                      Leave this field empty
+                    </label>
+                    <input
+                      id="contact-honeypot"
+                      {...register("honeypot")}
+                      tabIndex={-1}
+                      autoComplete="off"
+                    />
+                  </div>
 
-              <div className="mt-6">
-                <Field label="Your Message">
-                  <textarea
-                    name="message"
-                    value={form.message}
-                    onChange={onChange}
-                    required
-                    maxLength={1000}
-                    placeholder="Tell us more about your business or how we can help..."
-                    className="h-36 w-full resize-none rounded-xl border border-[#F0E4D8] bg-[#FFF9F4] px-4 py-3 text-sm text-ink placeholder:text-muted focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
-                  />
-                </Field>
-              </div>
+                  <div className="grid gap-5 sm:grid-cols-2">
+                    <ContactInput
+                      control={control}
+                      name="name"
+                      label="Full Name"
+                      icon={<Users className="h-4 w-4" />}
+                      autoComplete="name"
+                      placeholder="Your full name"
+                    />
 
-              <label className="mt-5 flex items-start gap-3 text-sm text-muted">
-                <input
-                  type="checkbox"
-                  checked={form.agree}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, agree: e.target.checked }))
-                  }
-                  required
-                  className="mt-1 h-4 w-4 accent-primary-500"
-                />
-                <span>
-                  I agree to the processing of my personal data in accordance
-                  with the{" "}
-                  <a href="#" className="text-primary-600 underline">
-                    Privacy Policy
-                  </a>{" "}
-                  and{" "}
-                  <a href="#" className="text-primary-600 underline">
-                    Terms of Service
-                  </a>
-                  .
-                </span>
-              </label>
+                    <ContactInput
+                      control={control}
+                      name="email"
+                      label="Work Email"
+                      icon={<Mail className="h-4 w-4" />}
+                      type="email"
+                      autoComplete="email"
+                      placeholder="you@company.com"
+                    />
 
-              <Button
-                type="submit"
-                size="lg"
-                fullWidth
-                className="mt-6"
-                leftIcon={<Send className="h-4 w-4" />}
-                rightIcon={<ArrowRight className="h-4 w-4" />}
-              >
-                Send Inquiry
-              </Button>
-            </form>
+                    <ContactInput
+                      control={control}
+                      name="subject"
+                      label="Subject"
+                      icon={<MessageSquare className="h-4 w-4" />}
+                      autoComplete="off"
+                      placeholder="How can we help?"
+                      className="sm:col-span-2"
+                    />
+                  </div>
+
+                  <div className="mt-6">
+                    <FormField
+                      control={control}
+                      name="message"
+                      label="Your Message"
+                      required
+                    >
+                      {({ field, aria }) => {
+                        const { invalid, ...ariaProps } = aria;
+                        return (
+                          <textarea
+                            {...field}
+                            {...ariaProps}
+                            rows={6}
+                            maxLength={MESSAGE_LIMIT}
+                            placeholder="Tell us more about your business or how we can help..."
+                            aria-invalid={invalid || undefined}
+                            className={textareaClass(invalid)}
+                          />
+                        );
+                      }}
+                    </FormField>
+                    <div className="mt-1 flex justify-end text-xs text-muted">
+                      <span aria-live="polite">
+                        {messageLength.toLocaleString()} /{" "}
+                        {MESSAGE_LIMIT.toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+
+                  {formError && (
+                    <div
+                      role="alert"
+                      className="mt-5 flex items-start gap-2 rounded-xl border border-danger-600/30 bg-danger-50 px-4 py-3 text-sm text-danger-700"
+                    >
+                      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                      <span>{formError}</span>
+                    </div>
+                  )}
+
+                  <Button
+                    type="submit"
+                    size="lg"
+                    fullWidth
+                    className="mt-6"
+                    loading={submit.isPending}
+                    leftIcon={
+                      submit.isPending ? undefined : <Send className="h-4 w-4" />
+                    }
+                    rightIcon={
+                      submit.isPending ? undefined : (
+                        <ArrowRight className="h-4 w-4" />
+                      )
+                    }
+                  >
+                    {submit.isPending ? "Sending…" : "Send Inquiry"}
+                  </Button>
+                </form>
+              )}
+            </div>
           </Reveal>
         </div>
       </section>

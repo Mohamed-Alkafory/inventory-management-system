@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { onSessionExpired } from "../api/authEvents";
 import { tokenStorage } from "../api/tokenStorage";
-import { request, requestBlob } from "./http";
+import { publicRequest, request, requestBlob } from "./http";
 
 const jsonResponse = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -119,6 +119,37 @@ describe("request", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(tokenStorage.getAccessToken()).toBe("access-old");
+  });
+});
+
+describe("publicRequest", () => {
+  it("never attaches the stored token, even when a session exists", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ received: true }, 201));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const body = await publicRequest("/contact", {
+      method: "POST",
+      body: JSON.stringify({ name: "Jane" }),
+      headers: { Authorization: "Bearer leaked" },
+    });
+
+    expect(body).toEqual({ received: true });
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect((init.headers as Headers).has("Authorization")).toBe(false);
+  });
+
+  it("does not refresh or sign the user out on 401", async () => {
+    const listener = vi.fn();
+    const unsubscribe = onSessionExpired(listener);
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ message: "Unauthorized" }, 401));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(publicRequest("/contact")).rejects.toMatchObject({ status: 401 });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(tokenStorage.getAccessToken()).toBe("access-old");
+    expect(listener).not.toHaveBeenCalled();
+    unsubscribe();
   });
 });
 
