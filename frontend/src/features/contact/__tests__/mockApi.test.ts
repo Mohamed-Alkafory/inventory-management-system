@@ -32,9 +32,22 @@ describe("mockContactMessagesApi", () => {
   });
 
   it("paginates and keeps the total", async () => {
+    signIn();
     const page = await mockContactMessagesApi.list({ ...all, page: 1, pageSize: 2 });
     expect(page.items).toHaveLength(2);
     expect(page.total).toBeGreaterThan(2);
+  });
+
+  it("answers 403 for roles without contact access", async () => {
+    signIn("staff-1", "STAFF");
+    await expect(mockContactMessagesApi.list(all)).rejects.toMatchObject({ status: 403 });
+    await expect(mockContactMessagesApi.get("88888888-8888-4888-8888-888888888801")).rejects.toMatchObject({ status: 403 });
+    await expect(
+      mockContactMessagesApi.update("88888888-8888-4888-8888-888888888801", { status: "RESOLVED" }),
+    ).rejects.toMatchObject({ status: 403 });
+
+    signIn("customer-1", "CUSTOMER");
+    await expect(mockContactMessagesApi.list(all)).rejects.toMatchObject({ status: 403 });
   });
 
   it("updates status, assignee and the internal note", async () => {

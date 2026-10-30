@@ -1,8 +1,8 @@
 # Frontend — React + Vite
 
 React 19 + TypeScript + Vite (+ Tailwind CSS, React Router, React Query,
-Axios, React Hook Form + Zod). Currently a starter shell — no API calls are
-wired yet. Full local setup lives in the [root README](../README.md).
+Axios, React Hook Form + Zod). Full local setup lives in the
+[root README](../README.md).
 
 ## Setup
 
@@ -25,22 +25,38 @@ Open <http://localhost:5173>. `vite.config.ts` pins the port with
 | `npm run build` | Type-check (`tsc -b`) + production build into `dist/` |
 | `npm run preview` | Serve the production build (after `npm run build`) |
 | `npm run lint` | ESLint over the project |
+| `npm test` | Vitest test suite |
 
-## Environment
+## Mocks vs the real backend
 
-Development requests use the relative base URL `/api/v1` and Vite proxies
-`/api` to `http://localhost:3010` (see `vite.config.ts`). This keeps browser
-requests same-origin, so CORS is not involved during proxied development.
+Everything is controlled by the single `VITE_USE_MOCK` variable in
+`frontend/.env`. Mocks are enabled only when its value is exactly `true`.
+Copy `frontend/.env.example` to `frontend/.env` for local overrides.
 
-`VITE_API_URL` is optional and must include the global `/api/v1` prefix when
-set. Use it for production or a non-proxied deployment, for example
-`VITE_API_URL=https://api.example.com/api/v1`. When unset, the frontend uses
-the relative `/api/v1` base URL. Copy `frontend/.env.example` to
-`frontend/.env` if you need local overrides.
+**With the real backend**
 
-Set `VITE_USE_MOCK=true` to run the auth/product list against the in-memory
-mocks instead of the backend. `VITE_USE_MOCK_API=true` does the same for the
-categories/suppliers screens.
+- Run the backend on `http://localhost:3010` (see the root README).
+- Leave `VITE_USE_MOCK` unset or set it to `false`.
+- `VITE_API_URL` is optional and must include the `/api/v1` prefix when set.
+  When unset, the frontend uses the relative `/api/v1` base URL and Vite
+  proxies `/api` and `/uploads` to `http://localhost:3010` (see
+  `vite.config.ts`), so requests stay same-origin and CORS is not involved.
+- Use `VITE_API_URL` for production or a non-proxied deployment, for example
+  `VITE_API_URL=https://api.example.com/api/v1`.
+
+**With mocks (no backend)**
+
+- Set `VITE_USE_MOCK=true` in `frontend/.env` and restart `npm run dev`.
+- All screens use in-memory data that resets on page reload. Accounts created
+  through the Register page persist in this browser's localStorage.
+- Demo accounts (email only — the passwords live in the mock source):
+
+| Role | Email |
+|---|---|
+| Admin | `admin@prodexa.com` |
+| Staff | `staff@prodexa.com` |
+| Support | `support@prodexa.com` |
+| Customer | `customer@prodexa.com` |
 
 ## Reference
 

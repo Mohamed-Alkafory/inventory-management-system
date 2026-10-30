@@ -187,7 +187,8 @@ export const mockNotificationsApi: NotificationsApi = {
       .filter((n) => (params.unread === undefined ? true : n.isRead !== params.unread))
       .filter((n) => (params.type ? n.type === params.type : true))
       .sort((a, b) => {
-        const order = a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id);
+        const field = params.sortBy ?? "createdAt";
+        const order = a[field].localeCompare(b[field]) || a.id.localeCompare(b.id);
         return params.sortOrder === "asc" ? order : -order;
       });
 
