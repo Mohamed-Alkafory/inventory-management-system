@@ -1,6 +1,7 @@
 import {
   Boxes,
   ClipboardList,
+  FileText,
   FolderTree,
   LayoutDashboard,
   LifeBuoy,
@@ -19,6 +20,7 @@ const NAV: AreaNavItem[] = [
   { to: "/admin/inventory", label: "Inventory", icon: Boxes },
   { to: "/admin/purchase-orders", label: "Purchase Orders", icon: ClipboardList },
   { to: "/admin/orders", label: "Orders", icon: ShoppingBag },
+  { to: "/admin/reports", label: "Reports", icon: FileText },
   { to: "/admin/categories", label: "Categories", icon: FolderTree },
   { to: "/admin/suppliers", label: "Suppliers", icon: Truck },
   { to: "/admin/users", label: "Users", icon: UsersIcon },

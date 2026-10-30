@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import AdminLayout from "./admin/layouts/AdminLayout";
 import AdminDashboard from "./admin/pages/Dashboard/AdminDashboard";
 import AdminProducts from "./admin/pages/Products/AdminProducts";
+import Reports from "./admin/pages/Reports/Reports";
 import Categories from "./admin/pages/Categories/Categories";
 import Inventory from "./admin/pages/Inventory/Inventory";
 import Suppliers from "./admin/pages/Suppliers/Suppliers";
@@ -130,6 +131,7 @@ export function AppRoutes() {
             <Route path="orders" element={<StaffOrdersPage basePath={ADMIN_ORDERS_PATH} newOrderPath={`${ADMIN_ORDERS_PATH}/new`} />} />
             <Route path="orders/new" element={<NewOrderFlow basePath={ADMIN_ORDERS_PATH} />} />
             <Route path="orders/:id" element={<StaffOrderDetailsPage basePath={ADMIN_ORDERS_PATH} />} />
+            <Route path="reports" element={<Reports />} />
             <Route path="users" element={<Users />} />
             <Route path="audit-logs" element={<Audit />} />
           </Route>

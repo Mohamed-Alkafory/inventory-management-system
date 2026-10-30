@@ -21,6 +21,7 @@ vi.mock("../page/Products/Products", () => ({ default: () => <p>Products page</p
 vi.mock("../page/Products/ShopProducts", () => ({ default: () => <p>Products page</p> }));
 vi.mock("../page/Products/ProductDetail", () => ({ default: () => <p>Product detail page</p> }));
 vi.mock("../admin/pages/Dashboard/AdminDashboard", () => ({ default: () => <p>Admin dashboard page</p> }));
+vi.mock("../admin/pages/Reports/Reports", () => ({ default: () => <p>Admin reports page</p> }));
 vi.mock("../features/orders/create/NewOrderFlow", () => ({ default: () => <p>New order page</p> }));
 vi.mock("../features/orders/StaffOrdersPage", () => ({ default: () => <p>Staff orders page</p> }));
 vi.mock("../features/orders/StaffOrderDetailsPage", () => ({ default: () => <p>Staff order details page</p> }));
@@ -71,7 +72,7 @@ afterEach(cleanup);
 
 describe("route access matrix", () => {
   it("sends anonymous visitors on protected routes to /login", () => {
-    for (const path of ["/admin", "/staff", "/support", "/cart", "/orders", "/orders/new", "/profile"]) {
+    for (const path of ["/admin", "/admin/reports", "/staff", "/support", "/cart", "/orders", "/orders/new", "/profile"]) {
       const view = renderAt(path);
       expect(login()).toBeInTheDocument();
       view.unmount();
@@ -97,6 +98,7 @@ describe("route access matrix", () => {
     signIn("ADMIN");
     const cases: Array<[string, string]> = [
       ["/admin", "Admin panel"],
+      ["/admin/reports", "Admin reports page"],
       ["/admin/orders", "Staff orders page"],
       ["/admin/orders/new", "New order page"],
       ["/admin/orders/o-1", "Staff order details page"],
@@ -126,6 +128,7 @@ describe("route access matrix", () => {
 
     const nav = screen.getByRole("navigation", { name: "Admin" });
     expect(within(nav).getByRole("link", { name: "Orders" })).toHaveAttribute("href", "/admin/orders");
+    expect(within(nav).getByRole("link", { name: "Reports" })).toHaveAttribute("href", "/admin/reports");
     expect(within(nav).getByRole("link", { name: "Support" })).toHaveAttribute("href", "/support/messages");
   });
 
@@ -157,7 +160,7 @@ describe("route access matrix", () => {
       view.unmount();
     }
 
-    for (const path of ["/admin", "/admin/orders", "/support", "/support/messages", "/support/orders", "/cart", "/orders"]) {
+    for (const path of ["/admin", "/admin/orders", "/admin/reports", "/support", "/support/messages", "/support/orders", "/cart", "/orders"]) {
       const view = renderAt(path);
       expect(forbidden()).toBeInTheDocument();
       view.unmount();
@@ -179,7 +182,7 @@ describe("route access matrix", () => {
       view.unmount();
     }
 
-    for (const path of ["/admin", "/admin/orders", "/staff", "/staff/orders", "/staff/inventory", "/orders/new", "/cart", "/orders"]) {
+    for (const path of ["/admin", "/admin/orders", "/admin/reports", "/staff", "/staff/orders", "/staff/inventory", "/orders/new", "/cart", "/orders"]) {
       const view = renderAt(path);
       expect(forbidden()).toBeInTheDocument();
       view.unmount();
@@ -196,7 +199,7 @@ describe("route access matrix", () => {
     expect(screen.getByText("My orders page")).toBeInTheDocument();
     view.unmount();
 
-    for (const path of ["/admin", "/admin/orders", "/staff", "/staff/orders", "/staff/products", "/support", "/support/messages", "/support/orders", "/orders/new"]) {
+    for (const path of ["/admin", "/admin/orders", "/admin/reports", "/staff", "/staff/orders", "/staff/products", "/support", "/support/messages", "/support/orders", "/orders/new"]) {
       view = renderAt(path);
       expect(forbidden()).toBeInTheDocument();
       view.unmount();

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { onSessionExpired } from "../api/authEvents";
 import { tokenStorage } from "../api/tokenStorage";
-import { request } from "./http";
+import { request, requestBlob } from "./http";
 
 const jsonResponse = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -119,5 +119,31 @@ describe("request", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(tokenStorage.getAccessToken()).toBe("access-old");
+  });
+});
+
+describe("requestBlob", () => {
+  it("returns the raw response with the bearer token so callers can read the file", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response("SKU,Name\n", { status: 200, headers: { "Content-Type": "text/csv" } }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const res = await requestBlob("/reports/inventory.csv");
+
+    expect(await res.text()).toBe("SKU,Name\n");
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect((init.headers as Headers).get("Authorization")).toBe("Bearer access-old");
+  });
+
+  it("keeps the server's validation message on a failed download", async () => {
+    const message = "Date range must not exceed 92 days";
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ message }, 400));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(requestBlob("/reports/sales.csv")).rejects.toMatchObject({
+      status: 400,
+      serverMessage: message,
+    });
   });
 });
