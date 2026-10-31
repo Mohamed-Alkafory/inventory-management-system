@@ -120,13 +120,20 @@ From the repository root:
 docker compose up --build -d
 ```
 
-The backend waits for PostgreSQL to become healthy and applies pending Prisma migrations before starting.
+The backend waits for PostgreSQL to become healthy and applies pending Prisma migrations before starting. The frontend waits for the backend health check, then serves the built React app through Nginx.
 
-The API is published on host port `3010` by default (the container still listens on `3000` internally). If that port is already in use, publish it on another host port by setting `BACKEND_PORT` for that command, e.g. `BACKEND_PORT=3011 docker compose up --build -d`.
+The frontend is published on host port `8080` by default (`FRONTEND_PORT`) and the API on host port `3010` (`BACKEND_PORT`). Nginx proxies `/api/` and `/uploads/` to the backend, so the app calls the API same-origin and CORS is not involved.
 
+- Web app: `http://localhost:8080`
 - API base URL: `http://localhost:3010/api/v1`
 - Health endpoint: `http://localhost:3010/api/v1/health`
 - Swagger UI: `http://localhost:3010/api/docs`
+
+To point the built frontend at an external API instead of the Nginx proxy, set `VITE_API_URL` (including the `/api/v1` prefix) before building:
+
+```bash
+VITE_API_URL=https://api.example.com/api/v1 docker compose up --build -d
+```
 
 ### Stop the application
 
@@ -248,7 +255,8 @@ The backend exposes `GET /api/v1/health` for readiness checks. Through the Vite 
 | `CORS_ORIGIN`       | Allowed CORS origin for direct frontend requests |
 | `JWT_SECRET`        | Secret for signing JWT authentication tokens |
 | `JWT_EXPIRES_IN`    | Access token expiration duration (e.g. `15m`)|
-| `VITE_API_URL`      | Optional full API base URL incl. `/api/v1`; development uses the Vite proxy by default |
+| `VITE_API_URL`      | Optional full API base URL incl. `/api/v1`; development uses the Vite proxy and the Docker build uses the Nginx proxy by default |
+| `FRONTEND_PORT`     | Host port mapped to the frontend container (default `8080`) |
 
 Environment templates contain placeholders only. Keep actual secrets in ignored local `.env` files and never commit them.
 

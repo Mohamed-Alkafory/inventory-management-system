@@ -1,4 +1,3 @@
-
 node_modules
 dist
 dist-seed
@@ -8,3 +7,11 @@ coverage
 *.log
 tsconfig.build.tsbuildinfo
 src/generated
+
+.git
+.gitignore
+.vscode
+.idea
+Dockerfile
+.dockerignore
+README.md
