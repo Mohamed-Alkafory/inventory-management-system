@@ -58,9 +58,27 @@ Copy `frontend/.env.example` to `frontend/.env` for local overrides.
 | Support | `support@prodexa.com` |
 | Customer | `customer@prodexa.com` |
 
+## Docker
+
+The image is multi-stage: Node builds `dist/`, then Nginx serves it.
+
+```bash
+# From the repository root:
+docker compose up --build -d
+# -> http://localhost:8080
+```
+
+Nginx has the SPA fallback to `index.html` and proxies `/api/` and
+`/uploads/` to the `backend` service, so the default relative `/api/v1`
+base URL works without CORS. To bake an external API URL into the bundle:
+
+```bash
+docker build --build-arg VITE_API_URL=https://api.example.com/api/v1 -t prodexa-frontend ./frontend
+```
+
 ## Reference
 
 - [Vite docs](https://vite.dev) · [React docs](https://react.dev)
 - [Tailwind CSS v4 docs](https://tailwindcss.com/docs)
-- CI runs `npm ci` · `npm run lint` · `npm run build` here
-  (`.github/workflows/ci.yml`).
+- CI runs `npm ci` · `npm run lint` · `npm run build` and builds the Docker
+  image here (`.github/workflows/ci.yml`).

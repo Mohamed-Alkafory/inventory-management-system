@@ -65,6 +65,8 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run build
+      - name: Build frontend Docker image
+        run: docker build --build-arg VITE_API_URL= -t inventory-frontend:ci .
 
   docker:
     runs-on: ubuntu-latest
