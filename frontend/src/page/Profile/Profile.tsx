@@ -1,19 +1,21 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import type { LucideIcon } from "lucide-react";
 import {
   CalendarDays,
   CircleCheck,
   LogOut,
   Mail,
   Pencil,
+  ReceiptText,
+  Settings,
   ShieldCheck,
   ShoppingBag,
   Trash2,
-  UserRound,
-  ReceiptText,
   Upload,
+  UserRound,
 } from "lucide-react";
-import { Badge, Button, Card, ConfirmDialog, IconBadge, useToast } from "../../components/ui";
+import { Badge, Button, Card, CardBody, CardHeader, ConfirmDialog, IconBadge, useToast } from "../../components/ui";
 import UserAvatar from "../../components/user/UserAvatar";
 import { useAuth } from "../../context/auth/useAuth";
 import { useMyOrders } from "../../features/orders/hooks";
@@ -23,6 +25,8 @@ import type { MyOrderListParams } from "../../features/orders/types";
 import ImageUploadField from "../../features/products/ImageUploadField";
 import { AVATAR_RULES } from "../../features/users/avatar";
 import { useArea } from "../../routes/useArea";
+import { useAreaLinks } from "../../routes/useAreaLinks";
+import { ROLE_LABELS } from "../../types/auth";
 import EditProfileDialog from "./EditProfileDialog";
 
 /** Shared row dimensions for the order-history list. */
@@ -38,7 +42,7 @@ const joined = (iso?: string) => {
 
 /**
  * Small labelled cell in the "Account details" grid — soft icon square on
- * the left, label + value on the right, like the reference design.
+ * the left, label + value on the right.
  */
 function DetailTile({
   icon,
@@ -67,13 +71,25 @@ function DetailTile({
   );
 }
 
+/** Row link in the sidebar "Quick links" card. */
+function QuickLink({ to, icon: Icon, children }: { to: string; icon: LucideIcon; children: React.ReactNode }) {
+  return (
+    <Link
+      to={to}
+      className="flex items-center gap-3 rounded-control px-3 py-2.5 text-sm font-semibold text-muted transition-colors hover:bg-surface-alt hover:text-ink"
+    >
+      <Icon className="size-4 shrink-0" aria-hidden="true" />
+      {children}
+    </Link>
+  );
+}
+
 /**
- * Account hub — styled after the reference profile card: gradient hero with
- * the name, avatar, account detail tiles, order history and the destructive
- * "delete account" zone. Every button performs a real action:
+ * Account hub: a sticky identity sidebar beside the editable profile content.
+ * Every button performs a real action:
  *
  *   Edit profile → PATCH /auth/me (name and/or password) via the modal
- *   My products  → the shop product list at /products
+ *   My products  → the product list for the current dashboard area
  *   Log out      → signs the session out
  *   Delete       → DELETE /auth/me (self-deactivation endpoint)
  */
@@ -81,7 +97,7 @@ export default function Profile() {
   const { user, logout, deleteAccount, hasRole, uploadAvatar, removeAvatar } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
-  const isAdmin = hasRole("ADMIN");
+  const links = useAreaLinks();
   const isCustomer = hasRole("CUSTOMER");
   // Inside a dashboard shell the layout owns the page background and padding.
   const inArea = useArea() !== null;
@@ -163,170 +179,255 @@ export default function Profile() {
   const orders = ordersQuery.data?.items ?? [];
 
   return (
-    <div className={inArea ? undefined : "min-h-[calc(100vh_-_var(--header-h))] bg-surface-alt py-10 text-ink"}>
-      <div className="mx-auto w-full max-w-3xl px-4 sm:px-6">
-        <Card className="overflow-hidden">
-          {/* Hero band — name over the brand gradient, avatar overlapping. */}
-          <div className="relative bg-gradient-to-r from-primary-600 via-primary-500 to-primary-400 px-6 pb-16 pt-10 sm:px-10">
-            <h1 className="text-2xl font-extrabold text-white sm:text-3xl">{user.name}</h1>
-            <UserAvatar
-              name={user.name}
-              src={user.avatarUrl}
-              size="xl"
-              className="absolute -bottom-12 left-6 bg-surface shadow-lg ring-4 ring-primary-100/70 sm:left-10"
-            />
-          </div>
+    <div
+      className={
+        inArea ? undefined : "min-h-[calc(100vh_-_var(--header-h))] bg-surface-alt py-8 text-ink sm:py-10"
+      }
+    >
+      <div className="mx-auto w-full max-w-6xl px-4 sm:px-6">
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)] xl:grid-cols-[22rem_minmax(0,1fr)]">
+          {/* ================= Sidebar ================= */}
+          <aside className="space-y-6 lg:sticky lg:top-[calc(var(--header-h)+1.5rem)] lg:self-start">
+            <Card className="overflow-hidden">
+              {/* Cover band + overlapping avatar */}
+              <div className="relative h-28 bg-gradient-to-br from-primary-600 via-primary-500 to-primary-400">
+                <div className="absolute inset-0 opacity-20 [background-image:radial-gradient(circle_at_1px_1px,white_1px,transparent_0)] [background-size:16px_16px]" />
+              </div>
 
-          <div className="px-6 pb-8 sm:px-10">
-            {/* Contact row under the avatar. */}
-            <div className="pl-0 pt-5 sm:pl-32">
-              <p className="text-sm text-muted">{user.email}</p>
-              <Badge tone="primary" dot className="mt-2 uppercase tracking-widest">
-                {user.role}
-              </Badge>
-            </div>
+              <div className="px-5 pb-5">
+                <div className="relative z-10 -mt-12 flex justify-center">
+                  <UserAvatar
+                    name={user.name}
+                    src={user.avatarUrl}
+                    size="xl"
+                    className="bg-surface shadow-lg ring-4 ring-surface"
+                  />
+                </div>
 
-            <h2 className="mt-9 text-lg font-bold">Profile photo</h2>
-            <div className="mt-1.5 h-px bg-line" />
+                <div className="mt-3 text-center">
+                  <h1 className="truncate text-xl font-extrabold text-ink">{user.name}</h1>
+                  <p className="mt-0.5 truncate text-sm text-muted">{user.email}</p>
+                  <Badge tone="primary" dot className="mt-2 uppercase tracking-widest">
+                    {ROLE_LABELS[user.role]}
+                  </Badge>
+                </div>
 
-            <div className="mt-5 space-y-3">
-              <ImageUploadField
-                currentUrl={user.avatarUrl}
-                file={avatarFile}
-                onFileSelect={setAvatarFile}
-                onRemove={handleAvatarFieldRemove}
-                disabled={avatarUploading || avatarRemoving}
-                loading={avatarUploading}
-                rules={AVATAR_RULES}
-                label="Avatar"
-                hint="JPEG, PNG or WebP — up to 1 MB."
-                previewAlt="Avatar preview"
-                previewClassName="size-24 rounded-full"
-                helperText={null}
-                chooseLabel="Choose avatar"
-                changeLabel="Change avatar"
-                removeLabel="Remove avatar"
-                loadingLabel="Uploading…"
-              />
-              {avatarFile && (
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="mt-5 grid grid-cols-2 divide-x divide-line rounded-control border border-line bg-surface-alt text-center">
+                  <div className="px-2 py-2.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">Member since</p>
+                    <p className="mt-0.5 text-sm font-semibold text-ink">{since ?? "—"}</p>
+                  </div>
+                  <div className="px-2 py-2.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">Status</p>
+                    <p className="mt-0.5 text-sm font-semibold text-success-700">Active</p>
+                  </div>
+                </div>
+
+                <div className="mt-4 flex flex-col gap-2">
                   <Button
-                    leftIcon={<Upload className="size-4" aria-hidden="true" />}
-                    loading={avatarUploading}
-                    onClick={() => void handleAvatarUpload()}
+                    fullWidth
+                    leftIcon={<Pencil className="size-4" aria-hidden="true" />}
+                    onClick={() => setEditOpen(true)}
                   >
-                    Upload avatar
+                    Edit profile
                   </Button>
                   <Button
+                    fullWidth
                     variant="ghost"
-                    disabled={avatarUploading}
-                    onClick={() => setAvatarFile(null)}
+                    className="text-danger-600 hover:text-danger-700"
+                    leftIcon={<LogOut className="size-4" aria-hidden="true" />}
+                    onClick={() => void handleLogout()}
                   >
-                    Cancel
+                    Log out
                   </Button>
                 </div>
-              )}
-            </div>
+              </div>
+            </Card>
 
-            <h2 className="mt-9 text-lg font-bold">Account details</h2>
-            <div className="mt-1.5 h-px bg-line" />
+            <Card>
+              <CardBody className="p-2">
+                <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
+                  Quick links
+                </p>
+                <nav className="flex flex-col">
+                  <QuickLink to={links.products} icon={ShoppingBag}>
+                    My products
+                  </QuickLink>
+                  {isCustomer && (
+                    <QuickLink to={links.orders} icon={ReceiptText}>
+                      My orders
+                    </QuickLink>
+                  )}
+                  <QuickLink to={links.settings} icon={Settings}>
+                    Settings
+                  </QuickLink>
+                </nav>
+              </CardBody>
+            </Card>
+          </aside>
 
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              <DetailTile icon={<UserRound className="size-5" />} label="Full name" value={user.name} className="sm:col-span-2" />
-              <DetailTile icon={<Mail className="size-5" />} label="Email address" value={user.email} />
-              <DetailTile
-                icon={<ShieldCheck className="size-5" />}
-                label="Account role"
-                value={isAdmin ? "Admin" : "Staff"}
-                hint="Managed by an administrator"
+          {/* ================= Main content ================= */}
+          <div className="min-w-0 space-y-6">
+            <Card>
+              <CardHeader
+                title="Profile photo"
+                description="This is how you appear across Prodexa."
               />
-              <DetailTile
-                icon={<CalendarDays className="size-5" />}
-                label="Member since"
-                value={since ?? "—"}
-                hint={since ? undefined : "Sign in again to load it"}
-              />
-              <DetailTile icon={<CircleCheck className="size-5" />} label="Account status" value="Active" />
-            </div>
+              <CardBody className="space-y-3">
+                <ImageUploadField
+                  currentUrl={user.avatarUrl}
+                  file={avatarFile}
+                  onFileSelect={setAvatarFile}
+                  onRemove={handleAvatarFieldRemove}
+                  disabled={avatarUploading || avatarRemoving}
+                  loading={avatarUploading}
+                  rules={AVATAR_RULES}
+                  label="Avatar"
+                  hint="JPEG, PNG or WebP — up to 1 MB."
+                  previewAlt="Avatar preview"
+                  previewClassName="size-24 rounded-full"
+                  helperText={null}
+                  chooseLabel="Choose avatar"
+                  changeLabel="Change avatar"
+                  removeLabel="Remove avatar"
+                  loadingLabel="Uploading..."
+                />
+                {avatarFile && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      leftIcon={<Upload className="size-4" aria-hidden="true" />}
+                      loading={avatarUploading}
+                      onClick={() => void handleAvatarUpload()}
+                    >
+                      Upload avatar
+                    </Button>
+                    <Button variant="ghost" disabled={avatarUploading} onClick={() => setAvatarFile(null)}>
+                      Cancel
+                    </Button>
+                  </div>
+                )}
+              </CardBody>
+            </Card>
 
-            <div className="mt-5 flex flex-wrap gap-3">
-              <Button leftIcon={<Pencil className="size-4" aria-hidden="true" />} onClick={() => setEditOpen(true)}>
-                Edit profile
-              </Button>
-              <Link to="/products" className="inline-flex">
-                <Button variant="secondary" leftIcon={<ShoppingBag className="size-4" aria-hidden="true" />}>
-                  My products
-                </Button>
-              </Link>
-              {isCustomer && (
-                <Link to="/dashboard/orders" className="inline-flex">
-                  <Button variant="secondary" leftIcon={<ReceiptText className="size-4" aria-hidden="true" />}>
-                    My orders
+            <Card>
+              <CardHeader
+                title="Account details"
+                description="Your personal information and permissions."
+                action={
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    leftIcon={<Pencil className="size-4" aria-hidden="true" />}
+                    onClick={() => setEditOpen(true)}
+                  >
+                    Edit
                   </Button>
-                </Link>
-              )}
-              <Button variant="ghost" className="text-danger-600 hover:text-danger-700" leftIcon={<LogOut className="size-4 " aria-hidden="true"  />} onClick={() => void handleLogout()}>
-                Log out
-              </Button>
-            </div>
+                }
+              />
+              <CardBody className="grid gap-3 sm:grid-cols-2">
+                <DetailTile
+                  icon={<UserRound className="size-5" />}
+                  label="Full name"
+                  value={user.name}
+                  className="sm:col-span-2"
+                />
+                <DetailTile icon={<Mail className="size-5" />} label="Email address" value={user.email} />
+                <DetailTile
+                  icon={<ShieldCheck className="size-5" />}
+                  label="Account role"
+                  value={ROLE_LABELS[user.role]}
+                  hint="Managed by an administrator"
+                />
+                <DetailTile
+                  icon={<CalendarDays className="size-5" />}
+                  label="Member since"
+                  value={since ?? "—"}
+                  hint={since ? undefined : "Sign in again to load it"}
+                />
+                <DetailTile icon={<CircleCheck className="size-5" />} label="Account status" value="Active" />
+              </CardBody>
+            </Card>
 
             {isCustomer && (
-              <>
-                <h2 className="mt-9 text-lg font-bold">Order history</h2>
-                <div className="mt-1.5 h-px bg-line" />
-
-                {ordersQuery.isPending ? (
-                  <ul className="mt-5 space-y-3" aria-hidden="true">
-                    {Array.from({ length: 3 }).map((_, i) => (
-                      <li key={i} className="h-14 animate-pulse rounded-control border border-line bg-surface-alt" />
-                    ))}
-                  </ul>
-                ) : ordersQuery.isError ? (
-                  <div className="mt-5 rounded-control border border-dashed border-danger-600/30 bg-danger-50 px-4 py-8 text-center text-sm text-danger-700">
-                    Couldn't load your orders. Please try again later.
-                  </div>
-                ) : orders.length === 0 ? (
-                  <div className="mt-5 rounded-control border border-dashed border-line bg-surface-alt px-4 py-10 text-center text-sm text-muted">
-                    No orders found.
-                  </div>
-                ) : (
-                  <ul className="mt-5 space-y-3">
-                    {orders.map((order) => (
-                      <li
-                        key={String(order.id)}
-                        className="rounded-control border border-line bg-surface-alt px-4 py-3 transition hover:border-primary-300"
-                      >
-                        <Link to={orderPath(order.id, "/dashboard/orders")} className="flex flex-wrap items-center justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="font-mono text-sm font-bold text-ink">{formatNumber(order.orderNumber)}</p>
-                            <p className="text-xs text-muted">{formatDate(order.createdAt)}</p>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <span className="text-sm font-semibold text-ink">{formatMoney(order.totalAmount)}</span>
-                            <OrderStatusBadge status={order.status} />
-                          </div>
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </>
+              <Card>
+                <CardHeader
+                  title="Order history"
+                  description="Your five most recent orders."
+                  action={
+                    <Link to={links.orders} className="inline-flex">
+                      <Button size="sm" variant="secondary">
+                        View all
+                      </Button>
+                    </Link>
+                  }
+                />
+                <CardBody>
+                  {ordersQuery.isPending ? (
+                    <ul className="space-y-3" aria-hidden="true">
+                      {Array.from({ length: 3 }).map((_, i) => (
+                        <li key={i} className="h-14 animate-pulse rounded-control border border-line bg-surface-alt" />
+                      ))}
+                    </ul>
+                  ) : ordersQuery.isError ? (
+                    <div className="rounded-control border border-dashed border-danger-600/30 bg-danger-50 px-4 py-8 text-center text-sm text-danger-700">
+                      Couldn't load your orders. Please try again later.
+                    </div>
+                  ) : orders.length === 0 ? (
+                    <div className="rounded-control border border-dashed border-line bg-surface-alt px-4 py-10 text-center text-sm text-muted">
+                      No orders found.
+                    </div>
+                  ) : (
+                    <ul className="space-y-3">
+                      {orders.map((order) => (
+                        <li
+                          key={String(order.id)}
+                          className="rounded-control border border-line bg-surface-alt px-4 py-3 transition hover:border-primary-300"
+                        >
+                          <Link
+                            to={orderPath(order.id, links.orders)}
+                            className="flex flex-wrap items-center justify-between gap-3"
+                          >
+                            <div className="min-w-0">
+                              <p className="font-mono text-sm font-bold text-ink">
+                                {formatNumber(order.orderNumber)}
+                              </p>
+                              <p className="text-xs text-muted">{formatDate(order.createdAt)}</p>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <span className="text-sm font-semibold text-ink">
+                                {formatMoney(order.totalAmount)}
+                              </span>
+                              <OrderStatusBadge status={order.status} />
+                            </div>
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </CardBody>
+              </Card>
             )}
 
             {/* Destructive zone — kept visually apart, guarded by a confirm dialog. */}
-            <div className="mt-9 flex flex-wrap items-center justify-between gap-4 rounded-control border border-danger-600/20 bg-danger-50 px-5 py-4">
-              <div>
-                <p className="text-sm font-bold text-danger-700">Delete account</p>
-                <p className="text-xs text-danger-700/80">
-                  Permanently remove your account. This can't be undone.
-                </p>
-              </div>
-              <Button variant="secondary" leftIcon={<Trash2 className="size-4" aria-hidden="true" />} onClick={() => setDeleteOpen(true)}>
-                Delete
-              </Button>
-            </div>
+            <Card className="border-danger-600/20 bg-danger-50/40">
+              <CardBody className="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-bold text-danger-700">Delete account</p>
+                  <p className="text-xs text-danger-700/80">
+                    Permanently remove your account. This can't be undone.
+                  </p>
+                </div>
+                <Button
+                  variant="secondary"
+                  leftIcon={<Trash2 className="size-4" aria-hidden="true" />}
+                  onClick={() => setDeleteOpen(true)}
+                >
+                  Delete
+                </Button>
+              </CardBody>
+            </Card>
           </div>
-        </Card>
+        </div>
       </div>
 
       <EditProfileDialog open={editOpen} onClose={() => setEditOpen(false)} />

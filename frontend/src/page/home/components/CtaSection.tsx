@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { CheckCircle2, RotateCcw, Zap } from "lucide-react";
+import { History, ShieldCheck, Zap } from "lucide-react";
 import Reveal from "../../../components/motion/Reveal";
 import Shine from "../../../components/motion/Shine";
 import { buttonClass } from "../../../components/ui/buttonClass";
@@ -40,7 +40,7 @@ export default function CtaSection() {
                 )}
               >
                 <Shine />
-                Start 14-Day Free Trial
+                Request a Demo
               </Link>
               <Link
                 to="/about"
@@ -52,13 +52,13 @@ export default function CtaSection() {
 
             <ul className="mt-6 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-[#4A4D60]">
               <li className="flex items-center gap-1.5">
-                <CheckCircle2 className="h-4 w-4 text-[#1F8F6B]" aria-hidden="true" /> No credit card required
+                <ShieldCheck className="h-4 w-4 text-[#1F8F6B]" aria-hidden="true" /> Role-based access
               </li>
               <li className="flex items-center gap-1.5">
                 <Zap className="h-4 w-4 text-[#1F8F6B]" aria-hidden="true" /> 5-minute guided setup
               </li>
               <li className="flex items-center gap-1.5">
-                <RotateCcw className="h-4 w-4 text-[#1F8F6B]" aria-hidden="true" /> Cancel anytime
+                <History className="h-4 w-4 text-[#1F8F6B]" aria-hidden="true" /> Full stock history
               </li>
             </ul>
           </div>

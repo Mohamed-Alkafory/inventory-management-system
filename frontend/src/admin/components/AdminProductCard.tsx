@@ -1,5 +1,5 @@
-import { Heart, Pencil, ShoppingCart, Trash2 } from "lucide-react";
-import { Button, Skeleton, SkeletonText, StatusBadge } from "../../components/ui";
+import { Pencil, Trash2 } from "lucide-react";
+import { Skeleton, SkeletonText, StatusBadge } from "../../components/ui";
 import { Card, CardBody } from "../../components/ui/Card";
 import { ProductThumb } from "../../components/shop/ProductCard";
 import { cn } from "../../lib/cn";
@@ -15,25 +15,19 @@ import type { InventoryProduct } from "../../types/inventory";
 export type AdminProductCardProps = {
   product: InventoryProduct;
   isAdmin: boolean;
-  isFavorite: boolean;
   disabled?: boolean;
   onOpen: (product: InventoryProduct) => void;
   onEdit?: (product: InventoryProduct) => void;
   onDelete?: (product: InventoryProduct) => void;
-  onOrder: (product: InventoryProduct) => void;
-  onToggleFavorite: (product: InventoryProduct) => void;
 };
 
 export function AdminProductCard({
   product,
   isAdmin,
-  isFavorite,
   disabled = false,
   onOpen,
   onEdit,
   onDelete,
-  onOrder,
-  onToggleFavorite,
 }: AdminProductCardProps) {
   const outOfStock = product.stock <= 0;
 
@@ -99,31 +93,6 @@ export function AdminProductCard({
           <span className={cn("text-xs font-medium", outOfStock ? "text-danger-600" : "text-muted")}>
             {outOfStock ? "None left" : `${product.stock} in stock`}
           </span>
-        </div>
-
-        <div className="flex items-center gap-1.5 pt-1">
-          <Button
-            size="sm"
-            className="flex-1"
-            leftIcon={<ShoppingCart className="size-4" aria-hidden="true" />}
-            disabled={disabled || outOfStock}
-            onClick={() => onOrder(product)}
-          >
-            Order
-          </Button>
-          <Button
-            size="sm"
-            variant={isFavorite ? "secondary" : "ghost"}
-            aria-label={isFavorite ? `Remove ${product.name} from favorites` : `Add ${product.name} to favorites`}
-            aria-pressed={isFavorite}
-            disabled={disabled}
-            onClick={() => onToggleFavorite(product)}
-          >
-            <Heart
-              className={cn("size-4", isFavorite && "fill-current text-danger-600")}
-              aria-hidden="true"
-            />
-          </Button>
         </div>
       </CardBody>
     </Card>

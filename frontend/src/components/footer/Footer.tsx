@@ -1,23 +1,9 @@
 import { Link } from "react-router-dom";
 import { Mail, MapPin, Phone } from "lucide-react";
 import { FaFacebookF, FaInstagram, FaXTwitter, FaYoutube } from "react-icons/fa6";
+import { useAreaLinks } from "../../routes/useAreaLinks";
 import ProdexaLogo from "../Logo";
 import { BRAND } from "../../lib/brand";
-
-const SHOP_LINKS = [
-  { label: "Home", to: "/" },
-  { label: "Products", to: "/products" },
-  { label: "About us", to: "/about" },
-  { label: "Contact", to: "/contact" },
-];
-
-const ACCOUNT_LINKS = [
-  { label: "My profile", to: "/profile" },
-  { label: "My orders", to: "/orders" },
-  { label: "Favorites", to: "/favorites" },
-  { label: "Cart", to: "/cart" },
-  { label: "Settings", to: "/settings" },
-];
 
 const CONTACT_ROWS = [
   { icon: Mail, text: "support@prodexa.com", href: "mailto:support@prodexa.com" },
@@ -43,6 +29,30 @@ const FOOTER_LINK =
  */
 export default function Footer() {
   const year = new Date().getFullYear();
+  const links = useAreaLinks();
+
+  const shopLinks = [
+    { label: "Home", to: "/" },
+    { label: "Products", to: links.products },
+    { label: "About us", to: "/about" },
+    { label: "Contact", to: "/contact" },
+  ];
+
+  // Favorites and cart belong to the customer storefront; other signed-in
+  // roles don't have those pages in their dashboards.
+  const showStorefrontLinks = !links.isAuthenticated || links.role === "CUSTOMER";
+
+  const accountLinks = [
+    { label: "My profile", to: links.profile },
+    { label: "My orders", to: links.orders },
+    ...(showStorefrontLinks
+      ? [
+          { label: "Favorites", to: links.favorites },
+          { label: "Cart", to: links.cart },
+        ]
+      : []),
+    { label: "Settings", to: links.settings },
+  ];
 
   return (
     <footer className="bg-linear-to-b from-surface-alt to-[#E9EDF2] text-ink">
@@ -86,7 +96,7 @@ export default function Footer() {
           <nav aria-label="Shop" className="min-w-0">
             <h2 className={FOOTER_HEADING}>Shop</h2>
             <ul className="mt-4 space-y-3">
-              {SHOP_LINKS.map((link) => (
+              {shopLinks.map((link) => (
                 <li key={link.label}>
                   <Link to={link.to} className={FOOTER_LINK}>
                     {link.label}
@@ -100,7 +110,7 @@ export default function Footer() {
           <nav aria-label="Account" className="min-w-0">
             <h2 className={FOOTER_HEADING}>Account</h2>
             <ul className="mt-4 space-y-3">
-              {ACCOUNT_LINKS.map((link) => (
+              {accountLinks.map((link) => (
                 <li key={link.label}>
                   <Link to={link.to} className={FOOTER_LINK}>
                     {link.label}

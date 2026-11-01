@@ -20,11 +20,17 @@ describe("Home page", () => {
     expect(screen.getByRole("main")).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/know exactly what you have/i);
     expect(screen.getByRole("heading", { name: "Everything You Need" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /built for every role/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /up and running in three steps/i })).toBeInTheDocument();
 
-    const trials = screen.getAllByRole("link", { name: /start 14-day free trial/i });
-    expect(trials.length).toBeGreaterThanOrEqual(2);
-    trials.forEach((a) => expect(a).toHaveAttribute("href", "/contact"));
+    // The four role workspaces are shown with their titles.
+    ["Admin", "Staff", "Support", "Customer"].forEach((role) =>
+      expect(screen.getByRole("heading", { name: role })).toBeInTheDocument(),
+    );
+
+    const demos = screen.getAllByRole("link", { name: /request a demo/i });
+    expect(demos.length).toBeGreaterThanOrEqual(2);
+    demos.forEach((a) => expect(a).toHaveAttribute("href", "/contact"));
   });
 
   it("links to the public catalog", () => {

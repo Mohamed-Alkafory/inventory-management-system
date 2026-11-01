@@ -131,14 +131,15 @@ describe("route access matrix", () => {
     }
   });
 
-  it("shows Orders and Support links in the admin sidebar", () => {
+  it("shows Orders and Reports links in the admin sidebar without a cross-area Support link", () => {
     signIn("ADMIN");
     renderAt("/admin");
 
     const nav = screen.getByRole("navigation", { name: "Admin" });
     expect(within(nav).getByRole("link", { name: "Orders" })).toHaveAttribute("href", "/admin/orders");
     expect(within(nav).getByRole("link", { name: "Reports" })).toHaveAttribute("href", "/admin/reports");
-    expect(within(nav).getByRole("link", { name: "Support" })).toHaveAttribute("href", "/support/messages");
+    // Support is its own workspace; the admin sidebar must not jump into it.
+    expect(within(nav).queryByRole("link", { name: "Support" })).not.toBeInTheDocument();
   });
 
   it("shows a Products link in the support sidebar", () => {

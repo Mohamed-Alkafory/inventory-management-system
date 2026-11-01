@@ -2,15 +2,18 @@ import { useState } from "react";
 import type { ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { FaBars, FaSignOutAlt, FaTimes, FaUser } from "react-icons/fa";
-import { Heart, Settings as SettingsIcon, ShoppingCart } from "lucide-react";
+import { Heart, ShoppingCart } from "lucide-react";
 import { useAuth } from "../../context/auth/useAuth";
 import { useCart } from "../../context/cart/useCart";
 import { useFavorites } from "../../context/favorites/useFavorites";
-import { AREA_HOME, areaForPath, homePathForRole } from "../../routes/redirect";
+import { useAreaLinks } from "../../routes/useAreaLinks";
 import NotificationBell from "../../features/notifications/NotificationBell";
 import ProdexaLogo from "../Logo";
 import UserAvatar from "../user/UserAvatar";
 import "./header.css";
+
+/** Screens that render their own full-page shell without the global header. */
+const AUTH_PATHS = new Set(["/login", "/register"]);
 
 /** Icon + orange count badge; guests are sent to sign in first. */
 function IconLink({
@@ -52,32 +55,19 @@ export default function Header() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
 
-  // Stay inside the dashboard the user is browsing: inside an area, links point
-  // at that area (Products → /admin/products, Dashboard → /admin) instead of
-  // dropping them back on the storefront.
-  const area = areaForPath(pathname);
+  // Auth-aware links: signed-in users stay inside the dashboard area they are
+  // browsing (or their role's home); guests get the public storefront.
+  const areaLinks = useAreaLinks();
 
-  // Products always opens inside a dashboard for signed-in users: the current
-  // area when they are in one, otherwise their role's dashboard. Only guests
-  // get the public storefront catalogue.
-  const productsHref = area
-    ? `${AREA_HOME[area]}/products`
-    : isAuthenticated
-      ? `${homePathForRole(role)}/products`
-      : "/products";
+  // Auth screens are a focused, full-screen experience — no site chrome.
+  if (AUTH_PATHS.has(pathname)) return null;
 
-  // Dashboard shortcut: the current area when inside one, else the role's home.
-  const dashboardHref = area ? AREA_HOME[area] : isAuthenticated ? homePathForRole(role) : null;
-
-  const settingsHref = area ? `${AREA_HOME[area]}/settings` : "/settings";
-  const profileHref = area ? `${AREA_HOME[area]}/profile` : "/profile";
-  const notificationsHref = area ? `${AREA_HOME[area]}/notifications` : "/notifications";
-  const cartHref = isAuthenticated ? (area === "customer" ? "/dashboard/cart" : "/cart") : "/login";
-  const favoritesHref = isAuthenticated
-    ? area === "customer"
-      ? "/dashboard/favorites"
-      : "/favorites"
-    : "/login";
+  const productsHref = areaLinks.products;
+  const dashboardHref = areaLinks.dashboard;
+  const profileHref = areaLinks.profile;
+  const notificationsHref = areaLinks.notifications;
+  const cartHref = isAuthenticated ? areaLinks.cart : "/login";
+  const favoritesHref = isAuthenticated ? areaLinks.favorites : "/login";
 
   const navLinks = [
     { label: "Home", href: "/" },
@@ -161,9 +151,6 @@ export default function Header() {
                     <FaSignOutAlt aria-hidden="true" />
                     Log out
                   </button>
-                  <Link to={settingsHref} className="icon-btn" aria-label="Settings">
-                    <SettingsIcon className="size-5" aria-hidden="true" />
-                  </Link>
                   <Link to={profileHref} className="icon-btn" aria-label="Your profile">
                     <UserAvatar name={user?.name} src={user?.avatarUrl} size="sm" />
                   </Link>
@@ -193,10 +180,6 @@ export default function Header() {
                     <FaSignOutAlt aria-hidden="true" style={{ marginRight: 8 }} />
                     Log out
                   </button>
-                  <Link to={settingsHref} className="btn btn--ghost" onClick={closeMenu}>
-                    <SettingsIcon className="size-4" aria-hidden="true" style={{ marginRight: 8 }} />
-                    Settings
-                  </Link>
                   <Link to={profileHref} className="btn btn--primary" onClick={closeMenu}>
                     <FaUser aria-hidden="true" style={{ marginRight: 8 }} />
                     My profile

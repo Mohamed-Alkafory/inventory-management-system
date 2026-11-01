@@ -11,6 +11,7 @@ import Audit from "./admin/pages/Audit/Audit";
 import PurchaseOrders from "./admin/pages/PurchaseOrders/PurchaseOrders";
 import PurchaseOrderDetails from "./admin/pages/PurchaseOrders/PurchaseOrderDetails";
 import Header from "./components/header/Header";
+import ScrollToTop from "./components/ScrollToTop";
 import SiteFooter from "./components/footer/SiteFooter";
 import ToastProvider from "./components/ui/toast/ToastProvider";
 import AuthProvider from "./context/auth/AuthProvider";
@@ -151,6 +152,7 @@ export function AppRoutes() {
           <Route path="/admin" element={<AdminLayout />}>
             <Route index element={<AdminDashboard />} />
             <Route path="products" element={<AdminProducts />} />
+            <Route path="products/:id" element={<StaffProductDetails basePath="/admin" />} />
             <Route path="inventory" element={<Inventory />} />
             <Route path="categories" element={<Categories />} />
             <Route path="suppliers" element={<Suppliers />} />
@@ -184,6 +186,7 @@ export default function App() {
           <AuthProvider>
             <CartProvider>
               <FavoritesProvider>
+                <ScrollToTop />
                 <Header />
 
                 <AppRoutes />
