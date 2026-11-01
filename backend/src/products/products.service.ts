@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 
 import { PrismaService } from '../prisma/prisma.service.js';
 import { Prisma } from '../generated/prisma/client.js';
@@ -10,9 +10,10 @@ import {
   type ProductSortableField,
 } from './dto/list-products.query.dto.js';
 import {
-  ImageStorageService,
+  IMAGE_STORAGE,
+  type ImageStorage,
   type UploadedImageFile,
-} from '../storage/image-storage.service.js';
+} from '../storage/image-storage.interface.js';
 
 /**
  * Contract §3.4 `Product` shape. `price`/`costPrice` are Decimal(12,2) in the
@@ -104,7 +105,7 @@ export class ProductsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
-    private readonly images: ImageStorageService,
+    @Inject(IMAGE_STORAGE) private readonly images: ImageStorage,
   ) {}
 
   /**

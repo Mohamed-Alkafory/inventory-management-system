@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  Inject,
   Injectable,
   NotFoundException,
   UnprocessableEntityException,
@@ -11,10 +12,11 @@ import { Prisma } from '../generated/prisma/client.js';
 import { UserRole } from '../generated/prisma/enums.js';
 import { AuditService } from '../audit/audit.service.js';
 import {
-  ImageStorageService,
-  MAX_AVATAR_SIZE_BYTES,
+  IMAGE_STORAGE,
+  type ImageStorage,
   type UploadedImageFile,
-} from '../storage/image-storage.service.js';
+} from '../storage/image-storage.interface.js';
+import { MAX_AVATAR_SIZE_BYTES } from '../storage/image-validation.js';
 import { CreateUserDto } from './dto/create-user.dto.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
 import { ListUsersQueryDto } from './dto/list-users.query.dto.js';
@@ -58,7 +60,7 @@ export class UsersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
-    private readonly images: ImageStorageService,
+    @Inject(IMAGE_STORAGE) private readonly images: ImageStorage,
   ) {}
 
   async create(createUserDto: CreateUserDto): Promise<UserResponse> {

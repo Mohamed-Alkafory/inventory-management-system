@@ -226,6 +226,7 @@ function buildMatrix(context: FixtureContext): MatrixEntry[] {
   return [
     // ------------------------------------------------------------------ public
     { method: 'get', path: '/health', expected: PUBLIC },
+    { method: 'get', path: '/health/live', expected: PUBLIC },
     {
       method: 'post',
       path: '/auth/login',
@@ -1102,7 +1103,7 @@ describe('Role permission matrix (e2e)', () => {
       const extra = matrixKeys.filter((route) => !discovered.includes(route));
       expect(extra, `Matrix entries with no registered route: ${extra.join(', ')}`).toEqual([]);
 
-      expect(discovered.length).toBe(78);
+      expect(discovered.length).toBe(79);
     });
   });
 

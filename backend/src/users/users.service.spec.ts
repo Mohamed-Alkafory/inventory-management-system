@@ -9,10 +9,8 @@ import { UsersService, type UserResponse } from './users.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { Prisma } from '../generated/prisma/client.js';
 import { AuditService } from '../audit/audit.service.js';
-import {
-  ImageStorageService,
-  MAX_AVATAR_SIZE_BYTES,
-} from '../storage/image-storage.service.js';
+import { IMAGE_STORAGE } from '../storage/image-storage.interface.js';
+import { MAX_AVATAR_SIZE_BYTES } from '../storage/image-validation.js';
 
 describe('UsersService', () => {
   let service: UsersService;
@@ -79,7 +77,7 @@ describe('UsersService', () => {
         UsersService,
         { provide: AuditService, useValue: { log: auditLog } },
         {
-          provide: ImageStorageService,
+          provide: IMAGE_STORAGE,
           useValue: { save: imageSave, delete: imageDelete },
         },
         {
@@ -452,6 +450,21 @@ describe('UsersService', () => {
       expect(result.avatarUrl).toBe('/uploads/avatars/new.png');
       expect(result).not.toHaveProperty('passwordHash');
       expect(JSON.stringify(result)).not.toContain('passwordHash');
+    });
+
+    it('leaves the user unchanged when the upload fails', async () => {
+      userFindUnique.mockResolvedValue({
+        ...adminRow(),
+        avatarUrl: '/uploads/avatars/old.png',
+      });
+      const boom = new Error('upload failed');
+      imageSave.mockRejectedValue(boom);
+
+      await expect(service.updateAvatar(STAFF_ID, file)).rejects.toBe(boom);
+
+      expect(userUpdate).not.toHaveBeenCalled();
+      expect(imageDelete).not.toHaveBeenCalled();
+      expect(auditLog).not.toHaveBeenCalled();
     });
 
     it('deletes the newly written file when the database update fails', async () => {

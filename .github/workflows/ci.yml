@@ -35,6 +35,7 @@ jobs:
           cache-dependency-path: backend/package-lock.json
       - run: npm ci
       - run: npx prisma generate
+      - run: npx prisma validate
       - run: npm run lint
       - run: npm test
       - name: Deploy database migrations for E2E
@@ -64,6 +65,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm run lint
+      - run: npm test -- --run
       - run: npm run build
       - name: Build frontend Docker image
         run: docker build --build-arg VITE_API_URL= -t inventory-frontend:ci .

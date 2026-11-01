@@ -69,7 +69,7 @@ export class UsersController {
   @ApiOperation({
     summary: 'Upload or replace the current user avatar',
     description:
-      'Multipart field `image`; the stored `avatarUrl` is a relative `/uploads/avatars/...` path. The previous local file is deleted.',
+      'Multipart field `image`; the stored `avatarUrl` is a Cloudinary https URL or a relative `/uploads/avatars/...` path. The previous image is deleted.',
   })
   @ApiResponse({
     status: HttpStatus.OK,

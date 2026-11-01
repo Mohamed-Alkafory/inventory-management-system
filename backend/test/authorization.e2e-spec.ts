@@ -153,6 +153,16 @@ describe('Authorization (e2e)', () => {
     });
   });
 
+  describe('public health probes', () => {
+    it('GET /api/v1/health/live is reachable without a token', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/api/v1/health/live')
+        .expect(200);
+
+      expect(res.body).toEqual({ status: 'ok' });
+    });
+  });
+
   describe('401 without a token', () => {
     const protectedRoutes: Array<[string, string]> = [
       ['get', '/api/v1/users'],

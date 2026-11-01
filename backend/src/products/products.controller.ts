@@ -189,7 +189,7 @@ export class ProductsController {
   @ApiOperation({
     summary: 'Upload or replace a product image (ADMIN only)',
     description:
-      'Multipart field `image`; the stored `imageUrl` is a relative `/uploads/products/...` path. The previous local file is deleted.',
+      'Multipart field `image`; the stored `imageUrl` is a Cloudinary https URL or a relative `/uploads/products/...` path. The previous image is deleted.',
   })
   @ApiResponse({
     status: HttpStatus.OK,

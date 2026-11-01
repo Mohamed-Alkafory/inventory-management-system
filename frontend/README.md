@@ -76,9 +76,28 @@ base URL works without CORS. To bake an external API URL into the bundle:
 docker build --build-arg VITE_API_URL=https://api.example.com/api/v1 -t prodexa-frontend ./frontend
 ```
 
+## Vercel
+
+The repository contains `vercel.json` (SPA rewrite of every path to
+`/index.html`), so the dashboard needs no routing configuration.
+
+1. **Import the repository** in Vercel and set **Root Directory** to `frontend`.
+2. Framework preset **Vite**; build command `npm run build`; output directory
+   `dist`.
+3. Add the environment variable `VITE_API_URL` (Production and Preview) as an
+   absolute URL ending in `/api/v1`, for example
+   `https://<your-render-service>.onrender.com/api/v1`.
+   `VITE_USE_MOCK` must be unset or `false`.
+4. Deploy, copy the resulting `https://<project>.vercel.app` origin (no trailing
+   slash), then add it to `CORS_ORIGIN` on the backend host and redeploy the
+   backend.
+
+`VITE_API_URL` is baked in at build time, so changing it requires a new
+deployment.
+
 ## Reference
 
 - [Vite docs](https://vite.dev) · [React docs](https://react.dev)
 - [Tailwind CSS v4 docs](https://tailwindcss.com/docs)
-- CI runs `npm ci` · `npm run lint` · `npm run build` and builds the Docker
-  image here (`.github/workflows/ci.yml`).
+- CI runs `npm ci` · `npm run lint` · `npm test -- --run` · `npm run build` and
+  builds the Docker image here (`.github/workflows/ci.yml`).

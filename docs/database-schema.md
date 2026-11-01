@@ -2,12 +2,12 @@
 
 Source of truth: `backend/prisma/schema.prisma` (Prisma 7.9.1, PostgreSQL provider).
 Initial migration: `backend/prisma/migrations/20251015000000_init/migration.sql`.
-Prisma config: `backend/prisma.config.ts` (`schema`, `migrations.path`, datasource URL from `DATABASE_URL`).
+Prisma config: `backend/prisma.config.ts` (`schema`, `migrations.path`, datasource URL from `DIRECT_URL` when set, otherwise `DATABASE_URL`).
 
 ## Connection
 
 - PostgreSQL 16 via Docker Compose service `db` (`docker-compose.yml`), data in the `pgdata` volume, database `inventory_db`. The container maps to host port `5432` by default; `POSTGRES_PORT` in the repo-root `.env` overrides it.
-- The backend connects with `DATABASE_URL` (see `backend/.env.example`). Local development on this machine currently maps the container to host port `5433` because a native Windows PostgreSQL occupies `5432`.
+- The backend runtime connects with `DATABASE_URL` (see `backend/.env.example`). The Prisma CLI (migrate/seed) uses `DIRECT_URL` when it is set and otherwise falls back to `DATABASE_URL`; on Neon set `DIRECT_URL` to the direct (non-pooled) URL and keep `DATABASE_URL` as the pooled URL.
 
 ## Conventions
 
@@ -21,11 +21,13 @@ Prisma config: `backend/prisma.config.ts` (`schema`, `migrations.path`, datasour
 
 | Enum                  | Values                                                                               |
 | --------------------- | ------------------------------------------------------------------------------------ |
-| `UserRole`            | `ADMIN`, `STAFF` (`users.role` defaults to `STAFF`)                                  |
+| `UserRole`            | `ADMIN`, `STAFF`, `CUSTOMER`, `SUPPORT` (`users.role` defaults to `STAFF`; self-registration always creates `CUSTOMER`) |
+| `ContactStatus`       | `NEW` (default), `IN_PROGRESS`, `RESOLVED`                                           |
 | `OrderStatus`         | `PENDING` (default), `CONFIRMED`, `CANCELLED`                                        |
+| `PaymentMethod`       | `COD` (default; the only value)                                                      |
 | `StockMovementType`   | `PURCHASE_RECEIPT`, `SALE`, `RETURN`, `ADJUSTMENT`                                   |
 | `PurchaseOrderStatus` | `DRAFT` (default), `ORDERED`, `PARTIALLY_RECEIVED`, `RECEIVED`, `CANCELLED`          |
-| `NotificationType`    | `LOW_STOCK`, `ORDER_CREATED`, `ORDER_CANCELLED`, `PURCHASE_ORDER_RECEIVED`, `SYSTEM` |
+| `NotificationType`    | `LOW_STOCK`, `ORDER_CREATED`, `ORDER_CONFIRMED`, `ORDER_CANCELLED`, `PURCHASE_ORDER_RECEIVED`, `CONTACT_MESSAGE_RECEIVED`, `SYSTEM` |
 
 ## Tables
 
@@ -43,11 +45,19 @@ Prisma config: `backend/prisma.config.ts` (`schema`, `migrations.path`, datasour
 
 ### `users`
 
-`id`, `name`, `email` (unique), `password_hash`, `role` (default `STAFF`), `is_active` (default true), `created_at`, `updated_at`. Has many `orders` (created), `stock_movements` (created), `purchase_orders` (created), `notifications`, `notification_preferences`, `audit_logs`, `refresh_tokens`.
+`id`, `name`, `email` (unique), `password_hash`, `avatar_url?`, `role` (default `STAFF`), `is_active` (default true), `created_at`, `updated_at`. The API's `POST /auth/register` always writes `CUSTOMER` regardless of the schema default. Has many `orders` (created), `customer_orders`, `stock_movements` (created), `purchase_orders` (created), `notifications`, `notification_preferences`, `audit_logs`, `refresh_tokens`, assigned `contact_messages`, and `order_notes`.
+
+### `contact_messages`
+
+`id`, `name`, `email`, `subject`, `message`, `status` (default `NEW`), `assigned_to_id?`, `internal_note?`, `created_at`, `updated_at`. Assigned to `User?` (`SetNull`).
 
 ### `orders`
 
-`id`, `order_number` (unique), `status` (default `PENDING`), `customer_name?`, `customer_phone?`, `notes?`, `total_amount`, `created_by_id`, `cancelled_at?`, `created_at`, `updated_at`. Created by `User` (`Restrict`); has many `order_items` and `stock_movements`.
+`id`, `order_number` (unique), `status` (default `PENDING`), `customer_name?`, `customer_phone?`, `notes?`, `total_amount`, `customer_id?`, `recipient_name?`, `recipient_phone?`, `shipping_address?`, `shipping_city?`, `payment_method` (default `COD`), `created_by_id`, `cancelled_at?`, `created_at`, `updated_at`. Created by `User` (`Restrict`); optionally linked to a customer `User?` (`SetNull`); has many `order_items`, `stock_movements`, and `internal_notes`.
+
+### `order_notes`
+
+`id`, `order_id`, `author_id`, `note`, `created_at`. Belongs to `Order` (`Cascade`) and author `User` (`Restrict`). Internal staff notes are not exposed to customers.
 
 ### `order_items`
 
@@ -85,8 +95,10 @@ Composite PK `(user_id, type)`; `enabled` (default true). Belongs to `User` (`Ca
 
 - `products`: `(category_id)`, `(supplier_id)`, `(name)`
 - `suppliers`: `(company_name)`
-- `orders`: `(status, created_at)`, `(created_by_id)`
+- `orders`: `(status, created_at)`, `(created_by_id)`, `(customer_id, created_at)`
 - `order_items`: `(product_id)`
+- `order_notes`: `(order_id, created_at)`
+- `contact_messages`: `(status, created_at)`, `(assigned_to_id)`
 - `stock_movements`: `(product_id, created_at)`, `(created_by_id)`, `(order_id)`, `(purchase_order_id)`
 - `purchase_orders`: `(supplier_id)`, `(status, created_at)`, `(created_by_id)`
 - `purchase_order_items`: `(product_id)`

@@ -697,4 +697,14 @@ describe('Auth & Users (e2e)', () => {
       await request(app.getHttpServer()).get('/api/v1/health').expect(200);
     });
   });
+
+  describe('GET /health/live', () => {
+    it('is public and does not require the database', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/api/v1/health/live')
+        .expect(200);
+
+      expect(res.body).toEqual({ status: 'ok' });
+    });
+  });
 });

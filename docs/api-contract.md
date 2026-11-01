@@ -59,7 +59,7 @@
 - Tokens are **not** stored in cookies by the API; the frontend holds them and attaches
   the header.
 - Public (no token) endpoints: `POST /auth/login`, `POST /auth/register`,
-  `POST /auth/refresh`, `GET /health`, `POST /contact`,
+  `POST /auth/refresh`, `GET /health`, `GET /health/live`, `POST /contact`,
   `GET /catalog/products`, `GET /catalog/products/:id`, `GET /catalog/categories`.
 
 ### Roles
@@ -169,7 +169,7 @@ Matrix generated from `ROLE_PERMISSIONS` and the controller decorators:
 | Endpoint group | Anonymous | CUSTOMER | SUPPORT | STAFF | ADMIN |
 | --- | --- | --- | --- | --- | --- |
 | `POST /auth/login`, `/register`, `/refresh` | yes | yes | yes | yes | yes |
-| `GET /health` | yes | yes | yes | yes | yes |
+| `GET /health`, `GET /health/live` | yes | yes | yes | yes | yes |
 | `GET /catalog/products`, `/:id`, `/categories` | yes | yes | yes | yes | yes |
 | `POST /contact` | yes | yes | yes | yes | yes |
 | Own account (`/auth/me`, change-password, logout, avatar) | no | yes | yes | yes | yes |
@@ -241,7 +241,12 @@ Matrix generated from `ROLE_PERMISSIONS` and the controller decorators:
 
 | Method | Path | Response | Statuses |
 | --- | --- | --- | --- |
-| GET | `/health` | `{ status: "ok", db: "up" }` | 200; 503 standard error when the DB is unreachable |
+| GET | `/health/live` | `{ status: "ok" }` | 200 always while the process is running; **never touches the database** (use this for uptime pingers) |
+| GET | `/health` | `{ status: "ok", db: "up" }` | 200; 503 standard error when the DB is unreachable (runs `SELECT 1`) |
+
+`/health/live` is a liveness probe: it answers even when the database is suspended or
+unreachable. `/health` is a readiness probe and wakes a suspended serverless Postgres
+compute, so keep-alive monitors should ping `/health/live` instead.
 
 ### 4.3 Public catalog
 
@@ -339,7 +344,8 @@ All four roles can call these. Ownership is enforced in the service, not by the 
   active ADMIN cannot self-deactivate: `409 CONFLICT`
   (`At least one active ADMIN must remain`).
 - Avatar uploads accept JPEG, PNG or WebP (detected from magic bytes) up to **1 MB**.
-  `avatarUrl` is `null` or a relative `/uploads/avatars/<uuid>.<jpg|png|webp>` path.
+  `avatarUrl` is `null`, a Cloudinary `https://res.cloudinary.com/...` URL, a legacy
+  relative `/uploads/avatars/<uuid>.<jpg|png|webp>` path, or another external URL.
 
 ### 5.2 Notifications
 
@@ -817,8 +823,8 @@ required permission.
 - Deactivation is the soft delete; the row is never removed (AD-001). Deleting a
   product never fails because of linked order/PO items — history keeps its snapshots.
 - Product image uploads accept JPEG, PNG or WebP (magic-byte detection) up to **2 MB**.
-  `imageUrl` is `null`, an external `https://...` URL, or a relative
-  `/uploads/products/<uuid>.<jpg|png|webp>` path.
+  `imageUrl` is `null`, a Cloudinary `https://res.cloudinary.com/...` URL, a legacy
+  relative `/uploads/products/<uuid>.<jpg|png|webp>` path, or another external URL.
 
 ### 9.5 Suppliers (write)
 

@@ -27,6 +27,14 @@ describe('AppController (e2e)', () => {
     return request(app.getHttpServer()).get('/api/v1/health').expect(200);
   });
 
+  it('/api/v1/health/live (GET) is public and database-free', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/api/v1/health/live')
+      .expect(200);
+
+    expect(res.body).toEqual({ status: 'ok' });
+  });
+
   afterEach(async () => {
     await app.close();
   });

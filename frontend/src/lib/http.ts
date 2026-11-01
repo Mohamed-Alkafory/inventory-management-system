@@ -2,6 +2,18 @@ import { emitSessionExpired } from "../api/authEvents";
 import { AUTH_ENDPOINTS } from "../api/endpoints";
 import { refreshAccessToken } from "../api/sessionRefresh";
 import { tokenStorage } from "../api/tokenStorage";
+import {
+  MAX_RETRIES,
+  REQUEST_TIMEOUT_MS,
+  TIMEOUT_MESSAGE,
+  UNAVAILABLE_MESSAGE,
+  beginApiRequest,
+  beginRetry,
+  isRetryableMethod,
+  isRetryableStatus,
+  retryDelayMs,
+  sleep,
+} from "./coldStart";
 import { API_URL } from "./env";
 
 const BASE = API_URL;
@@ -108,15 +120,80 @@ async function send(path: string, init: RequestInit, opts: SendOptions = {}): Pr
     headers.set("Authorization", `Bearer ${token}`);
   }
 
+  const url = `${BASE}${path}`;
+  const endRequest = beginApiRequest(url);
+
+  // Only idempotent reads are retried: a POST/PATCH/PUT/DELETE must never be
+  // replayed automatically (no double orders or form submits).
+  const canRetry = isRetryableMethod(init.method);
+  const externalSignal = init.signal;
+
   try {
-    return await fetch(`${BASE}${path}`, {
-      ...init,
-      credentials: "include",
-      headers,
-    });
-  } catch {
-    throw new ApiError(0, "Can’t reach the server. Check your connection and try again.");
+    for (let attempt = 0; ; attempt += 1) {
+      const controller = new AbortController();
+      let timedOut = false;
+
+      const timer = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, REQUEST_TIMEOUT_MS);
+      const forwardAbort = () => controller.abort();
+
+      if (externalSignal) {
+        if (externalSignal.aborted) controller.abort();
+        else externalSignal.addEventListener("abort", forwardAbort, { once: true });
+      }
+
+      let res: Response;
+      try {
+        res = await fetch(url, {
+          ...init,
+          credentials: "include",
+          headers,
+          signal: controller.signal,
+        });
+      } catch {
+        if (!canRetry || attempt >= MAX_RETRIES || externalSignal?.aborted) {
+          if (timedOut) throw new ApiError(0, TIMEOUT_MESSAGE);
+          throw new ApiError(0, "Can’t reach the server. Check your connection and try again.");
+        }
+
+        // Network error or timeout on an idempotent read: back off and retry.
+        const endRetry = beginRetry();
+        try {
+          await sleep(retryDelayMs(attempt));
+        } finally {
+          endRetry();
+        }
+        continue;
+      } finally {
+        clearTimeout(timer);
+        externalSignal?.removeEventListener("abort", forwardAbort);
+      }
+
+      // 502/503/504 usually mean the host is still waking up. Return the final
+      // response after the retries so the existing error parsing still runs.
+      if (canRetry && attempt < MAX_RETRIES && isRetryableStatus(res.status)) {
+        await res.body?.cancel().catch(() => {});
+        const endRetry = beginRetry();
+        try {
+          await sleep(retryDelayMs(attempt));
+        } finally {
+          endRetry();
+        }
+        continue;
+      }
+
+      return res;
+    }
+  } finally {
+    endRequest();
   }
+}
+
+/** Final message when the server sent nothing helpful. */
+function statusFallback(status: number): string {
+  return isRetryableStatus(status) ? UNAVAILABLE_MESSAGE : `Request failed (${status})`;
 }
 
 export async function requestBlob(path: string, init: RequestInit = {}): Promise<Response> {
@@ -153,7 +230,7 @@ export async function requestBlob(path: string, init: RequestInit = {}): Promise
     }
     const serverMessage = isObject(body) ? (text(body.message) ?? text(body.error) ?? null) : null;
     const helpful = serverMessage === "Internal Server Error" ? null : serverMessage;
-    throw new ApiError(res.status, helpful ?? `Request failed (${res.status})`, {
+    throw new ApiError(res.status, isRetryableStatus(res.status) ? statusFallback(res.status) : (helpful ?? statusFallback(res.status)), {
       fieldErrors: extractFieldErrors(body),
       serverMessage,
       body,
@@ -197,9 +274,11 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
   if (!res.ok) {
     const serverMessage = isObject(body) ? (text(body.message) ?? text(body.error) ?? null) : null;
     // A bare "Internal Server Error" alone doesn't help the user — fall back to it
-    // only when we have nothing better to say.
+    // only when we have nothing better to say. Gateway/sleeping-host statuses
+    // always get the cold-start wording, whatever the proxy sent.
     const helpful = serverMessage === "Internal Server Error" ? null : serverMessage;
-    throw new ApiError(res.status, helpful ?? `Request failed (${res.status})`, {
+    const message = isRetryableStatus(res.status) ? statusFallback(res.status) : (helpful ?? statusFallback(res.status));
+    throw new ApiError(res.status, message, {
       fieldErrors: extractFieldErrors(body),
       serverMessage,
       body,
@@ -231,7 +310,7 @@ export async function publicRequest<T>(path: string, init: RequestInit = {}): Pr
   if (!res.ok) {
     const serverMessage = isObject(body) ? (text(body.message) ?? text(body.error) ?? null) : null;
     const helpful = serverMessage === "Internal Server Error" ? null : serverMessage;
-    throw new ApiError(res.status, helpful ?? `Request failed (${res.status})`, {
+    throw new ApiError(res.status, isRetryableStatus(res.status) ? statusFallback(res.status) : (helpful ?? statusFallback(res.status)), {
       fieldErrors: extractFieldErrors(body),
       serverMessage,
       body,

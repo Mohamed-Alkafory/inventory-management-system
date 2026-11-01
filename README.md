@@ -32,7 +32,7 @@ An inventory and order management system designed to bring product tracking, sup
 
 The project is organized as two independent applications backed by a shared PostgreSQL database.
 
-- **Frontend:** A React application that provides the user interface (Under development).
+- **Frontend:** A React application that provides the catalog, customer shopping, and staff/admin/support interfaces (Implemented).
 - **Backend:** A NestJS REST API that handles application logic and data access (Implemented).
 - **Database:** PostgreSQL for persistent data storage.
 - **ORM:** Prisma for database schema management and queries.
@@ -61,14 +61,14 @@ PostgreSQL
 
 | Component                    | Current state                                                  |
 | ---------------------------- | -------------------------------------------------------------- |
-| Frontend                     | Initial React and Vite application                             |
+| Frontend                     | React + Vite app with catalog, customer, staff, admin and support screens |
 | Backend                      | NestJS REST API with core business logic                       |
-| Database                     | PostgreSQL container configured                                |
+| Database                     | PostgreSQL container configured; Neon-ready migrations         |
 | Prisma                       | Models, migrations, and seed data implemented                  |
-| Automated checks             | GitHub Actions CI with unit and E2E tests                      |
-| Inventory and order features | Backend implemented; Frontend under development                |
+| Automated checks             | GitHub Actions CI with backend unit/E2E and frontend tests     |
+| Inventory and order features | Implemented across backend and frontend                        |
 
-The backend exposes REST endpoints under `/api/v1` (with health check at `GET /api/v1/health` returning `{"status":"ok","db":"up"}`). The frontend is currently under development.
+The backend exposes REST endpoints under `/api/v1` (liveness at `GET /api/v1/health/live`, readiness at `GET /api/v1/health` returning `{"status":"ok","db":"up"}`). The frontend is implemented; see [Deployment (free tier)](#deployment-free-tier) for hosting it.
 
 ## Tech Stack
 
@@ -126,7 +126,7 @@ The frontend is published on host port `8080` by default (`FRONTEND_PORT`) and t
 
 - Web app: `http://localhost:8080`
 - API base URL: `http://localhost:3010/api/v1`
-- Health endpoint: `http://localhost:3010/api/v1/health`
+- Health endpoint: `http://localhost:3010/api/v1/health` (readiness) and `http://localhost:3010/api/v1/health/live` (liveness)
 - Swagger UI: `http://localhost:3010/api/docs`
 
 To point the built frontend at an external API instead of the Nginx proxy, set `VITE_API_URL` (including the `/api/v1` prefix) before building:
@@ -240,25 +240,290 @@ The frontend calls the API through Vite's `/api` proxy, so no backend URL needs 
 | Backend API | http://localhost:3010 |
 | PostgreSQL  | localhost:5432        |
 
-The backend exposes `GET /api/v1/health` for readiness checks. Through the Vite proxy, the same endpoint is available at `http://localhost:5173/api/v1/health`.
+The backend exposes `GET /api/v1/health/live` (liveness, no database access) and `GET /api/v1/health` (readiness) for health checks. Through the Vite proxy, the same endpoints are available at `http://localhost:5173/api/v1/health/live` and `http://localhost:5173/api/v1/health`.
 
 ## Environment Variables
 
-| Variable            | Purpose                                      |
-| ------------------- | -------------------------------------------- |
-| `POSTGRES_USER`     | PostgreSQL username                          |
-| `POSTGRES_PASSWORD` | PostgreSQL password                          |
-| `POSTGRES_DB`       | Database name                                |
-| `POSTGRES_PORT`     | Host port mapped to PostgreSQL               |
-| `DATABASE_URL`      | Database connection string used by Prisma    |
-| `PORT`              | Backend API port; local development uses `3010` |
-| `CORS_ORIGIN`       | Allowed CORS origin for direct frontend requests |
-| `JWT_SECRET`        | Secret for signing JWT authentication tokens |
-| `JWT_EXPIRES_IN`    | Access token expiration duration (e.g. `15m`)|
-| `VITE_API_URL`      | Optional full API base URL incl. `/api/v1`; development uses the Vite proxy and the Docker build uses the Nginx proxy by default |
-| `FRONTEND_PORT`     | Host port mapped to the frontend container (default `8080`) |
+Environment templates contain placeholders only: `.env.example` (repo root, used by Docker Compose), `backend/.env.example`, and `frontend/.env.example`. Keep actual secrets in ignored local `.env` files and never commit them.
 
-Environment templates contain placeholders only. Keep actual secrets in ignored local `.env` files and never commit them.
+### Local development
+
+| Variable | Where | Required | Value shape / example placeholder |
+| --- | --- | --- | --- |
+| `POSTGRES_USER` | root `.env` | yes (Compose) | Postgres user, e.g. `inventory` |
+| `POSTGRES_PASSWORD` | root `.env` | yes (Compose) | Postgres password, e.g. `<your-value>` |
+| `POSTGRES_DB` | root `.env` | yes (Compose) | Database name, e.g. `inventory_db` |
+| `POSTGRES_PORT` | root `.env` | no | Host port, default `5432` |
+| `BACKEND_PORT` | root `.env` | no | Published API port, default `3010` |
+| `FRONTEND_PORT` | root `.env` | no | Published web port, default `8080` |
+| `DATABASE_URL` | root + `backend/.env` | yes | `postgresql://inventory:<password>@localhost:5432/inventory_db?schema=public` |
+| `DIRECT_URL` | `backend/.env` | no | Direct (non-pooled) URL; only used by the Prisma CLI |
+| `PORT` | `backend/.env` | no | API port, default `3000`; local scripts use `3010` |
+| `CORS_ORIGIN` | `backend/.env` | yes | `http://localhost:5173` |
+| `JWT_SECRET` | `backend/.env` | yes | Random string; production requires ≥32 chars and rejects placeholders |
+| `JWT_EXPIRES_IN` | `backend/.env` | no | Access-token lifetime, default `15m` |
+| `SWAGGER_ENABLED` | `backend/.env` | no | `true` to serve Swagger in production; on by default outside production |
+| `TRUST_PROXY` | `backend/.env` | no | Trusted proxy hops; `0` locally, `1` behind one proxy |
+| `PG_POOL_MAX` | `backend/.env` | no | Pool size, default `5` |
+| `PG_CONNECTION_TIMEOUT_MS` | `backend/.env` | no | Default `10000` |
+| `PG_IDLE_TIMEOUT_MS` | `backend/.env` | no | Default `10000` |
+| `UPLOADS_DIR` | `backend/.env` | no | Local upload directory, default `uploads` |
+| `IMAGE_STORAGE` | `backend/.env` | no | `local` (default) or `cloudinary` |
+| `CLOUDINARY_CLOUD_NAME` / `CLOUDINARY_API_KEY` / `CLOUDINARY_API_SECRET` | `backend/.env` | only for Cloudinary | Credentials from the Cloudinary dashboard |
+| `VITE_API_URL` | `frontend/.env` | no | Absolute API URL ending in `/api/v1`; leave unset to use the Vite proxy |
+| `VITE_USE_MOCK` | `frontend/.env` | no | `true` only to run without a backend; production must leave it unset/`false` |
+
+### CI
+
+`.github/workflows/ci.yml` starts a PostgreSQL 16 service and provides these values to the E2E step. They are throwaway test values, not production secrets.
+
+| Variable | Value in CI |
+| --- | --- |
+| `DATABASE_URL` | `postgresql://inventory:change_me@localhost:5432/inventory_test?schema=public` |
+| `JWT_SECRET` | `ci_secret_value` (production rules are not enforced because `NODE_ENV` is not `production`) |
+| `JWT_EXPIRES_IN` | `15m` |
+| `CORS_ORIGIN` | `http://localhost:5173` |
+
+`npx prisma validate` runs before lint/tests, and the frontend job runs `npm test -- --run` before its build.
+
+## Deployment (free tier)
+
+This is a reference deployment: Vercel (frontend), Render (backend Docker service), Neon (PostgreSQL), Cloudinary (images), and an external uptime pinger.
+
+### Architecture
+
+```text
+                 Browser
+                    |
+        +-----------+-----------+
+        |                       |
+        v                       v
+ Vercel (static React)     Uptime pinger
+        |                       |
+        | HTTPS  /api/v1        | GET /api/v1/health/live
+        v                       v
+ Render web service (Docker: backend/Dockerfile)
+        |
+        +--> Neon PostgreSQL (pooled DATABASE_URL; direct DIRECT_URL for migrations)
+        |
+        +--> Cloudinary (product images, avatars)
+```
+
+- Vercel serves the SPA and calls the Render API directly, so `CORS_ORIGIN` on Render must include the Vercel origin.
+- The Render container runs `prisma migrate deploy` on every start, then `node dist/main.js`.
+- Render's free web service sleeps after inactivity; Neon's free compute also suspends. The pinger keeps Render awake without waking Neon.
+
+### Order of operations
+
+Do the steps in this order; later steps need values produced by earlier ones.
+
+1. Create the Neon database and copy both connection strings.
+2. Create the Cloudinary account and copy the three credentials.
+3. Deploy the backend on Render with a provisional `CORS_ORIGIN`.
+4. Deploy the frontend on Vercel and copy the production origin.
+5. Update `CORS_ORIGIN` on Render with the exact Vercel origin and redeploy.
+6. Register the first account, promote it to admin with SQL.
+7. Configure the keep-alive pinger.
+8. Run the verification checklist.
+
+### 1. Neon (PostgreSQL)
+
+1. Create a Neon project and database. Choose a region close to the Render region you will use.
+2. From **Connection Details**, copy the **pooled** connection string (host contains `-pooler`) and use it as `DATABASE_URL`. It must include `sslmode=require` (or `sslmode=verify-full`).
+3. Copy the **direct** connection string (no `-pooler`) and use it as `DIRECT_URL`. Prisma CLI commands (`migrate`, `seed`) use `DIRECT_URL` when set, and migrations work best over the direct connection.
+4. Keep the credentials out of source control. Neon's free plan has storage and compute-hour limits that change over time; check the current plan before relying on them.
+
+### 2. Cloudinary (images)
+
+1. Create a free Cloudinary account and note the **Cloud name**, **API key**, and **API secret** from the dashboard.
+2. Set `IMAGE_STORAGE=cloudinary` plus `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET` on Render.
+3. Without `IMAGE_STORAGE=cloudinary` the API writes to local disk (`UPLOADS_DIR`), which is ephemeral on Render and lost on redeploy — use Cloudinary in production.
+
+### 3. Render (backend)
+
+1. Create a **Web Service** from this repository.
+2. Runtime: **Docker**. Dockerfile path: `backend/Dockerfile`. Docker build context: `backend`.
+3. Region: the same region as the Neon project.
+4. Health check path: `/api/v1/health/live` (liveness only, never touches the database).
+5. Add the environment variables from the table below. Render injects `PORT`; do not set it manually.
+6. Deploy. The container applies pending migrations on start. Render's free instance may take a while to build and boot.
+7. Note the service URL, e.g. `https://<your-service>.onrender.com`.
+
+`CORS_ORIGIN` is required at boot. Before Vercel exists, use a provisional but valid origin such as `http://localhost:5173`; replace it with the exact Vercel origin in step 5.
+
+#### Backend environment variables (Render)
+
+| Variable | Required | Value shape / example placeholder |
+| --- | --- | --- |
+| `DATABASE_URL` | yes | Neon pooled URL: `postgresql://<user>:<password>@<host>-pooler.<region>.aws.neon.tech/<db>?sslmode=require` |
+| `DIRECT_URL` | recommended | Neon direct URL (no `-pooler`), same credentials and `sslmode` |
+| `JWT_SECRET` | yes | Random, ≥32 chars, not a placeholder (e.g. `openssl rand -base64 48`) |
+| `CORS_ORIGIN` | yes | Comma-separated origins, no trailing slash, e.g. `https://<project>.vercel.app` |
+| `JWT_EXPIRES_IN` | no | `15m` |
+| `SWAGGER_ENABLED` | no | `false` in production |
+| `TRUST_PROXY` | recommended | `1` (Render is a single proxy hop, so rate limits are per client) |
+| `PG_POOL_MAX` | no | `5` |
+| `PG_CONNECTION_TIMEOUT_MS` | no | `10000` |
+| `PG_IDLE_TIMEOUT_MS` | no | `10000` |
+| `UPLOADS_DIR` | no | `uploads` (irrelevant when Cloudinary is used) |
+| `IMAGE_STORAGE` | yes in production | `cloudinary` |
+| `CLOUDINARY_CLOUD_NAME` | with Cloudinary | `<your-cloud-name>` |
+| `CLOUDINARY_API_KEY` | with Cloudinary | `<your-api-key>` |
+| `CLOUDINARY_API_SECRET` | with Cloudinary | `<your-api-secret>` |
+
+`NODE_ENV=production` is already set by the Dockerfile.
+
+### 4. Vercel (frontend)
+
+1. Import the repository in Vercel.
+2. **Root Directory:** `frontend`.
+3. Framework preset: **Vite**. Build command `npm run build`, output directory `dist`.
+4. Add `VITE_API_URL` for Production and Preview: the Render service URL plus `/api/v1`, e.g. `https://<your-service>.onrender.com/api/v1`. Do not add a trailing slash after `/api/v1`.
+5. Leave `VITE_USE_MOCK` unset (or `false`).
+6. Deploy and copy the production origin, e.g. `https://<project>.vercel.app`.
+
+`VITE_API_URL` is embedded at build time, so change it only by redeploying the frontend. `frontend/vercel.json` rewrites every path to `/index.html` for client-side routing.
+
+#### Frontend environment variables (Vercel)
+
+| Variable | Required | Value shape / example placeholder |
+| --- | --- | --- |
+| `VITE_API_URL` | yes | Absolute URL ending in `/api/v1`, e.g. `https://<your-service>.onrender.com/api/v1` |
+| `VITE_USE_MOCK` | no | Unset or `false` in production |
+
+### 5. Update `CORS_ORIGIN` on Render
+
+In the Render dashboard, set:
+
+```text
+CORS_ORIGIN=https://<project>.vercel.app
+```
+
+Rules enforced by the backend:
+
+- no trailing slash (the value is normalised, but keep it clean);
+- comma-separated for several origins, e.g. `https://app.vercel.app,https://staging.vercel.app`;
+- `*` is rejected, and so are URLs with a path, query, fragment, or credentials.
+
+Save the change and let Render redeploy. Until this is done, the Vercel app's API calls fail with CORS errors.
+
+### 6. First admin
+
+> [!WARNING]
+> Never run `npm run db:seed` / `prisma db seed` in production. It inserts well-known development accounts and sample data.
+
+Registration always creates a `CUSTOMER`, regardless of the schema default. To create the first admin:
+
+1. Open the deployed app and register a normal account (e.g. `owner@example.com`).
+2. In the Neon **SQL Editor**, run the statement below with that account's email:
+
+```sql
+UPDATE users
+SET role = 'ADMIN'
+WHERE email = '<your-admin-email>';
+```
+
+`users` is the table, `role` is the column, and `"UserRole"` is the Postgres enum type (`ADMIN`, `STAFF`, `CUSTOMER`, `SUPPORT`). The literal `'ADMIN'` is cast to the enum automatically.
+
+3. Sign out and back in (or just reload) — no restart is needed. `JwtAuthGuard` reloads the user's role from the database on every authenticated request, so the new role takes effect immediately after the next request. Existing access tokens do not need to be reissued for the role change, though the frontend may cache the old role in its own state until it refreshes `/auth/me`.
+
+### 7. Keep-alive
+
+Create a free monitor in UptimeRobot or cron-job.org:
+
+- URL: `https://<your-service>.onrender.com/api/v1/health/live`
+- Method: `GET`
+- Interval: every 10 minutes
+- Expected response: HTTP `200` with `{"status":"ok"}`
+
+**Why `/health/live` and not `/health`:** `/health` runs `SELECT 1`, which wakes a suspended Neon compute and consumes free compute hours. `/health/live` answers from the process without touching the database, so it keeps the Render service warm without waking Postgres. It is also the Render health check path.
+
+**Cold starts:** Render may sleep after inactivity. The first visitor can wait while the container boots, and the first database query may also wait for Neon to resume. The frontend shows a cold-start banner after 3 seconds and retries the failed GET/HEAD request up to two times (after 1 second, then 3 seconds). Expect a slow first load, not an error, if you wait for the retries.
+
+### 8. Verification checklist
+
+Replace `<api>` with your full Render base including scheme and `/api/v1` (e.g. `https://<your-service>.onrender.com/api/v1`) and `<web>` with your Vercel origin (e.g. `https://<project>.vercel.app`).
+
+```bash
+# 1. Liveness: 200 {"status":"ok"} and no database access
+curl -i "<api>/health/live"
+
+# 2. Readiness: 200 {"status":"ok","db":"up"} (may take a few seconds if Neon is suspended)
+curl -i "<api>/health"
+
+# 3. Public catalog: 200 and a paginated product list
+curl -i "<api>/catalog/products?limit=5"
+
+# 4. CORS preflight for the Vercel origin: expect 204 and Access-Control-Allow-Origin
+curl -i -X OPTIONS "<api>/auth/me" \
+  -H "Origin: <web>" \
+  -H "Access-Control-Request-Method: GET"
+
+# 5. Protected route without a token: expect 401
+curl -i "<api>/auth/me"
+
+# 6. Swagger disabled in production: expect 404
+curl -o /dev/null -s -w "%{http_code}\n" "https://<your-service>.onrender.com/api/docs"
+```
+
+Swagger is mounted on the API host under `/api/docs` (outside the `/api/v1` prefix); it is disabled when `NODE_ENV=production` unless `SWAGGER_ENABLED=true`.
+
+Manual smoke test:
+
+- **Anonymous:** browse the catalog, filter/search, open a product, submit the contact form.
+- **CUSTOMER:** register/sign in, add items to the cart, place an order, see it under own orders, update the profile/avatar, read notifications.
+- **STAFF:** sign in and manage orders, adjust stock, read suppliers and purchase orders, receive a purchase order.
+- **ADMIN:** everything above plus products/categories/suppliers writes and image uploads, user management, dashboard, reports, audit log.
+- **SUPPORT:** read products/categories, view all orders, manage the contact inbox; write actions are rejected.
+
+### Deployment troubleshooting
+
+**CORS errors in the browser**
+
+- Confirm `CORS_ORIGIN` matches the exact Vercel origin (scheme + host, no trailing slash) and redeploy Render after changing it.
+- Multiple origins must be comma-separated.
+- `*` is rejected by the backend at boot; list origins explicitly.
+- Browser extensions or a custom domain can change the `Origin` header — check the failing request's `Origin` value.
+
+**502 / 503 after the service sleeps**
+
+- Render cold start: wait for the container to boot, then retry.
+- Neon cold start: the first query can take a few seconds; retry.
+- If it persists, check the Render logs for a crash loop or a migration failure.
+
+**"Can't reach the server" in the frontend**
+
+- Check `VITE_API_URL` on Vercel: it must be the full URL ending in `/api/v1` and must have been set before the build.
+- Confirm the Render URL responds to `/health/live`.
+- Redeploy the frontend after changing `VITE_API_URL` (it is baked into the bundle).
+
+**Migration failures on start**
+
+- Use the Neon **direct** URL for `DIRECT_URL`; the pooled URL can fail for schema changes.
+- Both URLs need `sslmode=require` (or `sslmode=verify-full`).
+- If the container exits during `prisma migrate deploy`, read the Render deploy logs; a failed migration blocks the cache and repeats on every start until resolved.
+
+**Images not showing**
+
+- `IMAGE_STORAGE=cloudinary` and all three `CLOUDINARY_*` variables must be set on Render; otherwise images are written to ephemeral local disk and disappear on redeploy.
+- Check the Cloudinary dashboard for upload errors and the provider's free-plan limits.
+
+**`JWT_SECRET` validation failure at boot**
+
+- In production the value must be at least 32 characters and must not contain `change_me`, `changeme`, `secret`, `password`, `example`, or `ci_secret`.
+- Generate one with `openssl rand -base64 48`, set it on Render, and redeploy.
+
+**Swagger is reachable in production**
+
+- Swagger is off when `NODE_ENV=production` unless `SWAGGER_ENABLED=true`. Remove that variable or set it to `false`, then redeploy.
+
+### Known limitations
+
+- **Free-tier sleep:** Render sleeps after inactivity and Neon suspends compute; expect cold starts. The `/health/live` pinger keeps Render warm but deliberately does not keep Neon awake.
+- **Restarts:** Render may restart the service at any time. With `IMAGE_STORAGE=local`, uploaded files are lost; use Cloudinary.
+- **Quotas:** Neon storage/compute hours, Cloudinary transformations/storage, Vercel bandwidth and build minutes, and Render instance hours are subject to each provider's current free-plan limits. Re-check them before relying on this deployment.
+- **Single instance:** the free setup runs one backend instance; there is no horizontal scaling or high availability.
+- **Migrations on boot:** the container runs `prisma migrate deploy` at start, so a broken migration prevents the API from booting.
 
 ## Development Commands
 
@@ -322,6 +587,7 @@ Run the relevant checks locally before opening a pull request.
 Backend:
 
 ```bash
+npx prisma validate
 npm run lint
 npm test
 npm run test:e2e
@@ -332,6 +598,7 @@ Frontend:
 
 ```bash
 npm run lint
+npm test -- --run
 npm run build
 ```
 

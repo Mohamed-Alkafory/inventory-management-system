@@ -3,6 +3,12 @@
 import 'dotenv/config';
 import { defineConfig } from 'prisma/config';
 
+// Prisma CLI (migrate/seed) uses the direct database URL when the host provides
+// one (Neon recommends the non-pooled URL for migrations) and falls back to
+// DATABASE_URL so local, CI and Docker setups keep working unchanged.
+const databaseUrl =
+  process.env['DIRECT_URL']?.trim() || process.env['DATABASE_URL'];
+
 export default defineConfig({
   schema: 'prisma/schema.prisma',
   migrations: {
@@ -10,6 +16,6 @@ export default defineConfig({
     seed: 'npm run db:seed:run',
   },
   datasource: {
-    url: process.env['DATABASE_URL'],
+    url: databaseUrl,
   },
 });

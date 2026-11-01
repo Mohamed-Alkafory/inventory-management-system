@@ -117,4 +117,24 @@ describe('AllExceptionsFilter', () => {
       timestamp: expect.any(String),
     });
   });
+
+  it.each([
+    'timeout exceeded when trying to connect',
+    'connect ECONNREFUSED 127.0.0.1:5432',
+    'Connection terminated unexpectedly',
+  ])('maps the connection failure %j to 503', (message) => {
+    filter.catch(new Error(message), host);
+
+    expect(response.status).toHaveBeenCalledWith(503);
+    expect(response.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        statusCode: 503,
+        message:
+          'Database temporarily unavailable. Please try again in a moment.',
+        error: 'SERVICE_UNAVAILABLE',
+        path: '/api/v1/products',
+        timestamp: expect.any(String),
+      }),
+    );
+  });
 });

@@ -1,6 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { onSessionExpired } from "../api/authEvents";
 import { tokenStorage } from "../api/tokenStorage";
+import {
+  MAX_RETRIES,
+  REQUEST_TIMEOUT_MS,
+  RETRY_DELAYS_MS,
+  TIMEOUT_MESSAGE,
+  UNAVAILABLE_MESSAGE,
+  getSlowRequestState,
+  resetColdStart,
+} from "./coldStart";
 import { publicRequest, request, requestBlob } from "./http";
 
 const jsonResponse = (body: unknown, status = 200) =>
@@ -17,8 +26,10 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   tokenStorage.clear();
+  resetColdStart();
 });
 
 describe("request", () => {
@@ -150,6 +161,107 @@ describe("publicRequest", () => {
     expect(tokenStorage.getAccessToken()).toBe("access-old");
     expect(listener).not.toHaveBeenCalled();
     unsubscribe();
+  });
+});
+
+describe("cold-start retries", () => {
+  it("retries an idempotent GET after a 503 and returns the successful response", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ message: "Service Unavailable" }, 503))
+      .mockResolvedValueOnce(jsonResponse({ data: [] }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const promise = request("/products");
+    await vi.advanceTimersByTimeAsync(RETRY_DELAYS_MS[0]);
+
+    await expect(promise).resolves.toEqual({ data: [] });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(getSlowRequestState()).toEqual({ waking: false, pending: 0 });
+  });
+
+  it("backs off 1s then 3s and gives up after two retries", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn().mockImplementation(async () => jsonResponse({ message: "Service Unavailable" }, 503));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const promise = request("/products");
+    const assertion = expect(promise).rejects.toMatchObject({
+      status: 503,
+      message: UNAVAILABLE_MESSAGE,
+    });
+
+    await vi.advanceTimersByTimeAsync(RETRY_DELAYS_MS[0]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    await vi.advanceTimersByTimeAsync(RETRY_DELAYS_MS[1]);
+    await assertion;
+    expect(fetchMock).toHaveBeenCalledTimes(1 + MAX_RETRIES);
+  });
+
+  it("retries network failures on GET", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce(jsonResponse({ data: [] }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const promise = request("/products");
+    await vi.advanceTimersByTimeAsync(RETRY_DELAYS_MS[0]);
+    await vi.advanceTimersByTimeAsync(RETRY_DELAYS_MS[1]);
+
+    await expect(promise).resolves.toEqual({ data: [] });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("never retries a POST after a 503", async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => jsonResponse({ message: "Service Unavailable" }, 503));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      request("/orders", { method: "POST", body: JSON.stringify({ productId: "p1" }) }),
+    ).rejects.toMatchObject({ status: 503 });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([404, 409])("does not retry a %i response", async (status) => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ message: `HTTP ${status}` }, status));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(request("/products/p1")).rejects.toMatchObject({ status });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("aborts a request after the 45 second per-attempt timeout", async () => {
+    vi.useFakeTimers();
+    let aborted = false;
+    const fetchMock = vi.fn(
+      (_url: RequestInfo | URL, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => {
+            aborted = true;
+            reject(new DOMException("Aborted", "AbortError"));
+          });
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    // POST has no automatic retry, so this settles on the first timeout.
+    const promise = request("/orders", { method: "POST", body: "{}" });
+    const assertion = expect(promise).rejects.toMatchObject({
+      status: 0,
+      message: TIMEOUT_MESSAGE,
+    });
+
+    await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS);
+    await assertion;
+
+    expect(aborted).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
 

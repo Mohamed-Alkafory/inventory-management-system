@@ -55,6 +55,7 @@ export class PrismaExceptionFilter implements ExceptionFilter {
       case 'ECONNRESET':
       case 'P1001':
       case 'P1002':
+      case 'P1008':
         statusCode = HttpStatus.SERVICE_UNAVAILABLE;
         message = 'Database temporarily unavailable. Please try again in a moment.';
         break;

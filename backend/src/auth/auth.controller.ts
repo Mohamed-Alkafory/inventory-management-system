@@ -83,7 +83,9 @@ export class AuthController {
     return { message: 'Welcome, Admin!' };
   }
 
+  /** Public login. Explicit limit slows credential stuffing per client. */
   @Public()
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('login')
   @HttpCode(HttpStatus.OK)
   login(@Body() loginDto: LoginDto) {
@@ -99,7 +101,9 @@ export class AuthController {
     return this.authService.register(registerDto);
   }
 
+  /** Public refresh. Rotation is single-use, so a moderate limit is enough. */
   @Public()
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   refresh(@Body() refreshTokenDto: RefreshTokenDto) {

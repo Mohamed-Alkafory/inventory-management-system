@@ -12,6 +12,11 @@ const USER = {
   role: 'ADMIN',
 } as const;
 
+// @nestjs/throttler's constants are internal; its decorator stores them as
+// `THROTTLER:LIMIT` / `THROTTLER:TTL` plus the throttler name (`default`).
+const THROTTLER_LIMIT_KEY = 'THROTTLER:LIMITdefault';
+const THROTTLER_TTL_KEY = 'THROTTLER:TTLdefault';
+
 describe('AuthController', () => {
   let controller: AuthController;
   const loginFn = vi.fn();
@@ -115,6 +120,26 @@ describe('AuthController', () => {
     ]) {
       expect(Reflect.getMetadata(IS_PUBLIC_KEY, handler)).toBeUndefined();
     }
+  });
+
+  it('sets explicit rate limits on the public login and refresh routes', () => {
+    const limits: Array<[keyof AuthController, number]> = [
+      ['login', 10],
+      ['refresh', 20],
+    ];
+
+    for (const [name, limit] of limits) {
+      const handler = AuthController.prototype[name];
+      expect(Reflect.getMetadata(THROTTLER_LIMIT_KEY, handler)).toBe(limit);
+      expect(Reflect.getMetadata(THROTTLER_TTL_KEY, handler)).toBe(60_000);
+    }
+  });
+
+  it('keeps the stricter register limit', () => {
+    const handler = AuthController.prototype.register;
+
+    expect(Reflect.getMetadata(THROTTLER_LIMIT_KEY, handler)).toBe(5);
+    expect(Reflect.getMetadata(THROTTLER_TTL_KEY, handler)).toBe(60_000);
   });
 
   describe('input validation (400)', () => {

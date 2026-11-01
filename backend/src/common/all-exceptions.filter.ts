@@ -33,7 +33,7 @@ function isDatabaseUnavailable(exception: unknown): boolean {
   }
   return (
     exception.name === 'PrismaClientInitializationError' ||
-    /can't reach database server|connection refused|ECONNREFUSED/i.test(
+    /can't reach database server|connection refused|ECONNREFUSED|ETIMEDOUT|timeout exceeded when trying to connect|timeout expired|Connection terminated/i.test(
       exception.message,
     )
   );

@@ -1,4 +1,5 @@
 import axios from "axios";
+import { UNAVAILABLE_MESSAGE, isRetryableStatus } from "../lib/coldStart";
 
 type ApiErrorInit = {
   status?: number | null;
@@ -33,6 +34,7 @@ function defaultMessage(status: number): string {
   if (status === 413) return "The file is too large.";
   if (status === 422) return "Some of the submitted values are not valid.";
   if (status === 429) return "Too many requests. Please slow down and try again.";
+  if (status === 502 || status === 503 || status === 504) return UNAVAILABLE_MESSAGE;
   if (status >= 500) return "The server ran into a problem. Please try again shortly.";
   return "Something went wrong.";
 }
@@ -83,11 +85,14 @@ export function toApiError(error: unknown): ApiError {
     // A bare "Internal Server Error" tells the user nothing useful — prefer the status-based hint.
     if (serverMessage === "Internal Server Error") serverMessage = undefined;
 
-    return new ApiError(serverMessage ?? defaultMessage(status), {
-      status,
-      code: typeof body.code === "string" ? body.code : typeof body.error === "string" ? body.error : undefined,
-      details: body.fieldErrors ?? body.errors,
-    });
+    return new ApiError(
+      isRetryableStatus(status) ? UNAVAILABLE_MESSAGE : (serverMessage ?? defaultMessage(status)),
+      {
+        status,
+        code: typeof body.code === "string" ? body.code : typeof body.error === "string" ? body.error : undefined,
+        details: body.fieldErrors ?? body.errors,
+      },
+    );
   }
 
   return new ApiError(error instanceof Error ? error.message : "Something went wrong.");

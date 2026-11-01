@@ -1,5 +1,6 @@
 import { Controller, Get } from '@nestjs/common';
 import { ServiceUnavailableException } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { Public } from '../auth/decorators/public.decorator.js';
 
@@ -8,6 +9,17 @@ import { Public } from '../auth/decorators/public.decorator.js';
 @Controller('health')
 export class HealthController {
   constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * Liveness probe for keep-alive pings: never touches the database, so a free
+   * serverless PostgreSQL compute is not woken up by monitoring.
+   */
+  @Public()
+  @SkipThrottle()
+  @Get('live')
+  live() {
+    return { status: 'ok' };
+  }
 
   @Public()
   @Get()

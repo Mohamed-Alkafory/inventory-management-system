@@ -17,10 +17,18 @@ npm ci
 npx prisma validate
 ```
 
-Env vars used: `DATABASE_URL` (Prisma, must match the container credentials),
-`PORT` (API port; local development uses `3010`), `JWT_SECRET` (reserved for upcoming
-auth — no code reads it yet). Details in the
-[root README](../README.md#environment-variables).
+Env vars used: `DATABASE_URL` (Prisma runtime connection, must match the container
+credentials), `DIRECT_URL` (optional; the Prisma CLI uses it first — set the Neon
+direct URL in production), `PORT` (API port; local development uses `3010`),
+`CORS_ORIGIN` (comma-separated allowed origins; required), `JWT_SECRET` (signs
+access tokens; required, and in production it must be at least 32 characters and
+not a placeholder), `JWT_EXPIRES_IN` (access-token lifetime, default `15m`),
+`SWAGGER_ENABLED` (optional), `TRUST_PROXY` (optional proxy hop count),
+`PG_POOL_MAX` / `PG_CONNECTION_TIMEOUT_MS` / `PG_IDLE_TIMEOUT_MS` (optional pool
+tuning), `UPLOADS_DIR` (optional), and `IMAGE_STORAGE` + `CLOUDINARY_*` (optional
+image backend). Details in the
+[root README](../README.md#deployment-free-tier) and
+[`backend/.env.example`](.env.example).
 
 ## Scripts (all run from `backend/`)
 
@@ -62,19 +70,26 @@ npm run test:e2e -- test/role-permission-matrix.e2e-spec.ts
 Set `E2E_DATABASE_URL` to point at a dedicated test database; the helper
 refuses to truncate a database whose name does not contain `test`.
 
-Health check: `GET http://localhost:3010/api/v1/health` → `{"status":"ok","db":"up"}`.
+Health checks: `GET http://localhost:3010/api/v1/health/live` →
+`{"status":"ok"}` (liveness; no database access) and
+`GET http://localhost:3010/api/v1/health` → `{"status":"ok","db":"up"}`
+(readiness; runs `SELECT 1`).
 
 ## Prisma
 
 - Schema: `prisma/schema.prisma` (Core models implemented).
-- Connection: `prisma.config.ts` reads `DATABASE_URL` from `backend/.env`.
+- Connection: `prisma.config.ts` uses `DIRECT_URL` when set and falls back to
+  `DATABASE_URL`, so the CLI (migrate/seed) can use Neon's direct URL while the
+  app runtime keeps the pooled `DATABASE_URL`.
 - Validate: `npx prisma validate` (from `backend/`).
-- Migrations: `npx prisma migrate dev`, then `npx prisma generate` (client output: `src/generated/prisma/`, git-ignored).
+- Migrations: `npx prisma migrate dev`, then `npx prisma generate` (client output: `src/generated/prisma/`, git-ignored). The production image runs
+  `prisma migrate deploy` on container start; never run `prisma db seed` there.
 
 ## Reference
 
 - [NestJS docs](https://docs.nestjs.com)
 - [Prisma docs](https://www.prisma.io/docs)
 - [Vitest docs](https://vitest.dev)
-- CI runs `npm ci` → `npm run lint` → `npm test` → `npm run build` here
-  (`.github/workflows/ci.yml`).
+- CI runs `npm ci` → `npx prisma generate` → `npx prisma validate` →
+  `npm run lint` → `npm test` → `npx prisma migrate deploy` → `npm run test:e2e`
+  → `npm run build` here (`.github/workflows/ci.yml`).

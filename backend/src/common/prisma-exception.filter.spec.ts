@@ -1,5 +1,8 @@
 import { ArgumentsHost, HttpStatus } from '@nestjs/common';
-import { PrismaClientKnownRequestError } from '@prisma/client/runtime/client';
+import {
+  PrismaClientInitializationError,
+  PrismaClientKnownRequestError,
+} from '@prisma/client/runtime/client';
 import type { Request, Response } from 'express';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PrismaExceptionFilter } from './prisma-exception.filter.js';
@@ -95,5 +98,44 @@ describe('PrismaExceptionFilter', () => {
 
     expect(body.message).toContain('P2002');
     expect(Number.isNaN(Date.parse(body.timestamp))).toBe(false);
+  });
+
+  it.each(['ECONNREFUSED', 'ENOTFOUND', 'ETIMEDOUT', 'ECONNRESET', 'P1001', 'P1002', 'P1008'])(
+    'maps the connection error %s to 503 Service Unavailable',
+    (code) => {
+      filter.catch(createPrismaError(code), host);
+
+      expect(response.status).toHaveBeenCalledWith(
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+      expect(response.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          statusCode: 503,
+          message: expect.stringContaining('Database temporarily unavailable'),
+          error: 'SERVICE_UNAVAILABLE',
+        }),
+      );
+    },
+  );
+
+  it('maps a pool connection timeout at boot to 503', () => {
+    filter.catch(
+      new PrismaClientInitializationError(
+        'timeout exceeded when trying to connect',
+        'test',
+      ),
+      host,
+    );
+
+    expect(response.status).toHaveBeenCalledWith(
+      HttpStatus.SERVICE_UNAVAILABLE,
+    );
+    expect(response.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        statusCode: 503,
+        message: expect.stringContaining('Database temporarily unavailable'),
+        error: 'SERVICE_UNAVAILABLE',
+      }),
+    );
   });
 });

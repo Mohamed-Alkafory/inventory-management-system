@@ -8,9 +8,9 @@ import { type ListProductsQueryDto } from './dto/list-products.query.dto.js';
 import { type UpdateProductDto } from './dto/update-product.dto.js';
 import { ProductsService } from './products.service.js';
 import {
-  ImageStorageService,
+  IMAGE_STORAGE,
   type UploadedImageFile,
-} from '../storage/image-storage.service.js';
+} from '../storage/image-storage.interface.js';
 
 const CATEGORY_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const SUPPLIER_ID = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
@@ -79,7 +79,7 @@ describe('ProductsService', () => {
         ProductsService,
         { provide: AuditService, useValue: { log } },
         {
-          provide: ImageStorageService,
+          provide: IMAGE_STORAGE,
           useValue: { save: imageSave, delete: imageDelete },
         },
         {
@@ -648,6 +648,20 @@ describe('ProductsService', () => {
 
       expect(imageDelete).toHaveBeenCalledTimes(1);
       expect(imageDelete).toHaveBeenCalledWith('/uploads/products/new-image.png');
+    });
+
+    it('leaves the database unchanged when the upload fails', async () => {
+      productFindUnique.mockResolvedValue(productRow());
+      const boom = new Error('upload failed');
+      imageSave.mockRejectedValue(boom);
+
+      await expect(service.uploadImage(id, file, 'admin-id')).rejects.toBe(
+        boom,
+      );
+
+      expect(productUpdate).not.toHaveBeenCalled();
+      expect(imageDelete).not.toHaveBeenCalled();
+      expect(log).not.toHaveBeenCalled();
     });
 
     it('throws 404 when the product does not exist', async () => {

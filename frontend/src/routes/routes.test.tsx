@@ -96,7 +96,7 @@ describe("route access matrix", () => {
     view.unmount();
   });
 
-  it("ADMIN may open /admin, the staff workspace and /support but not customer pages", () => {
+  it("ADMIN may open /admin, the staff workspace and /support but not customer pages", async () => {
     signIn("ADMIN");
     const cases: Array<[string, string]> = [
       ["/admin", "Admin panel"],
@@ -126,27 +126,28 @@ describe("route access matrix", () => {
     ];
     for (const [path, text] of cases) {
       const view = renderAt(path);
-      expect(screen.getByText(text)).toBeInTheDocument();
+      // Admin/staff/support pages are lazy: wait for the chunk to resolve.
+      expect(await screen.findByText(text)).toBeInTheDocument();
       view.unmount();
     }
-  });
+  }, 20_000);
 
-  it("shows Orders and Reports links in the admin sidebar without a cross-area Support link", () => {
+  it("shows Orders and Reports links in the admin sidebar without a cross-area Support link", async () => {
     signIn("ADMIN");
     renderAt("/admin");
 
-    const nav = screen.getByRole("navigation", { name: "Admin" });
+    const nav = await screen.findByRole("navigation", { name: "Admin" });
     expect(within(nav).getByRole("link", { name: "Orders" })).toHaveAttribute("href", "/admin/orders");
     expect(within(nav).getByRole("link", { name: "Reports" })).toHaveAttribute("href", "/admin/reports");
     // Support is its own workspace; the admin sidebar must not jump into it.
     expect(within(nav).queryByRole("link", { name: "Support" })).not.toBeInTheDocument();
   });
 
-  it("shows a Products link in the support sidebar", () => {
+  it("shows a Products link in the support sidebar", async () => {
     signIn("SUPPORT");
     renderAt("/support");
 
-    const nav = screen.getByRole("navigation", { name: "Support" });
+    const nav = await screen.findByRole("navigation", { name: "Support" });
     expect(within(nav).getByRole("link", { name: "Products" })).toHaveAttribute(
       "href",
       "/support/products",
@@ -162,7 +163,7 @@ describe("route access matrix", () => {
     }
   });
 
-  it("STAFF may open every /staff page but not /admin, /support or customer pages", () => {
+  it("STAFF may open every /staff page but not /admin, /support or customer pages", async () => {
     signIn("STAFF");
     const allowed: Array<[string, string]> = [
       ["/staff", "Staff dashboard"],
@@ -178,7 +179,7 @@ describe("route access matrix", () => {
     ];
     for (const [path, text] of allowed) {
       const view = renderAt(path);
-      expect(screen.getByText(text)).toBeInTheDocument();
+      expect(await screen.findByText(text)).toBeInTheDocument();
       view.unmount();
     }
 
@@ -189,7 +190,7 @@ describe("route access matrix", () => {
     }
   });
 
-  it("SUPPORT may open every /support page but not /staff, /admin, /orders/new or customer pages", () => {
+  it("SUPPORT may open every /support page but not /staff, /admin, /orders/new or customer pages", async () => {
     signIn("SUPPORT");
     const allowed: Array<[string, string]> = [
       ["/support", "Support workspace"],
@@ -203,7 +204,7 @@ describe("route access matrix", () => {
     ];
     for (const [path, text] of allowed) {
       const view = renderAt(path);
-      expect(screen.getByText(text)).toBeInTheDocument();
+      expect(await screen.findByText(text)).toBeInTheDocument();
       view.unmount();
     }
 
@@ -271,9 +272,21 @@ describe("role home redirects", () => {
     ["STAFF", "Staff dashboard"],
     ["SUPPORT", "Support dashboard"],
     ["CUSTOMER", "Products page"],
-  ] as const)("sends a signed-in %s away from /login to its own area", (role, text) => {
+  ] as const)("sends a signed-in %s away from /login to its own area", async (role, text) => {
     signIn(role);
     renderAt("/login");
-    expect(screen.getByText(text)).toBeInTheDocument();
+    expect(await screen.findByText(text)).toBeInTheDocument();
+  });
+});
+
+describe("lazy workspace routes", () => {
+  it.each([
+    ["ADMIN", "/admin/reports", "Admin reports page"],
+    ["STAFF", "/staff/inventory", "Staff inventory page"],
+    ["SUPPORT", "/support/messages", "Support messages page"],
+  ] as const)("renders the %s lazy route after the chunk resolves", async (role, path, text) => {
+    signIn(role);
+    renderAt(path);
+    expect(await screen.findByText(text)).toBeInTheDocument();
   });
 });
