@@ -5,7 +5,6 @@ import {
   FileText,
   FolderTree,
   LayoutDashboard,
-  LifeBuoy,
   Package,
   ScrollText,
   Settings,
@@ -31,7 +30,6 @@ const NAV: AreaNavItem[] = [
   { to: "/admin/notifications", label: "Notifications", icon: Bell },
   { to: "/admin/profile", label: "Profile", icon: UserRound },
   { to: "/admin/settings", label: "Settings", icon: Settings },
-  { to: "/support/messages", label: "Support", icon: LifeBuoy },
 ];
 
 /** Shell for every /admin page (ADMIN only). Same markup as before, built on AreaLayout. */

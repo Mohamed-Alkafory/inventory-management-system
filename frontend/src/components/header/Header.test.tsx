@@ -182,17 +182,28 @@ describe("Header stays inside the current dashboard", () => {
     },
   );
 
-  it("opens Products, Settings and Profile inside the customer dashboard", () => {
+  it.each([
+    ["ADMIN", "/admin/profile"],
+    ["STAFF", "/staff/profile"],
+    ["SUPPORT", "/support/profile"],
+    ["CUSTOMER", "/dashboard/profile"],
+  ] as const)(
+    "opens Profile in the %s dashboard even from the storefront",
+    (role, href) => {
+      signIn(role);
+      renderHeader("/");
+
+      expect(screen.getAllByRole("link", { name: "Your profile" })[0]).toHaveAttribute("href", href);
+    },
+  );
+
+  it("opens Products and Profile inside the customer dashboard", () => {
     signIn("CUSTOMER");
     renderHeader("/dashboard/orders");
 
     const products = screen.getAllByRole("link", { name: "Products" });
     expect(products.some((link) => link.getAttribute("href") === "/dashboard/products")).toBe(true);
     expect(screen.getAllByRole("link", { name: "Dashboard" })[0]).toHaveAttribute("href", "/dashboard");
-    expect(screen.getAllByRole("link", { name: "Settings" })[0]).toHaveAttribute(
-      "href",
-      "/dashboard/settings",
-    );
     expect(screen.getAllByRole("link", { name: "Your profile" })[0]).toHaveAttribute(
       "href",
       "/dashboard/profile",

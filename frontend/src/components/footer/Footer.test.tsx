@@ -1,17 +1,24 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import AuthProvider from "../../context/auth/AuthProvider";
 import Footer from "./Footer";
 
 const renderFooter = () =>
   render(
     <MemoryRouter>
-      <Footer />
+      <AuthProvider>
+        <Footer />
+      </AuthProvider>
     </MemoryRouter>,
   );
 
-afterEach(cleanup);
+beforeEach(() => localStorage.clear());
+afterEach(() => {
+  cleanup();
+  localStorage.clear();
+});
 
 describe("Footer", () => {
   it("renders the brand, link columns and copyright", () => {
@@ -24,7 +31,7 @@ describe("Footer", () => {
     expect(screen.getByText(/All rights reserved/i)).toBeInTheDocument();
   });
 
-  it("points its links at real routes", () => {
+  it("points its public links at real routes for guests", () => {
     renderFooter();
 
     expect(screen.getByRole("link", { name: "Products" })).toHaveAttribute("href", "/products");

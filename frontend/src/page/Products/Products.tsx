@@ -5,17 +5,15 @@ import { ApiError } from "../../api/errors";
 import { Button, EmptyState, Input, Pagination, Select } from "../../components/ui";
 import { Card, CardBody } from "../../components/ui/Card";
 import { AdminProductCard, AdminProductCardSkeleton } from "../../admin/components/AdminProductCard";
-import { useCart } from "../../context/cart/useCart";
-import { useFavorites } from "../../context/favorites/useFavorites";
 import { useAuth } from "../../context/auth/useAuth";
 import DeleteProductDialog from "../../features/products/DeleteProductDialog";
 import ProductFormDialog from "../../features/products/ProductFormDialog";
 import type { Product } from "../../features/products/types";
 import { useProductCategories, useProducts } from "../../hooks/useProducts";
 import { cn } from "../../lib/cn";
+import { useArea } from "../../routes/useArea";
 import { STOCK_STATUSES } from "../../types/inventory";
 import type { InventoryProduct, ProductSortField, StockStatus } from "../../types/inventory";
-import type { ShopProduct } from "../../types/shop";
 import { PAGE_SIZES } from "./productQuery";
 import { useProductFilters } from "./useProductFilters";
 
@@ -36,21 +34,6 @@ const SORT_OPTIONS: Array<{ value: string; label: string }> = [
 ];
 
 const SEARCH_DEBOUNCE_MS = 300;
-
-/** Internal inventory row → the customer-safe snapshot used by the cart/favorites. */
-function toShopSnapshot(product: InventoryProduct): ShopProduct {
-  return {
-    id: product.id,
-    name: product.name,
-    description: product.description,
-    price: product.price,
-    imageUrl: product.imageUrl,
-    category: product.category,
-    categoryId: product.categoryId,
-    inStock: product.stock > 0,
-    maxOrderable: Math.max(0, product.stock),
-  };
-}
 
 /** The list row carries everything the edit form needs except the supplier/barcode extras. */
 function toFormProduct(product: InventoryProduct): Product {
@@ -73,8 +56,18 @@ export default function Products({ embedded = false }: { embedded?: boolean }) {
   const { hasRole } = useAuth();
   const isAdmin = hasRole("ADMIN");
   const navigate = useNavigate();
-  const cart = useCart();
-  const favorites = useFavorites();
+  // Stay inside the dashboard shell the list is rendered in (admin/staff/support).
+  const area = useArea();
+  const detailBase =
+    area === "admin"
+      ? "/admin/products"
+      : area === "staff"
+        ? "/staff/products"
+        : area === "support"
+          ? "/support/products"
+          : area === "customer"
+            ? "/dashboard/products"
+            : "/products";
 
   const { query, update, clearFilters, hasFilters } = useProductFilters();
 
@@ -138,16 +131,6 @@ export default function Products({ embedded = false }: { embedded?: boolean }) {
   const products = data?.items ?? [];
 
   const addProduct = () => setDialog({ mode: "create" });
-
-  /** Order click → put the product in the cart, then jump to the Cart page. */
-  const handleOrder = (product: InventoryProduct) => {
-    cart.addToCart(toShopSnapshot(product));
-    navigate("/cart");
-  };
-
-  const handleToggleFavorite = (product: InventoryProduct) => {
-    favorites.toggle(toShopSnapshot(product));
-  };
 
   const errorMessage = isError ? (error instanceof ApiError ? error.message : "Couldn't load the products.") : null;
 
@@ -257,13 +240,10 @@ export default function Products({ embedded = false }: { embedded?: boolean }) {
                     key={product.id}
                     product={product}
                     isAdmin={isAdmin}
-                    isFavorite={favorites.has(product.id)}
                     disabled={isPlaceholderData}
-                    onOpen={(product) => navigate(`/products/${product.id}`)}
+                    onOpen={(product) => navigate(`${detailBase}/${product.id}`)}
                     onEdit={(product) => setDialog({ mode: "edit", product })}
                     onDelete={setToDelete}
-                    onOrder={handleOrder}
-                    onToggleFavorite={handleToggleFavorite}
                   />
                 ))}
           </div>

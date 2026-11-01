@@ -8,7 +8,6 @@ import {
   AlertCircle,
   ArrowRight,
   Check,
-  ChevronDown,
   Mail,
   MapPin,
   MessageSquare,
@@ -24,56 +23,55 @@ import FormField from "../../components/ui/form/FormField";
 import Reveal from "../../components/motion/Reveal";
 import { useAuth } from "../../context/auth/useAuth";
 import { publicContactApi } from "../../features/contact/publicApi";
+import { useInView } from "../../hooks/useInView";
+import { BRAND } from "../../lib/brand";
 import { ApiError } from "../../lib/http";
-
-const BRAND = "InRetail";
 
 const contactCards = [
   {
     icon: <Users className="h-5 w-5" />,
     title: "Sales & Partnerships",
-    text: "For new stores, expansion plans, and business inquiries.",
-    email: "sales@inretail.com",
+    text: "For new accounts, partnerships and general business inquiries.",
+    email: "sales@prodexa.com",
     phone: "+1 (555) 123-4567",
   },
   {
     icon: <ShieldCheck className="h-5 w-5" />,
     title: "Technical Support",
-    text: "For integrations, system issues, and operational help.",
-    email: "support@inretail.com",
+    text: "For account access, system issues and day-to-day help.",
+    email: "support@prodexa.com",
     phone: "+1 (555) 987-6543",
   },
   {
     icon: <MapPin className="h-5 w-5" />,
-    title: "Operations & Hubs",
-    text: "For logistics, fulfillment hubs, and physical operations.",
-    email: "ops@inretail.com",
+    title: "Order Support",
+    text: "For questions about orders, stock and deliveries.",
+    email: "orders@prodexa.com",
     phone: "+1 (555) 246-8100",
   },
 ];
 
 const stats = [
-  { value: "99.8%", label: "Resolution rate" },
-  { value: "4.9/5", label: "Customer satisfaction" },
-  { value: "24/7", label: "Support availability" },
+  { value: "4", label: "User roles" },
+  { value: "1", label: "Shared inbox" },
+  { value: "3", label: "Message statuses" },
 ];
 
-const faqs = [
+const contactSteps = [
   {
-    q: `How does ${BRAND} support multi-store operations?`,
-    a: "We help you manage inventory, orders, and operations across multiple locations from one centralized system.",
+    icon: <Send className="h-5 w-5" />,
+    title: "Send your message",
+    text: "Fill in the form above with your question or request — it takes less than a minute.",
   },
   {
-    q: "Can I integrate my existing systems with the platform?",
-    a: "Yes, the platform is built to support integrations with POS, ERP, and e-commerce systems.",
+    icon: <MessageSquare className="h-5 w-5" />,
+    title: "It reaches our inbox",
+    text: "Your message lands in our shared support inbox, where it is tracked and assigned to the right person.",
   },
   {
-    q: "What kind of support do you offer?",
-    a: "We provide expert support for technical issues, onboarding, operations, and ongoing assistance.",
-  },
-  {
-    q: "How long does onboarding usually take?",
-    a: "Most teams can get started quickly with guided setup and support from our team.",
+    icon: <Mail className="h-5 w-5" />,
+    title: "We reply by email",
+    text: "We get back to you at the email you provide, so keep an eye on your inbox for our reply.",
   },
 ];
 
@@ -175,8 +173,8 @@ function ContactInput({
 
 export default function ContactPage() {
   const { user } = useAuth();
-  const [open, setOpen] = useState<number | null>(0);
   const [formError, setFormError] = useState<string | null>(null);
+  const { ref: stepsRef, inView: stepsInView } = useInView<HTMLOListElement>({ threshold: 0.3 });
 
   const {
     control,
@@ -324,11 +322,11 @@ export default function ContactPage() {
                 Why {BRAND}
               </p>
               <h2 className="mt-4 text-3xl font-bold leading-tight text-ink sm:text-4xl">
-                Real support from real retail experts.
+                Support that understands your workflow.
               </h2>
               <p className="mt-5 text-base leading-8 text-muted">
-                We’re not just a software provider — we’re a partner focused on
-                helping your business run better every day.
+                From your first setup question to a day-to-day stock issue, our
+                team helps you get the most out of the system.
               </p>
 
               <div className="mt-8 grid grid-cols-3 gap-4">
@@ -347,9 +345,9 @@ export default function ContactPage() {
 
               <ul className="mt-8 space-y-3 text-sm text-ink">
                 {[
-                  "Expert support",
-                  "Fast response",
-                  "Long-term partnership",
+                  "Guided onboarding",
+                  "In-app message tracking",
+                  "Clear, practical answers",
                 ].map((item) => (
                   <li key={item} className="flex items-center gap-3">
                     <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary-600 text-white">
@@ -518,58 +516,58 @@ export default function ContactPage() {
         </div>
       </section>
 
-      {/* FAQ */}
+      {/* What happens next */}
       <section className="px-4 pb-20 sm:px-6 lg:px-10">
-        <div className="mx-auto max-w-4xl">
+        <div className="mx-auto max-w-5xl">
           <Reveal>
             <div className="text-center">
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary-600">
-                FAQ
+                What Happens Next
               </p>
               <h2 className="mt-4 text-3xl font-bold text-ink sm:text-4xl">
-                Frequently asked questions
+                From your message to our reply
               </h2>
               <p className="mx-auto mt-4 max-w-2xl text-base leading-8 text-muted">
-                Quick answers to common questions about support, onboarding, and
-                integrations.
+                Every message lands in our shared support inbox, where it is tracked
+                through to resolution. Here is what to expect after you hit send.
               </p>
             </div>
           </Reveal>
 
-          <div className="mt-10 space-y-4">
-            {faqs.map((faq, i) => {
-              const isOpen = open === i;
-              return (
-                <Reveal key={faq.q} delay={i * 80}>
-                  <div className="rounded-2xl border border-[#F0E4D8] bg-white shadow-sm">
-                    <button
-                      type="button"
-                      onClick={() => setOpen(isOpen ? null : i)}
-                      className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left text-sm font-semibold text-ink"
-                    >
-                      {faq.q}
-                      <ChevronDown
-                        className={`h-4 w-4 text-primary-600 transition-transform duration-300 motion-reduce:transition-none ${
-                          isOpen ? "rotate-180" : ""
-                        }`}
-                      />
-                    </button>
-                    <div
-                      className={`grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none ${
-                        isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
-                      }`}
-                    >
-                      <div className="overflow-hidden">
-                        <p className="px-5 pb-5 text-sm leading-7 text-muted">
-                          {faq.a}
-                        </p>
-                      </div>
+          <ol ref={stepsRef} className="relative mt-12 grid gap-10 md:grid-cols-3 md:gap-6">
+            <div
+              aria-hidden="true"
+              className={`pointer-events-none absolute left-[16.7%] right-[16.7%] top-6 hidden h-0.5 origin-left rounded-full bg-linear-to-r from-primary-200 via-primary-400 to-primary-200 transition-transform duration-1000 ease-out motion-reduce:transition-none md:block ${
+                stepsInView ? "scale-x-100" : "scale-x-0"
+              }`}
+            />
+
+            {contactSteps.map((s, i) => (
+              <li key={s.title} className="relative text-center">
+                <Reveal delay={i * 180}>
+                  <div className="group">
+                    <div className="relative mx-auto flex h-12 w-12 items-center justify-center rounded-full border border-primary-200 bg-white text-primary-600 shadow-sm ring-8 ring-[#FBFAF8] transition duration-300 group-hover:scale-110 group-hover:border-primary-400 group-hover:bg-primary-50 motion-reduce:transition-none motion-reduce:group-hover:scale-100">
+                      {s.icon}
                     </div>
+                    <p className="mt-5 text-xs font-semibold uppercase tracking-widest text-primary-600">
+                      Step {i + 1}
+                    </p>
+                    <h3 className="mt-1 text-lg font-semibold text-ink">{s.title}</h3>
+                    <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed text-muted">
+                      {s.text}
+                    </p>
                   </div>
                 </Reveal>
-              );
-            })}
-          </div>
+              </li>
+            ))}
+          </ol>
+
+          <Reveal delay={240}>
+            <p className="mx-auto mt-10 max-w-xl rounded-2xl border border-[#F0E4D8] bg-white px-5 py-4 text-center text-sm text-muted shadow-sm">
+              <span className="font-semibold text-ink">Tip:</span> include your order
+              number or product name where relevant, and we can help faster.
+            </p>
+          </Reveal>
         </div>
       </section>
     </main>

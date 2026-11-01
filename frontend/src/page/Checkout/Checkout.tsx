@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Wallet } from "lucide-react";
+import { ArrowLeft, Check, CreditCard, MapPin, ShieldCheck, Wallet } from "lucide-react";
 import { z } from "zod";
 import { Button, Card, CardBody, CardHeader, Field, Input, Textarea, useToast } from "../../components/ui";
 import { useAuth } from "../../context/auth/useAuth";
@@ -76,6 +76,32 @@ function stockConflictItem(error: ApiError, items: ReturnType<typeof useCart>["i
   return productId ? items.find((row) => String(row.product.id) === productId) : undefined;
 }
 
+/** One step in the little "Cart → Delivery → Confirmation" tracker. */
+function Step({ label, state }: { label: string; state: "done" | "current" | "upcoming" }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span
+        className={
+          state === "done"
+            ? "flex size-6 items-center justify-center rounded-full bg-primary-600 text-white"
+            : state === "current"
+              ? "flex size-6 items-center justify-center rounded-full border-2 border-primary-600 bg-primary-50 text-[11px] font-bold text-primary-700"
+              : "flex size-6 items-center justify-center rounded-full border border-line bg-surface text-[11px] font-bold text-muted"
+        }
+      >
+        {state === "done" ? <Check className="size-3.5" aria-hidden="true" /> : state === "current" ? "2" : "3"}
+      </span>
+      <span
+        className={
+          state === "upcoming" ? "text-xs font-medium text-muted" : "text-xs font-semibold text-ink"
+        }
+      >
+        {label}
+      </span>
+    </div>
+  );
+}
+
 /**
  * Checkout: delivery details and the order summary, then ONE real order
  * through POST /orders/mine. The server recomputes every price and validates
@@ -87,8 +113,11 @@ export default function Checkout() {
   const navigate = useNavigate();
   const toast = useToast();
   const placeOrder = useCreateMyOrder();
-  // Inside a dashboard shell the layout owns the page background and padding.
-  const inArea = useArea() !== null;
+  // Inside a dashboard shell the layout owns the page background and padding,
+  // and the cart link stays in that shell.
+  const area = useArea();
+  const inArea = area !== null;
+  const cartPath = area === "customer" ? "/dashboard/cart" : "/cart";
 
   const [form, setForm] = useState<CheckoutForm>(() => ({
     ...EMPTY_FORM,
@@ -110,9 +139,9 @@ export default function Checkout() {
   const cartIsEmpty = items.length === 0;
   useEffect(() => {
     if (user && cartIsEmpty && !placeOrder.isPending && !orderPlaced.current) {
-      navigate("/cart", { replace: true });
+      navigate(cartPath, { replace: true });
     }
-  }, [user, cartIsEmpty, placeOrder.isPending, navigate]);
+  }, [user, cartIsEmpty, placeOrder.isPending, navigate, cartPath]);
 
   const tooManyProducts = items.length > MAX_CART_PRODUCTS;
   const overQuantity = items.find((row) => row.quantity > MAX_LINE_QUANTITY);
@@ -219,29 +248,51 @@ export default function Checkout() {
   if (!user) return null;
 
   return (
-    <div className={inArea ? undefined : "min-h-[calc(100vh_-_var(--header-h))] bg-surface-alt py-10 text-ink"}>
+    <div className={inArea ? undefined : "min-h-[calc(100vh_-_var(--header-h))] bg-surface-alt py-8 text-ink sm:py-10"}>
       <div className="mx-auto w-full max-w-7xl px-4 sm:px-6">
-        <h1 className="text-3xl font-bold">Checkout</h1>
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-extrabold sm:text-4xl">Checkout</h1>
+            <p className="mt-1 text-sm text-muted">Almost there — confirm your delivery details.</p>
+          </div>
+          <div className="hidden items-center gap-3 sm:flex">
+            <Step label="Cart" state="done" />
+            <span className="h-px w-6 bg-line" aria-hidden="true" />
+            <Step label="Delivery" state="current" />
+            <span className="h-px w-6 bg-line" aria-hidden="true" />
+            <Step label="Confirmation" state="upcoming" />
+          </div>
+        </div>
 
         <form className="mt-6 grid items-start gap-6 lg:grid-cols-[1fr_22rem]" onSubmit={handleSubmit} noValidate>
           {/* Delivery details */}
           <div className="flex flex-col gap-6">
             <Card>
-              <CardHeader title="Delivery Details" />
-              <CardBody className="flex flex-col gap-4">
-                <Field label="Full name" required error={errors.recipientName}>
-                  {(control) => (
-                    <Input
-                      {...control}
-                      type="text"
-                      autoComplete="name"
-                      maxLength={100}
-                      placeholder="Full name"
-                      value={form.recipientName}
-                      onChange={setField("recipientName")}
-                    />
-                  )}
-                </Field>
+              <CardHeader
+                title="Delivery Details"
+                description="Where should we send your order?"
+                action={
+                  <span className="flex size-9 items-center justify-center rounded-full bg-primary-50 text-primary-600">
+                    <MapPin className="size-4" aria-hidden="true" />
+                  </span>
+                }
+              />
+              <CardBody className="grid gap-4 sm:grid-cols-2">
+                <div className="sm:col-span-2">
+                  <Field label="Full name" required error={errors.recipientName}>
+                    {(control) => (
+                      <Input
+                        {...control}
+                        type="text"
+                        autoComplete="name"
+                        maxLength={100}
+                        placeholder="Full name"
+                        value={form.recipientName}
+                        onChange={setField("recipientName")}
+                      />
+                    )}
+                  </Field>
+                </div>
                 <Field label="Phone number" required error={errors.recipientPhone}>
                   {(control) => (
                     <Input
@@ -268,38 +319,54 @@ export default function Checkout() {
                     />
                   )}
                 </Field>
-                <Field label="Address" required error={errors.shippingAddress}>
-                  {(control) => (
-                    <Input
-                      {...control}
-                      type="text"
-                      autoComplete="street-address"
-                      maxLength={500}
-                      placeholder="Street, building, apartment…"
-                      value={form.shippingAddress}
-                      onChange={setField("shippingAddress")}
-                    />
-                  )}
-                </Field>
-                <Field label="Order notes" hint="Optional — delivery instructions for the courier." error={errors.notes}>
-                  {(control) => (
-                    <Textarea
-                      {...control}
-                      rows={3}
-                      maxLength={2000}
-                      placeholder="Anything we should know? (optional)"
-                      value={form.notes}
-                      onChange={setField("notes")}
-                    />
-                  )}
-                </Field>
+                <div className="sm:col-span-2">
+                  <Field label="Address" required error={errors.shippingAddress}>
+                    {(control) => (
+                      <Input
+                        {...control}
+                        type="text"
+                        autoComplete="street-address"
+                        maxLength={500}
+                        placeholder="Street, building, apartment…"
+                        value={form.shippingAddress}
+                        onChange={setField("shippingAddress")}
+                      />
+                    )}
+                  </Field>
+                </div>
+                <div className="sm:col-span-2">
+                  <Field label="Order notes" hint="Optional — delivery instructions for the courier." error={errors.notes}>
+                    {(control) => (
+                      <Textarea
+                        {...control}
+                        rows={3}
+                        maxLength={2000}
+                        placeholder="Anything we should know? (optional)"
+                        value={form.notes}
+                        onChange={setField("notes")}
+                      />
+                    )}
+                  </Field>
+                </div>
               </CardBody>
             </Card>
+
+            <div className="flex items-center gap-2 rounded-control border border-line bg-surface px-4 py-3 text-xs text-muted">
+              <ShieldCheck className="size-4 shrink-0 text-success-600" aria-hidden="true" />
+              Your details are only used to deliver this order. Payment is collected on delivery.
+            </div>
           </div>
 
           {/* Order summary */}
-          <Card className="overflow-hidden border-t-2 border-primary-500">
-            <CardHeader title="Order Summary" />
+          <Card className="overflow-hidden border-t-2 border-primary-500 lg:sticky lg:top-[calc(var(--header-h)+1.5rem)]">
+            <CardHeader
+              title="Order Summary"
+              action={
+                <span className="flex size-9 items-center justify-center rounded-full bg-primary-50 text-primary-600">
+                  <CreditCard className="size-4" aria-hidden="true" />
+                </span>
+              }
+            />
             <CardBody className="flex flex-col gap-3">
               <ul className="flex flex-col gap-2">
                 {items.map((row) => (
@@ -322,18 +389,21 @@ export default function Checkout() {
               </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted">Shipping</span>
-                <span className="font-semibold text-ink">Free</span>
+                <span className="font-semibold text-success-700">Free</span>
               </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted">Payment</span>
-                <span className="font-semibold text-ink">Cash on delivery</span>
+                <span className="inline-flex items-center gap-1.5 font-semibold text-ink">
+                  <Wallet className="size-4 text-primary-600" aria-hidden="true" />
+                  Cash on delivery
+                </span>
               </div>
 
               <div className="my-2 border-t border-dashed border-line" />
 
               <div className="flex items-center justify-between">
                 <span className="text-base font-bold text-ink">Total:</span>
-                <span className="font-mono text-xl font-bold text-primary-600">{formatPrice(subtotal)}</span>
+                <span className="font-mono text-2xl font-extrabold text-primary-600">{formatPrice(subtotal)}</span>
               </div>
 
               {tooManyProducts && (
@@ -357,6 +427,7 @@ export default function Checkout() {
               <Button
                 type="submit"
                 fullWidth
+                size="lg"
                 className="mt-2"
                 loading={placeOrder.isPending}
                 disabled={checkoutBlocked}
@@ -366,10 +437,11 @@ export default function Checkout() {
               </Button>
 
               <Link
-                to="/cart"
-                className="text-center text-xs font-semibold text-muted underline-offset-4 transition hover:text-ink hover:underline"
+                to={cartPath}
+                className="inline-flex items-center justify-center gap-1.5 text-center text-xs font-semibold text-muted underline-offset-4 transition hover:text-ink hover:underline"
               >
-                ← Back to cart
+                <ArrowLeft className="size-3.5" aria-hidden="true" />
+                Back to cart
               </Link>
             </CardBody>
           </Card>
